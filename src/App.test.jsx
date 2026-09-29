@@ -10,16 +10,28 @@ test('renders the main portal marketing homepage', () => {
   render(<App />);
 
   expect(screen.getAllByText(/portal iklan/i).length).toBeGreaterThan(0);
-  expect(screen.getByText(/gibrig entertainment/i)).toBeDefined();
+  expect(screen.getAllByText(/gibrig entertainment/i).length).toBeGreaterThan(0);
 });
 
 test('shows a scannable QR code for an invitation template', () => {
   window.history.pushState({}, '', '/undangan');
   renderApp();
 
-  fireEvent.click(screen.getAllByRole('button', { name: /bagikan qr/i })[0]);
+  fireEvent.click(screen.getAllByRole('button', { name: /lihat qr/i })[0]);
 
   expect(screen.getByTitle(/qr untuk template/i)).toBeDefined();
+});
+
+test('opens a guest-facing preview beside a template card', () => {
+  window.history.pushState({}, '', '/undangan');
+  renderApp();
+
+  const previewLink = screen.getAllByRole('link', { name: /preview undangan/i })[0];
+  expect(previewLink.getAttribute('href')).toMatch(/\/undangan-preview\//);
+
+  window.history.pushState({}, '', new URL(previewLink.href).pathname);
+  renderApp();
+  expect(screen.getByRole('button', { name: /buka undangan/i })).toBeDefined();
 });
 
 test('renders the registration form on the register route', () => {

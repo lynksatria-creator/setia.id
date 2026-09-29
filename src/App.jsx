@@ -6,7 +6,7 @@ import Auth from './pages/Auth';
 import Blog, { articleSlug } from './pages/Blog';
 import BlogDetail from './pages/BlogDetail';
 import Pricing from './pages/Pricing';
-import Templates from './pages/Templates';
+import Templates, { createPreviewInvitation, slugify } from './pages/Templates';
 import Dashboard from './pages/Dashboard';
 import AdminBilling from './pages/AdminBilling';
 import PublicInvitation from './pages/PublicInvitation';
@@ -55,8 +55,9 @@ const defaultPortalData = {
     title: 'Rayakan momen penting dengan cerita yang terasa milik Anda.',
     subtitle:
       'Dari perencanaan pernikahan bersama Nunuy Nadhifa Wedding hingga undangan digital elegan dari Undangan.id, setiap detail dibuat lebih personal.',
-    cta: 'Rencanakan Pernikahan',
-    secondary: 'Jelajahi Undangan.id',
+    cta: 'Rencanakan Acara dengan Nunuy Nadhifa Wedding',
+    secondary: 'Buat Undangan dengan Undangan.id',
+    tertiary: 'Hiburan bersama Gibrig Entertainment',
   },
   services: [
     {
@@ -515,6 +516,7 @@ const PortalHome = () => {
               <div className="cta-row">
                 <button className="primary-btn" onClick={() => navigate('/nunuy-nadhifa-wedding')}>{portalData.hero.cta}</button>
                 <button className="secondary-btn" onClick={() => navigate('/undangan')}>{portalData.hero.secondary}</button>
+                <button className="secondary-btn portal-tertiary-btn" onClick={() => navigate('/gibrig')}>{portalData.hero.tertiary || 'Hiburan bersama Gibrig Entertainment'}</button>
               </div>
               <div className="portal-proofline"><span>Dirancang dengan personal</span><span>Siap dibagikan ke seluruh keluarga</span></div>
             </div>
@@ -534,8 +536,8 @@ const PortalHome = () => {
           <div className="container">
             <div className="section-head portal-section-head">
               <p className="eyebrow">Momen berharga, detail istimewa</p>
-              <h2>Dua cara untuk merayakan<br />cerita yang paling berarti.</h2>
-              <p className="portal-section-intro">Temukan tim yang tepat untuk merancang hari bahagia dan membagikan kabarnya dengan cara yang tak terlupakan.</p>
+              <h2>Tiga cara untuk merayakan<br />cerita yang paling berarti.</h2>
+              <p className="portal-section-intro">Temukan tim yang tepat untuk merancang acara, membagikan kabarnya, dan menghadirkan hiburan yang tak terlupakan.</p>
             </div>
             <div className="service-grid portal-brand-grid">
               {portalData.services.map((service, index) => {
@@ -1021,6 +1023,12 @@ function App() {
     const data = loadData(storage.invitation, defaultInvitationData);
     const slug = path.split('/').pop();
     return <BlogDetail articles={data.articles} slug={slug} onBack={() => navigate('/undangan')} />;
+  }
+
+  if (path.startsWith('/undangan-preview/')) {
+    const templateSlug = path.slice('/undangan-preview/'.length);
+    const template = defaultInvitationData.templates.find((item) => slugify(item.name) === templateSlug);
+    if (template) return <PublicInvitation invitation={createPreviewInvitation(template)} slug={`demo-${templateSlug}`} />;
   }
 
   if (path === '/admin') {

@@ -1853,6 +1853,77 @@ input {
   height: 112px;
 }
 
+.template-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-card-actions button,
+.template-qr-panel button,
+.template-public-preview-heading button {
+  min-height: 40px;
+  padding: 0.7rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: #f1f1f1;
+  color: #141414;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.template-preview-link {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  background: #294b3e;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.template-card-actions button:last-child,
+.template-qr-panel button {
+  background: #294b3e;
+  color: #fff;
+}
+
+.template-public-preview {
+  margin-top: 36px;
+  padding: 22px;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  background: #f8f5ee;
+}
+
+.template-public-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.template-public-preview-heading h2 {
+  margin: 5px 0 0;
+  color: #29473a;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 2.2rem;
+  font-weight: 500;
+}
+
+.template-public-preview-viewport {
+  max-height: 860px;
+  overflow: auto;
+  border: 1px solid rgba(32, 53, 46, 0.14);
+}
+
+.template-public-preview-viewport .public-invitation-page {
+  min-height: 0;
+}
+
 .demo-card a {
   display: inline-flex;
   margin-top: 10px;
