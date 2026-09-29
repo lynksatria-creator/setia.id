@@ -255,6 +255,12 @@ const navigate = (path) => {
   }
 };
 
+const openWhatsApp = (number, message) => {
+  if (typeof window !== 'undefined') {
+    window.open(`https://wa.me/${number.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+  }
+};
+
 const getAuthStorageKey = (site) => `${site}-auth`;
 
 const readCredentials = async (site) => {
@@ -340,6 +346,21 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     alert('Perubahan berhasil disimpan.');
   };
 
+  const saveDraft = () => {
+    saveData(dataKey, formData);
+    alert('Draft berhasil disimpan di perangkat ini.');
+  };
+
+  const preview = () => {
+    const previewPaths = {
+      admin: '/',
+      gibrig: '/gibrig',
+      nunuy: '/nunuy-nadhifa-wedding',
+      invitation: '/undangan',
+    };
+    navigate(previewPaths[site] || '/');
+  };
+
   const addTheme = () => {
     const nextTheme = {
       name: themeName || `Theme ${Date.now()}`,
@@ -386,8 +407,8 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             <h1>{label}</h1>
           </div>
           <div className="admin-actions">
-            <button className="ghost">Save Draft</button>
-            <button className="ghost">Preview</button>
+            <button className="ghost" onClick={saveDraft}>Save Draft</button>
+            <button className="ghost" onClick={preview}>Preview</button>
             <button onClick={saveChanges}>Publish</button>
           </div>
         </header>
@@ -679,7 +700,7 @@ const GibrigHome = () => {
               <p className="eyebrow">Gibrig Entertainment</p>
               <h1>{data.hero.title}</h1>
               <p>{data.hero.subtitle}</p>
-              <button className="primary-btn" onClick={() => navigate('/gibrig-admin')}>{data.hero.cta}</button>
+              <button className="primary-btn" onClick={() => openWhatsApp(data.whatsapp.number, data.whatsapp.message)}>{data.hero.cta}</button>
             </div>
             <div className="hero-visual gibrig-visual">
               <div className="hero-panel"><span>Artist</span><strong>Premium performance</strong></div>
@@ -711,7 +732,7 @@ const GibrigHome = () => {
                   <small>{artist.category}</small>
                   <p>{artist.description}</p>
                   <strong>{artist.price}</strong>
-                  <button>Booking Inquiry</button>
+                  <button onClick={() => openWhatsApp(data.whatsapp.number, `${data.whatsapp.message} Saya tertarik booking ${artist.name}.`)}>Booking Inquiry</button>
                 </article>
               ))}
             </div>
@@ -780,7 +801,7 @@ const NunuyHome = () => {
               <p className="eyebrow">Wedding Planner</p>
               <h1>{data.hero.title}</h1>
               <p>{data.hero.subtitle}</p>
-              <button className="primary-btn">{data.hero.cta}</button>
+              <button className="primary-btn" onClick={() => openWhatsApp(data.whatsapp.number, data.whatsapp.message)}>{data.hero.cta}</button>
             </div>
             <div className="hero-visual wedding-visual" />
           </div>
@@ -811,7 +832,7 @@ const NunuyHome = () => {
                   <ul>
                     {pkg.facilities.map((facility) => <li key={facility}>{facility}</li>)}
                   </ul>
-                  <button>WhatsApp</button>
+                  <button onClick={() => openWhatsApp(data.whatsapp.number, `${data.whatsapp.message} Saya tertarik dengan paket ${pkg.name}.`)}>WhatsApp</button>
                 </div>
               ))}
             </div>
@@ -857,8 +878,8 @@ const InvitationHome = () => {
               <h1>{data.hero.title}</h1>
               <p>{data.hero.subtitle}</p>
               <div className="cta-row">
-                <button className="primary-btn">{data.hero.cta}</button>
-                <button className="secondary-btn">{data.hero.secondary}</button>
+                <button className="primary-btn" onClick={() => openAuth('register')}>{data.hero.cta}</button>
+                <button className="secondary-btn" onClick={() => document.getElementById('templates')?.scrollIntoView({ behavior: 'smooth' })}>{data.hero.secondary}</button>
               </div>
               <div className="hero-micro">
                 <span>✓ Template premium</span>

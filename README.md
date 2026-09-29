@@ -11,6 +11,25 @@ npm start
 
 Buka http://localhost:3000 untuk melihat aplikasi.
 
+## Akun tester
+
+Panel CMS frontend memakai akun lokal berikut. Akun ini tersimpan di `localStorage`, sehingga cocok untuk QA browser lokal:
+
+| Panel | URL | Username | Password |
+| --- | --- | --- | --- |
+| Portal | `/admin` | `admin` | `admin123` |
+| Gibrig Entertainment | `/gibrig-admin` | `gibrigadmin` | `gibrig123` |
+| Nunuy Nadhifa Wedding | `/nunuy-admin` | `nunuyadmin` | `nunuy123` |
+| Undangan.id | `/undangan-admin` | akun admin backend | konfigurasi `backend/.env` |
+
+Untuk membuat akun user tester backend pada database lokal atau staging, jalankan dari root project:
+
+```sh
+python3 backend/seed_test_account.py
+```
+
+Akun yang dibuat adalah `tester@undangan.id` dengan password `Tester12345!`. Jangan jalankan seed ini pada production.
+
 ## Pengujian dan build
 
 ```sh

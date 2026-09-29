@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
@@ -54,4 +54,24 @@ test('shows the server-authenticated admin login page', () => {
 
   expect(screen.getByRole('heading', { name: 'Admin Undangan.id' })).toBeDefined();
   expect(screen.getByLabelText('Email admin')).toBeDefined();
+});
+
+test('renders the Gibrig public homepage and connects booking inquiry', () => {
+  window.history.pushState({}, '', '/gibrig');
+  const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+  render(<App />);
+
+  expect(screen.getByRole('heading', { name: /artist performance & entertainment studio/i })).toBeDefined();
+  fireEvent.click(screen.getAllByRole('button', { name: /booking inquiry/i })[0]);
+  expect(openSpy).toHaveBeenCalledWith(expect.stringContaining('wa.me'), '_blank', 'noopener,noreferrer');
+  openSpy.mockRestore();
+});
+
+test('connects the invitation hero CTA to registration', () => {
+  window.history.pushState({}, '', '/undangan');
+  renderApp();
+
+  fireEvent.click(screen.getAllByRole('button', { name: /buat undangan/i })[0]);
+  expect(window.location.pathname).toBe('/undangan-auth');
+  expect(window.location.search).toBe('?mode=register');
 });
