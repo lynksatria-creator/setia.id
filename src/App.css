@@ -3724,6 +3724,159 @@ input {
   box-shadow: 0 8px 20px rgba(38, 26, 17, 0.18);
 }
 
+.wedding-guest-form {
+  display: grid;
+  max-width: 540px;
+  gap: 10px;
+  margin: 26px auto 0;
+  text-align: left;
+}
+
+.wedding-guest-form input,
+.wedding-guest-form select,
+.wedding-guest-form textarea {
+  width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid rgba(238, 213, 165, 0.35);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff8e9;
+}
+
+.wedding-guest-form textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.wedding-guest-form input::placeholder,
+.wedding-guest-form textarea::placeholder {
+  color: #d9c6a5;
+}
+
+.wedding-guest-message {
+  color: #f4d38d;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.wedding-guestbook {
+  max-width: none;
+  background: #f2e8d6;
+}
+
+.wedding-guestbook-list {
+  display: grid;
+  max-width: 680px;
+  gap: 12px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.wedding-guestbook-list article {
+  padding: 16px;
+  border-left: 3px solid #b88a44;
+  background: rgba(255, 252, 244, 0.75);
+}
+
+.wedding-guestbook-list strong,
+.wedding-guestbook-list span {
+  display: block;
+}
+
+.wedding-guestbook-list strong {
+  color: #4a3524;
+  font-size: 0.9rem;
+}
+
+.wedding-guestbook-list span {
+  margin-top: 3px;
+  color: #a67837;
+  font-size: 0.68rem;
+}
+
+.wedding-guestbook-list p {
+  margin: 9px 0 0;
+  color: #75685d;
+  line-height: 1.6;
+}
+
+.guestbook-management-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.guestbook-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px 12px;
+  color: #68766e;
+}
+
+.guestbook-summary strong {
+  color: #294b3e;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 2rem;
+}
+
+.guestbook-summary span {
+  margin-right: 18px;
+  font-size: 0.75rem;
+}
+
+.owner-guestbook-list {
+  display: grid;
+  gap: 10px;
+}
+
+.owner-guestbook-list article {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  background: #fff;
+}
+
+.owner-guestbook-list article.is-hidden {
+  opacity: 0.55;
+}
+
+.owner-guestbook-list article strong,
+.owner-guestbook-list article span {
+  display: block;
+}
+
+.owner-guestbook-list article span {
+  color: #758178;
+  font-size: 0.7rem;
+}
+
+.owner-guestbook-list article p {
+  margin: 6px 0 0;
+  color: #536157;
+  font-size: 0.82rem;
+}
+
+.owner-guestbook-list article > div:last-child {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.owner-guestbook-list button {
+  padding: 6px 9px;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  border-radius: 3px;
+  background: #f6f6f1;
+  color: #294b3e;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
 @keyframes wedding-cover-open {
   0% { transform: scale(1); filter: saturate(0.92); }
   100% { transform: scale(0.985); filter: saturate(1.08); }
@@ -3736,6 +3889,7 @@ input {
 
 @media (max-width: 600px) {
   .wedding-music-toggle { right: 8px; bottom: 46px; }
+  .owner-guestbook-list article { flex-direction: column; }
 }
 
 .wedding-cover-inner::before,

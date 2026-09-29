@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { billingApi, invitationsApi, paymentsApi } from '../lib/api';
+import { billingApi, guestbookApi, invitationsApi, paymentsApi } from '../lib/api';
 import PublicInvitation from './PublicInvitation';
 
 const emptyForm = {
@@ -85,6 +85,8 @@ export default function Dashboard({ onSignIn }) {
   const [billing, setBilling] = useState({ plans: [], payment_methods: [] });
   const [invitations, setInvitations] = useState([]);
   const [previewInvitation, setPreviewInvitation] = useState(null);
+  const [guestbookInvitation, setGuestbookInvitation] = useState(null);
+  const [ownerGuestbook, setOwnerGuestbook] = useState([]);
   const [demoTemplate, setDemoTemplate] = useState(null);
   const [setupComplete, setSetupComplete] = useState(false);
   const [setupGroup, setSetupGroup] = useState('');
@@ -365,6 +367,33 @@ export default function Dashboard({ onSignIn }) {
     }
   };
 
+  const openGuestbook = async (invitation) => {
+    setGuestbookInvitation(invitation);
+    try {
+      setOwnerGuestbook(await guestbookApi.listOwner(token, invitation.id));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const moderateGuestbook = async (entry, status) => {
+    try {
+      await guestbookApi.moderate(token, guestbookInvitation.id, entry.id, status);
+      setOwnerGuestbook((current) => current.map((item) => item.id === entry.id ? { ...item, status } : item));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const removeGuestbook = async (entry) => {
+    try {
+      await guestbookApi.remove(token, guestbookInvitation.id, entry.id);
+      setOwnerGuestbook((current) => current.filter((item) => item.id !== entry.id));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
   if (isChecking || isLoading) return <main className="account-page container"><p>Memuat dashboard…</p></main>;
   if (!user || !token) {
     return (
@@ -470,6 +499,7 @@ export default function Dashboard({ onSignIn }) {
                       <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{plan?.name || invitation.plan_id} · aktif sampai {displayDate(invitation.active_until)}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p></div>
                       <div className="account-card-actions">
                         <button className="secondary-btn" onClick={() => setPreviewInvitation(invitation)}>Preview</button>
+                        <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
                         <button className="secondary-btn" onClick={() => editInvitation(invitation)}>Edit</button>
                         {active && invitation.status !== 'published' ? <button className="primary-btn" onClick={() => publishInvitation(invitation)}>Publish</button> : null}
                         {!active ? <>
@@ -484,6 +514,8 @@ export default function Dashboard({ onSignIn }) {
               </div>
             )}
           </section>
+
+          {guestbookInvitation ? <section className="account-panel guestbook-management-panel"><div className="account-panel-heading"><div><span className="eyebrow">Tamu undangan</span><h2>RSVP, ucapan, dan buku tamu</h2></div><button className="text-button" onClick={() => setGuestbookInvitation(null)}>Tutup</button></div><div className="guestbook-summary"><strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span><strong>{ownerGuestbook.length}</strong><span>total kiriman</span></div><div className="owner-guestbook-list">{ownerGuestbook.length ? ownerGuestbook.map((entry) => <article key={entry.id} className={entry.status === 'hidden' ? 'is-hidden' : ''}><div><strong>{entry.name}</strong><span>{entry.attendance} · {entry.guests} tamu</span><p>{entry.message}</p></div><div><button onClick={() => moderateGuestbook(entry, entry.status === 'visible' ? 'hidden' : 'visible')}>{entry.status === 'visible' ? 'Sembunyikan' : 'Tampilkan'}</button><button className="danger-text" onClick={() => removeGuestbook(entry)}>Hapus</button></div></article>) : <p className="form-hint">Belum ada RSVP atau ucapan untuk undangan ini.</p>}</div></section> : null}
 
           {previewInvitation ? (
             <section className="account-panel invitation-preview-panel">

@@ -37,6 +37,14 @@ export const invitationsApi = {
   publish: (token, id) => apiRequest(`/invitations/${id}/publish`, { token, method: 'POST' }),
 };
 
+export const guestbookApi = {
+  listPublic: (slug) => apiRequest(`/public/invitations/${encodeURIComponent(slug)}/guestbook`),
+  createPublic: (slug, data) => apiRequest(`/public/invitations/${encodeURIComponent(slug)}/guestbook`, { method: 'POST', body: JSON.stringify(data) }),
+  listOwner: (token, invitationId) => apiRequest(`/invitations/${invitationId}/guestbook`, { token }),
+  moderate: (token, invitationId, entryId, status) => apiRequest(`/invitations/${invitationId}/guestbook/${entryId}`, { token, method: 'PATCH', body: JSON.stringify({ status }) }),
+  remove: (token, invitationId, entryId) => apiRequest(`/invitations/${invitationId}/guestbook/${entryId}`, { token, method: 'DELETE' }),
+};
+
 export const paymentsApi = {
   create: (token, invitationId, paymentMethodId) => apiRequest(`/invitations/${invitationId}/payments`, {
     token,

@@ -124,6 +124,17 @@ class PaymentProof(BaseModel):
     transfer_reference: str = Field(min_length=3, max_length=100)
 
 
+class GuestbookEntryCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    message: str = Field(min_length=2, max_length=500)
+    attendance: Literal["attending", "not_attending", "maybe"] = "attending"
+    guests: int = Field(default=1, ge=1, le=10)
+
+
+class GuestbookModeration(BaseModel):
+    status: Literal["visible", "hidden"]
+
+
 class AdminActivationUpdate(BaseModel):
     status: Literal["draft", "active", "published", "expired"]
     active_until: datetime | None = None
@@ -521,6 +532,81 @@ async def get_public_invitation(slug: str):
         await db.invitations.update_one({"id": invitation["id"]}, {"$set": {"status": "expired"}})
         raise HTTPException(status_code=410, detail="Masa aktif undangan sudah berakhir.")
     return {"title": invitation["title"], "slug": invitation["slug"], "content": invitation["content"]}
+
+
+async def get_published_invitation(slug: str):
+    invitation = await db.invitations.find_one({"slug": slug, "status": "published"}, {"_id": 0})
+    if invitation is None:
+        raise HTTPException(status_code=404, detail="Undangan tidak tersedia.")
+    if datetime.fromisoformat(invitation["active_until"]) <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="Masa aktif undangan sudah berakhir.")
+    return invitation
+
+
+def public_guestbook_entry(entry):
+    return {
+        "id": entry["id"],
+        "name": entry["name"],
+        "message": entry["message"],
+        "attendance": entry["attendance"],
+        "guests": entry["guests"],
+        "created_at": entry["created_at"],
+    }
+
+
+@api_router.get("/public/invitations/{slug}/guestbook")
+async def list_public_guestbook(slug: str):
+    invitation = await get_published_invitation(slug)
+    entries = await db.guestbook_entries.find(
+        {"invitation_id": invitation["id"], "status": "visible"},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(length=200)
+    return [public_guestbook_entry(entry) for entry in entries]
+
+
+@api_router.post("/public/invitations/{slug}/guestbook")
+async def create_public_guestbook(slug: str, payload: GuestbookEntryCreate):
+    invitation = await get_published_invitation(slug)
+    entry = {
+        "id": str(uuid.uuid4()),
+        "invitation_id": invitation["id"],
+        "owner_id": invitation["owner_id"],
+        **payload.model_dump(),
+        "status": "visible",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.guestbook_entries.insert_one(entry)
+    return public_guestbook_entry(entry)
+
+
+@api_router.get("/invitations/{invitation_id}/guestbook")
+async def list_my_guestbook(invitation_id: str, current_user=Depends(get_current_user)):
+    await get_owned_invitation(invitation_id, current_user["id"])
+    return await db.guestbook_entries.find(
+        {"invitation_id": invitation_id},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(length=500)
+
+
+@api_router.patch("/invitations/{invitation_id}/guestbook/{entry_id}")
+async def moderate_guestbook(invitation_id: str, entry_id: str, payload: GuestbookModeration, current_user=Depends(get_current_user)):
+    await get_owned_invitation(invitation_id, current_user["id"])
+    result = await db.guestbook_entries.update_one(
+        {"id": entry_id, "invitation_id": invitation_id},
+        {"$set": {"status": payload.status}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Kiriman tamu tidak ditemukan.")
+    return {"status": payload.status}
+
+
+@api_router.delete("/invitations/{invitation_id}/guestbook/{entry_id}")
+async def delete_guestbook(invitation_id: str, entry_id: str, current_user=Depends(get_current_user)):
+    await get_owned_invitation(invitation_id, current_user["id"])
+    result = await db.guestbook_entries.delete_one({"id": entry_id, "invitation_id": invitation_id})
+    if not result.deleted_count:
+        raise HTTPException(status_code=404, detail="Kiriman tamu tidak ditemukan.")
+    return {"status": "deleted"}
 
 
 @api_router.post("/invitations/{invitation_id}/payments")

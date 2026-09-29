@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { apiRequest } from '../lib/api';
+import { apiRequest, guestbookApi } from '../lib/api';
 
 const defaultStory = [
   { title: 'Pertama Bertemu', date: '2019', text: 'Sebuah pertemuan sederhana yang menjadi awal dari perjalanan panjang kami.' },
@@ -127,6 +127,10 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [selectedImage, setSelectedImage] = useState(null);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [guestbook, setGuestbook] = useState([]);
+  const [guestForm, setGuestForm] = useState({ name: '', message: '', attendance: 'attending', guests: 1 });
+  const [guestMessage, setGuestMessage] = useState('');
+  const [isGuestSubmitting, setIsGuestSubmitting] = useState(false);
   const musicRef = useRef(null);
   const contentRef = useRef(null);
 
@@ -151,6 +155,14 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
   }, [invitation]);
+
+  useEffect(() => {
+    if (!invitation || initialInvitation) return undefined;
+    guestbookApi.listPublic(invitation.slug)
+      .then((entries) => setGuestbook(entries))
+      .catch(() => {});
+    return undefined;
+  }, [initialInvitation, invitation]);
 
   if (error) return <main className="public-invitation-state"><p className="eyebrow">Undangan tidak tersedia</p><h1>Link ini belum aktif atau sudah berakhir.</h1><a href="/undangan">Kunjungi Undangan.id</a></main>;
   if (!invitation) return <main className="public-invitation-state"><p>Memuat undangan…</p></main>;
@@ -201,6 +213,26 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     }
   };
 
+  const submitGuestbook = async (event) => {
+    event.preventDefault();
+    if (initialInvitation) {
+      setGuestMessage('Form aktif setelah undangan dipublish.');
+      return;
+    }
+    setIsGuestSubmitting(true);
+    setGuestMessage('');
+    try {
+      const entry = await guestbookApi.createPublic(invitation.slug, guestForm);
+      setGuestbook((current) => [entry, ...current]);
+      setGuestForm({ name: '', message: '', attendance: 'attending', guests: 1 });
+      setGuestMessage('Terima kasih, RSVP dan ucapan Anda sudah terkirim.');
+    } catch (requestError) {
+      setGuestMessage(requestError.message);
+    } finally {
+      setIsGuestSubmitting(false);
+    }
+  };
+
   return (
     <main className={`public-invitation-page public-template-${templateClass} wedding-frame-${frameClass} ${isOpened ? 'is-opened' : ''}`} style={customStyle}>
       <section className="wedding-cover" style={content.cover_image ? { backgroundImage: `linear-gradient(180deg, rgba(24, 22, 18, 0.08), rgba(24, 22, 18, 0.58)), url("${content.cover_image}")` } : undefined}>
@@ -231,7 +263,8 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
         {content.video_url ? <section className="wedding-section wedding-video"><p className="wedding-eyebrow">OUR BEAUTIFUL MOMENTS</p><h2>Film kisah kami</h2><iframe src={videoEmbedUrl(content.video_url)} title="Video prewedding" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen /></section> : null}
 
-        <section className="wedding-section wedding-rsvp"><p className="wedding-eyebrow">YOUR PRESENCE IS A GIFT</p><h2>Konfirmasi kehadiran</h2><p>Mohon konfirmasi kehadiran dan titipkan doa terbaik untuk perjalanan kami.</p>{content.rsvp_url ? <a className="wedding-calendar-button" href={content.rsvp_url} target="_blank" rel="noreferrer">KONFIRMASI RSVP</a> : null}</section>
+        <section className="wedding-section wedding-rsvp"><p className="wedding-eyebrow">YOUR PRESENCE IS A GIFT</p><h2>Konfirmasi kehadiran</h2><p>Mohon konfirmasi kehadiran dan titipkan doa terbaik untuk perjalanan kami.</p>{content.rsvp_url ? <a className="wedding-calendar-button" href={content.rsvp_url} target="_blank" rel="noreferrer">KONFIRMASI RSVP</a> : null}<form className="wedding-guest-form" onSubmit={submitGuestbook}><input value={guestForm.name} onChange={(event) => setGuestForm({ ...guestForm, name: event.target.value })} placeholder="Nama Anda" required minLength={2} /><select value={guestForm.attendance} onChange={(event) => setGuestForm({ ...guestForm, attendance: event.target.value })}><option value="attending">Saya akan hadir</option><option value="not_attending">Maaf, belum bisa hadir</option><option value="maybe">Masih tentatif</option></select><input type="number" min="1" max="10" value={guestForm.guests} onChange={(event) => setGuestForm({ ...guestForm, guests: Number(event.target.value) })} aria-label="Jumlah tamu" /><textarea value={guestForm.message} onChange={(event) => setGuestForm({ ...guestForm, message: event.target.value })} placeholder="Tulis ucapan dan doa..." required minLength={2} /><button className="wedding-calendar-button" disabled={isGuestSubmitting}>{isGuestSubmitting ? 'MENGIRIM...' : 'KIRIM RSVP & UCAPAN'}</button>{guestMessage ? <span className="wedding-guest-message" role="status">{guestMessage}</span> : null}</form></section>
+        <section className="wedding-section wedding-guestbook"><p className="wedding-eyebrow">BUKU TAMU</p><h2>Ucapan untuk kami</h2><div className="wedding-guestbook-list">{guestbook.length ? guestbook.map((entry) => <article key={entry.id}><strong>{entry.name}</strong><span>{entry.attendance === 'attending' ? 'Akan hadir' : entry.attendance === 'maybe' ? 'Masih tentatif' : 'Belum bisa hadir'}{entry.guests > 1 ? ` · ${entry.guests} tamu` : ''}</span><p>{entry.message}</p></article>) : <p>Jadilah yang pertama meninggalkan ucapan.</p>}</div></section>
         <section className="wedding-section wedding-closing"><p>{isTemplateDemo ? copy.closing : 'Terima kasih atas doa dan kasih yang mengiringi langkah kami.'}</p><h2>{coupleNames}</h2><span>{copy.kicker}</span></section>
       </div>
 
