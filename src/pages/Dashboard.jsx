@@ -22,7 +22,7 @@ const emptyForm = {
   address: '',
   maps_url: '',
   story: 'Cerita acara pernikahan',
-  opening_text: 'Dengan penuh hati kami mengundang Anda untuk hadir di hari istimewa kami.',
+  opening_text: 'Dengan bahagia, kami mengundang Anda untuk hadir dan merayakan hari istimewa kami bersama.',
   music_url: '',
   video_url: '',
   rsvp_url: '',
@@ -149,6 +149,29 @@ export default function Dashboard({ onSignIn }) {
   const setupTemplates = setupGroup
     ? invitationTemplates.filter((template) => templateGroups[setupGroup]?.includes(template.category))
     : [];
+
+  const demoInvitation = demoTemplate ? {
+    id: `demo-${demoTemplate.id}`,
+    title: 'Aulia & Farhan',
+    slug: 'template-demo',
+    content: {
+      event_type: 'Pernikahan',
+      demo_template: true,
+      template_id: demoTemplate.id,
+      couple_names: 'Aulia & Farhan',
+      event_date: '2026-12-12',
+      event_time: '10:00',
+      venue: 'The Grand Ballroom',
+      address: 'Jakarta Selatan, Indonesia',
+      opening_text: 'Dengan penuh hati kami mengundang Anda untuk hadir dan memberikan doa restu pada hari istimewa kami.',
+      story: 'Setiap pertemuan membawa kami pada cerita yang akhirnya ingin kami rayakan bersama orang-orang terkasih.',
+      gallery: [
+        'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1000&q=85',
+        'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1000&q=85',
+        'https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=1000&q=85',
+      ],
+    },
+  } : null;
 
   const beginInvitation = () => {
     if (!setupGroup || !setupEventType || !setupTemplateId) {
@@ -401,7 +424,7 @@ export default function Dashboard({ onSignIn }) {
                     <small>Pilih warna sesuai tema Anda</small>
                   </button>
                 </div>
-                {demoTemplate ? <div className="template-demo-panel"><div><span className="template-choice-swatch" style={{ background: `linear-gradient(135deg, ${demoTemplate.colors[0]}, ${demoTemplate.colors[1]})` }} /><p className="eyebrow">{demoTemplate.category}</p><h3>{demoTemplate.name}</h3><p>{demoTemplate.description}. Template ini mencakup bingkai cover, nama, foto, informasi acara, galeri, RSVP, ucapan, dan penutup.</p></div><div><button type="button" className="secondary-btn" onClick={() => setDemoTemplate(null)}>Tutup Demo</button><button type="button" className="primary-btn" onClick={() => { setForm((current) => ({ ...current, template_id: demoTemplate.id, custom_design: false })); setDemoTemplate(null); }}>Gunakan Template</button></div></div> : null}
+                {demoTemplate ? <div className="template-demo-panel"><div className="template-demo-heading"><div><p className="eyebrow">Demo calon undangan · {demoTemplate.category}</p><h3>{demoTemplate.name}</h3><p>{demoTemplate.description}</p></div><div><button type="button" className="secondary-btn" onClick={() => setDemoTemplate(null)}>Tutup Demo</button><button type="button" className="primary-btn" onClick={() => { setForm((current) => ({ ...current, template_id: demoTemplate.id, custom_design: false })); setDemoTemplate(null); }}>Gunakan Template</button></div></div><div className="template-demo-viewport"><PublicInvitation invitation={demoInvitation} slug="template-demo" /></div></div> : null}
                 {form.custom_design ? <div className="custom-design-fields"><label>Warna utama<input type="color" value={form.custom_primary} onChange={(event) => updateField('custom_primary', event.target.value)} /></label><label>Warna aksen<input type="color" value={form.custom_accent} onChange={(event) => updateField('custom_accent', event.target.value)} /></label><label>Warna latar<input type="color" value={form.custom_background} onChange={(event) => updateField('custom_background', event.target.value)} /></label></div> : null}
               </div>
               {weddingEventTypes.includes(form.event_type) ? <label>Nama pasangan<input value={form.couple_names} onChange={(event) => updateField('couple_names', event.target.value)} placeholder="Aulia & Farhan" /></label> : <label>Nama yang dirayakan<input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder="Nama anak, keluarga, atau penyelenggara" /></label>}

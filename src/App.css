@@ -2355,9 +2355,7 @@ input {
 }
 
 .template-demo-panel {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  display: grid;
   gap: 18px;
   padding: 16px;
   border: 1px solid rgba(32, 53, 46, 0.14);
@@ -2366,6 +2364,14 @@ input {
 
 .template-demo-panel > div:first-child {
   max-width: 620px;
+}
+
+.template-demo-heading {
+  display: flex;
+  max-width: none;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
 }
 
 .template-demo-panel h3,
@@ -2380,11 +2386,22 @@ input {
   margin-bottom: 10px;
 }
 
-.template-demo-panel > div:last-child {
+.template-demo-heading > div:last-child {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.template-demo-viewport {
+  max-height: 760px;
+  overflow: auto;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  background: #fbf7ed;
+}
+
+.template-demo-viewport .public-invitation-page {
+  min-height: 0;
 }
 
 .custom-swatch {
@@ -3585,6 +3602,109 @@ input {
   .wedding-video iframe { min-height: 220px; }
   .wedding-audio { right: 8px; bottom: 8px; width: 170px; }
 }
+
+.wedding-cover {
+  background: var(--public-cover, linear-gradient(135deg, #443021, #bd9a5b 45%, #17120e));
+  font-family: var(--public-font, 'Cormorant Garamond', Georgia, serif);
+}
+
+.wedding-content {
+  font-family: var(--public-font, 'Cormorant Garamond', Georgia, serif);
+}
+
+.wedding-cover h1,
+.wedding-section h2,
+.wedding-quote p,
+.wedding-person h3,
+.wedding-ampersand,
+.countdown-grid strong,
+.love-story-timeline h3,
+.wedding-event-card h3,
+.schedule-list span,
+.wedding-closing p {
+  font-family: var(--public-display-font, 'Cormorant Garamond', Georgia, serif);
+}
+
+.public-invitation-page.is-opened .wedding-cover {
+  animation: wedding-cover-open 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.public-invitation-page.is-opened .wedding-section {
+  animation: wedding-section-reveal 0.9s ease both;
+}
+
+.public-invitation-page.is-opened .wedding-section:nth-child(2) { animation-delay: 0.08s; }
+.public-invitation-page.is-opened .wedding-section:nth-child(3) { animation-delay: 0.16s; }
+.public-invitation-page.is-opened .wedding-section:nth-child(4) { animation-delay: 0.24s; }
+.public-invitation-page.is-opened .wedding-section:nth-child(5) { animation-delay: 0.32s; }
+
+.wedding-music-toggle {
+  position: fixed;
+  z-index: 9;
+  right: 14px;
+  bottom: 52px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(184, 138, 68, 0.7);
+  border-radius: 999px;
+  background: rgba(58, 43, 32, 0.9);
+  color: #f8df9d;
+  font-size: 0.68rem;
+  box-shadow: 0 8px 20px rgba(38, 26, 17, 0.18);
+}
+
+@keyframes wedding-cover-open {
+  0% { transform: scale(1); filter: saturate(0.92); }
+  100% { transform: scale(0.985); filter: saturate(1.08); }
+}
+
+@keyframes wedding-section-reveal {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+  .wedding-music-toggle { right: 8px; bottom: 46px; }
+}
+
+.wedding-cover-inner::before,
+.wedding-cover-inner::after {
+  position: absolute;
+  inset: -30px -42px;
+  border: 1px solid rgba(245, 211, 145, 0.58);
+  content: '';
+  pointer-events: none;
+}
+
+.wedding-cover-inner::after {
+  inset: -21px -33px;
+  border-color: rgba(255, 250, 231, 0.28);
+}
+
+.wedding-frame-ornate-gold .wedding-cover-inner::before { border: 1px solid #e0bb6c; border-radius: 4px; box-shadow: 0 0 0 6px rgba(224, 187, 108, 0.1); }
+.wedding-frame-ornate-gold .wedding-cover-inner::after { border-style: solid; opacity: 0.55; }
+.wedding-frame-black-corner .wedding-cover-inner::before { inset: -34px -46px; border: 1px solid #d8ad57; border-top-width: 5px; border-bottom-width: 5px; }
+.wedding-frame-black-corner .wedding-cover-inner::after { inset: -24px -36px; border-color: rgba(255, 255, 255, 0.46); border-left: 0; border-right: 0; }
+.wedding-frame-maroon .wedding-cover-inner::before { border: 2px solid #e2ad82; border-radius: 48% 10px; box-shadow: 0 0 0 8px rgba(226, 173, 130, 0.1); }
+.wedding-frame-classic .wedding-cover-inner::before { border: 1px solid #e1c68a; border-radius: 3px; }
+.wedding-frame-classic .wedding-cover-inner::after { border: 1px solid rgba(244, 226, 181, 0.7); border-radius: 3px; }
+.wedding-frame-ivory .wedding-cover-inner::before { border: 1px solid #f5db9d; border-radius: 50%; }
+.wedding-frame-rose .wedding-cover-inner::before { border: 2px solid #e6a9a2; border-radius: 50% 12px; }
+.wedding-frame-emerald .wedding-cover-inner::before { border: 2px solid #d6b56d; border-radius: 4px 42px; }
+.wedding-frame-navy .wedding-cover-inner::before { border: 1px solid #e6c778; border-radius: 0; box-shadow: inset 0 0 0 5px rgba(230, 199, 120, 0.12); }
+.wedding-frame-botanical .wedding-cover-inner::before { border: 1px solid #d5c28d; border-radius: 42px 8px; transform: rotate(-1deg); }
+.wedding-frame-floral .wedding-cover-inner::before { border: 2px solid #e4bb7d; border-radius: 35% 8px; box-shadow: 0 0 0 8px rgba(228, 187, 125, 0.1); }
+.wedding-frame-minimal .wedding-cover-inner::before { inset: -25px -32px; border: 1px solid rgba(255, 255, 255, 0.6); }
+.wedding-frame-modern .wedding-cover-inner::before { inset: -38px -52px; border: 1px solid #d9b867; transform: skewY(-2deg); }
+.wedding-frame-islamic .wedding-cover-inner::before { border: 2px solid #dcb96f; border-radius: 50% 4px; box-shadow: inset 0 0 0 6px rgba(220, 185, 111, 0.1); }
+.wedding-frame-traditional .wedding-cover-inner::before { border: 2px solid #d5a75d; border-radius: 8px; box-shadow: inset 0 0 0 4px rgba(213, 167, 93, 0.15), inset 0 0 0 8px rgba(213, 167, 93, 0.08); }
+.wedding-frame-playful .wedding-cover-inner::before { border: 3px dotted #f5ce6e; border-radius: 28px; }
+.wedding-frame-soft .wedding-cover-inner::before { border: 2px solid #edc890; border-radius: 50%; }
+.wedding-frame-celebration .wedding-cover-inner::before { border: 2px dashed #f2c567; border-radius: 12px; }
+.wedding-frame-academic .wedding-cover-inner::before { border: 1px solid #e3bd62; border-top-width: 7px; border-bottom-width: 7px; }
+.wedding-frame-heart .wedding-cover-inner::before { border: 2px solid #e7b18a; border-radius: 45% 45% 10px 10px; }
+.wedding-frame-geometric .wedding-cover-inner::before { inset: -32px -44px; border: 1px solid #e3bd62; transform: rotate(1.5deg); }
+.wedding-frame-custom .wedding-cover-inner::before { border: 2px solid var(--public-accent, #d8b56d); border-radius: 12px; box-shadow: 0 0 0 7px color-mix(in srgb, var(--public-accent), transparent 78%); }
 
 .public-invitation-state {
   display: grid;
