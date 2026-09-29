@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+import Auth from './pages/Auth';
+import Blog, { articleSlug } from './pages/Blog';
+import BlogDetail from './pages/BlogDetail';
+import Pricing from './pages/Pricing';
+import Templates from './pages/Templates';
+import Dashboard from './pages/Dashboard';
+import AdminBilling from './pages/AdminBilling';
+import PublicInvitation from './pages/PublicInvitation';
 
 const storage = {
   portal: 'portal-cms',
@@ -42,11 +52,11 @@ const defaultPortalData = {
   siteName: 'Portal Iklan',
   logo: 'G',
   hero: {
-    title: 'Platform bisnis digital premium untuk 3 brand unggulan.',
+    title: 'Rayakan momen penting dengan cerita yang terasa milik Anda.',
     subtitle:
-      'Melayani promosi, entertainment, wedding, dan undangan digital dalam satu ekosistem modern.',
-    cta: 'Lihat Layanan',
-    secondary: 'Hubungi Kami',
+      'Dari perencanaan pernikahan bersama Nunuy Nadhifa Wedding hingga undangan digital elegan dari Undangan.id, setiap detail dibuat lebih personal.',
+    cta: 'Rencanakan Pernikahan',
+    secondary: 'Jelajahi Undangan.id',
   },
   services: [
     {
@@ -59,28 +69,28 @@ const defaultPortalData = {
     {
       name: 'NUNUY NADHIFA WEDDING',
       description:
-        'Wedding organizer/dekorasi dan kebutuhan pernikahan dengan konsep elegan.',
-      button: 'Kunjungi Website',
+        'Wedding planner dan dekorasi personal untuk hari istimewa yang tertata indah dari awal hingga akhir.',
+      button: 'Konsultasi Wedding',
       href: '/nunuy-nadhifa-wedding',
       accent: '#ec4899',
     },
     {
       name: 'UNDANGAN DIGITAL',
-      description: 'Undangan digital modern, interaktif, elegan dan dapat disesuaikan.',
-      button: 'Buat Undangan',
+      description: 'Undangan online berdesain premium, lengkap dengan RSVP, peta lokasi, galeri, dan musik.',
+      button: 'Lihat Undangan.id',
       href: '/undangan',
       accent: '#10b981',
     },
   ],
   gallery: [
-    'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1100&q=85',
+    'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1100&q=85',
     'https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=900&q=80',
   ],
   packages: [
-    { name: 'Starter Brand', price: 'Rp 2.5 Juta', features: ['Landing page', 'SEO dasar', 'CTA WhatsApp'] },
-    { name: 'Growth Brand', price: 'Rp 5.5 Juta', features: ['CMS', 'Theme builder', 'Website utama'] },
-    { name: 'Premium Studio', price: 'Rp 9.5 Juta', features: ['Multi website', 'Admin panel', 'Support 1 bulan'] },
+    { name: 'Wedding Classic', price: 'Mulai Rp 18 Juta', features: ['Konsep dan dekorasi', 'Koordinator acara', 'Rundown yang tertata'], href: '/nunuy-nadhifa-wedding' },
+    { name: 'Wedding Luxury', price: 'Mulai Rp 32 Juta', features: ['Styling venue premium', 'Fotografi dan live music', 'Perencanaan menyeluruh'], href: '/nunuy-nadhifa-wedding' },
+    { name: 'Undangan Premium', price: 'Mulai Rp 99 Ribu', features: ['Template eksklusif', 'RSVP dan buku tamu', 'Link personal siap dibagikan'], href: '/undangan' },
   ],
   testimonials: [
     { name: 'Ayu & Rafi', text: 'Proses cepat, hasil premium, dan struktur website yang sangat rapi.' },
@@ -99,11 +109,11 @@ const defaultPortalData = {
   socials: ['Instagram', 'TikTok', 'YouTube'],
   footer: '© 2026 Portal Iklan • Crafted for premium digital brands',
   theme: {
-    primary: '#111827',
-    secondary: '#f5f3ff',
-    accent: '#8b5cf6',
-    background: '#f8fafc',
-    font: 'Poppins',
+    primary: '#203f35',
+    secondary: '#f6f0e7',
+    accent: '#bd755d',
+    background: '#fbf9f4',
+    font: 'DM Sans',
   },
 };
 
@@ -217,11 +227,11 @@ const themeLibrary = [
 ];
 
 const navItems = [
-  { label: 'Home', href: '/' },
-  { label: 'About', href: '#about' },
-  { label: 'Gallery', href: '#gallery' },
-  { label: 'Packages', href: '#packages' },
-  { label: 'Contact', href: '#contact' },
+  { label: 'Beranda', href: '#top' },
+  { label: 'Wedding', href: '#brands' },
+  { label: 'Galeri', href: '#gallery' },
+  { label: 'Paket', href: '#packages' },
+  { label: 'Kontak', href: '#contact' },
 ];
 
 const formatPath = (path) => path || '/';
@@ -462,92 +472,122 @@ const PortalHome = () => {
 
   return (
     <div className="site-shell theme-portal">
-      <header className="topbar">
-        <div className="container nav-wrap">
-          <div className="brand"><span className="logo-mark">{portalData.logo}</span>{portalData.siteName}</div>
-          <nav className="nav-links">
+      <header className="topbar portal-topbar">
+        <div className="container nav-wrap portal-nav-wrap">
+          <a className="brand portal-brand" href="#top"><span className="logo-mark">{portalData.logo}</span><span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span></a>
+          <nav className="nav-links portal-nav-links" aria-label="Navigasi utama">
             {navItems.map((item) => (
               <a key={item.label} href={item.href}>{item.label}</a>
             ))}
           </nav>
-          <button className="primary-btn" onClick={() => navigate('/admin')}>Admin Panel</button>
+          <button className="portal-admin-button" onClick={() => navigate('/admin')}>Admin</button>
         </div>
       </header>
 
-      <main>
-        <section className="hero-section">
-          <div className="container hero-grid">
-            <div>
-              <p className="eyebrow">Portal iklan</p>
+      <main id="top">
+        <section className="hero-section portal-hero">
+          <div className="container hero-grid portal-hero-grid">
+            <div className="portal-hero-copy">
+              <p className="eyebrow">Wedding planning <span>·</span> Digital invitation</p>
               <h1>{portalData.hero.title}</h1>
               <p>{portalData.hero.subtitle}</p>
               <div className="cta-row">
-                <button className="primary-btn" onClick={() => navigate('/gibrig')}>{portalData.hero.cta}</button>
+                <button className="primary-btn" onClick={() => navigate('/nunuy-nadhifa-wedding')}>{portalData.hero.cta}</button>
                 <button className="secondary-btn" onClick={() => navigate('/undangan')}>{portalData.hero.secondary}</button>
               </div>
+              <div className="portal-proofline"><span>Dirancang dengan personal</span><span>Siap dibagikan ke seluruh keluarga</span></div>
             </div>
-            <div className="hero-visual">
-              <div className="floating-card card-a">Brand Growth</div>
-              <div className="floating-card card-b">Creative Studio</div>
-              <div className="hero-panel">
-                <span>3 brand</span>
-                <strong>Premium digital ecosystem</strong>
-              </div>
+            <div className="portal-hero-visual">
+              <img src="https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1500&q=90" alt="Dekorasi pernikahan outdoor yang hangat dan elegan" />
+              <div className="portal-hero-image-shade" />
+              <div className="portal-photo-caption"><span>THE ART OF CELEBRATING</span><strong>Every detail, thoughtfully yours.</strong></div>
+              <div className="portal-floating-note portal-note-top"><span>WEDDING PLANNER</span><strong>Nunuy Nadhifa</strong></div>
+              <div className="portal-floating-note portal-note-bottom"><span>YOUR STORY, BEAUTIFULLY TOLD</span><strong>Undangan.id</strong></div>
+              <span className="portal-image-index">01 <i /> 02</span>
+            </div>
+          </div>
+          <div className="portal-hero-bottom container"><span>Wedding planning with heart</span><span>Digital invitations with meaning</span><span>Made for your once-in-a-lifetime day</span></div>
+        </section>
+
+        <section id="brands" className="section-wrap portal-brands-section">
+          <div className="container">
+            <div className="section-head portal-section-head">
+              <p className="eyebrow">Momen berharga, detail istimewa</p>
+              <h2>Dua cara untuk merayakan<br />cerita yang paling berarti.</h2>
+              <p className="portal-section-intro">Temukan tim yang tepat untuk merancang hari bahagia dan membagikan kabarnya dengan cara yang tak terlupakan.</p>
+            </div>
+            <div className="service-grid portal-brand-grid">
+              {portalData.services.map((service, index) => {
+                const isWedding = service.href.includes('nunuy');
+                const isInvitation = service.href.includes('undangan');
+                const image = isWedding
+                  ? 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1200&q=85'
+                  : isInvitation
+                    ? 'https://images.unsplash.com/photo-1523438885200-e635ba2c371e?auto=format&fit=crop&w=1200&q=85'
+                    : 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=85';
+                const brandType = isWedding ? 'wedding' : isInvitation ? 'invitation' : 'gibrig';
+
+                return (
+                  <article key={service.name} className={`service-card portal-brand-card portal-brand-${brandType}`}>
+                    <div className="portal-brand-photo">
+                      <img src={image} alt={isWedding ? 'Pasangan merayakan hari pernikahan' : isInvitation ? 'Detail stationery untuk undangan pernikahan' : 'Panggung hiburan untuk sebuah perayaan'} loading="lazy" />
+                      <span className="portal-brand-kicker">{isWedding ? 'WEDDING PLANNER & DECOR' : isInvitation ? 'DIGITAL INVITATION STUDIO' : 'ENTERTAINMENT & EVENT'}</span>
+                    </div>
+                    <div className="portal-brand-content">
+                      <span className="portal-brand-number">0{index + 1} / 03</span>
+                      <h3>{service.name}</h3>
+                      <p>{service.description}</p>
+                      <button onClick={() => navigate(service.href)}>{service.button}<span aria-hidden="true">↗</span></button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        <section className="section-wrap">
+        <section id="gallery" className="section-wrap portal-gallery-section">
           <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Layanan utama</p>
-              <h2>Solusi lengkap untuk brand Anda</h2>
+            <div className="section-head portal-gallery-head">
+              <div><p className="eyebrow">Wedding journal</p><h2>Suasana yang ingin<br />Anda kenang selamanya.</h2></div>
+              <p>Inspirasi untuk merangkai perayaan yang terasa hangat, intim, dan sepenuhnya milik Anda.</p>
             </div>
-            <div className="service-grid">
-              {portalData.services.map((service) => (
-                <div key={service.name} className="service-card" style={{ background: `linear-gradient(135deg, ${service.accent}22, #ffffff)` }}>
-                  <span className="service-badge" style={{ background: service.accent }}>{service.name.split(' ')[0]}</span>
-                  <h3>{service.name}</h3>
-                  <p>{service.description}</p>
-                  <button onClick={() => navigate(service.href)}>{service.button}</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="gallery" className="section-wrap muted-bg">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Galeri</p>
-              <h2>Portfolio yang menunjukkan kualitas</h2>
-            </div>
-            <div className="gallery-grid">
+            <div className="gallery-grid portal-gallery-grid">
               {portalData.gallery.map((image, index) => (
-                <img key={index} src={image} alt={`Portfolio ${index + 1}`} />
+                <figure key={index} className={`portal-gallery-item portal-gallery-item-${index + 1}`}>
+                  <img src={image} alt={`Inspirasi momen pernikahan ${index + 1}`} loading="lazy" />
+                  <figcaption>{['The ceremony', 'Little details', 'Together, always'][index % 3]}</figcaption>
+                </figure>
               ))}
             </div>
           </div>
         </section>
 
-        <section id="packages" className="section-wrap">
+        <section id="packages" className="section-wrap portal-packages-section">
           <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Paket</p>
-              <h2>Pilih jadwal yang sesuai</h2>
+            <div className="section-head portal-section-head">
+              <p className="eyebrow">Mulai dari yang Anda butuhkan</p>
+              <h2>Pilih pengalaman yang<br />paling sesuai untuk Anda.</h2>
             </div>
-            <div className="pricing-grid">
-              {portalData.packages.map((pkg) => (
-                <div key={pkg.name} className="price-card">
+            <div className="pricing-grid portal-pricing-grid">
+              {portalData.packages.map((pkg, index) => (
+                <div key={pkg.name} className={`price-card portal-price-card portal-price-card-${index + 1}`}>
+                  <span className="portal-package-index">0{index + 1}</span>
                   <h3>{pkg.name}</h3>
                   <strong>{pkg.price}</strong>
-                  <ul>
-                    {pkg.features.map((feature) => <li key={feature}>{feature}</li>)}
-                  </ul>
-                  <button>Mulai</button>
+                  <ul>{pkg.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
+                  <button onClick={() => navigate(pkg.href || '/nunuy-nadhifa-wedding')}>{pkg.href === '/undangan' ? 'Pilih Undangan' : 'Konsultasi Paket'}<span aria-hidden="true">↗</span></button>
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="section-wrap portal-quote-section">
+          <div className="container portal-quote-inner">
+            <span className="portal-quote-mark">“</span>
+            <p>Some days deserve to be remembered beautifully.</p>
+            <span>— NUNUY NADHIFA WEDDING × UNDANGAN.ID</span>
           </div>
         </section>
 
@@ -798,21 +838,16 @@ const NunuyHome = () => {
 
 const InvitationHome = () => {
   const data = useMemo(() => loadData(storage.invitation, defaultInvitationData), []);
+  const openAuth = (mode) => navigate(`/undangan-auth?mode=${mode}`);
 
   return (
     <div className="site-shell invitation-shell">
-      <header className="topbar invitation-topbar">
-        <div className="container nav-wrap">
-          <div className="brand"><span className="logo-mark">U</span>{data.siteName}</div>
-          <nav className="nav-links">
-            <a href="#templates">Template</a>
-            <a href="#categories">Kategori</a>
-            <a href="#faq">FAQ</a>
-            <a href="#contact">Contact</a>
-          </nav>
-          <button className="primary-btn" onClick={() => navigate('/undangan-admin')}>Admin</button>
-        </div>
-      </header>
+      <Navbar
+        siteName={data.siteName}
+        onAdmin={() => navigate('/undangan-admin')}
+        onLogin={() => openAuth('login')}
+        onRegister={() => openAuth('register')}
+      />
 
       <main>
         <section className="hero-section invitation-hero">
@@ -889,65 +924,9 @@ const InvitationHome = () => {
           </div>
         </section>
 
-        <section id="templates" className="section-wrap">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Template</p>
-              <h2>Desain undangan yang siap Anda gunakan</h2>
-            </div>
-            <div className="template-grid">
-              {data.templates.map((template) => (
-                <div key={template.name} className={`template-card invitation-template template-${template.palette}`}>
-                  <div className="template-thumb invitation-thumb" />
-                  <span className="template-tag">{template.category}</span>
-                  <h3>{template.name}</h3>
-                  <p>{template.description}</p>
-                  <button>Gunakan Template</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+        <Templates templates={data.templates} demos={data.demoItems} />
 
-        <section className="section-wrap">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Lihat Contoh Undangan</p>
-              <h2>Template siap pakai untuk setiap momen</h2>
-            </div>
-            <div className="demo-grid">
-              {data.demoItems.map((demo) => (
-                <div key={demo.name} className="demo-card">
-                  <div className="demo-thumb" />
-                  <small>{demo.category}</small>
-                  <h3>{demo.name}</h3>
-                  <button>{demo.label}</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="section-wrap muted-bg">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Paket & pricing</p>
-              <h2>Pilih paket yang sesuai kebutuhan acara Anda</h2>
-            </div>
-            <div className="pricing-grid">
-              {data.pricingPlans.map((plan) => (
-                <div key={plan.name} className={`price-card ${plan.highlight ? 'featured-price' : ''}`}>
-                  <h3>{plan.name}</h3>
-                  <strong>{plan.price}</strong>
-                  <ul>
-                    {plan.features.map((item) => <li key={item}>{item}</li>)}
-                  </ul>
-                  <button>Pilih Paket</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+        <Pricing plans={data.pricingPlans} onChoose={() => openAuth('register')} />
 
         <section className="section-wrap">
           <div className="container">
@@ -975,30 +954,13 @@ const InvitationHome = () => {
               <p>Masuk ke dashboard untuk mengelola template, undangan, tamu, RSVP, dan statistik secara praktis.</p>
             </div>
             <div className="login-box">
-              <button className="primary-btn">Daftar Sekarang</button>
-              <button className="secondary-btn">Masuk</button>
+              <button className="primary-btn" onClick={() => openAuth('register')}>Daftar Sekarang</button>
+              <button className="secondary-btn" onClick={() => openAuth('login')}>Masuk</button>
             </div>
           </div>
         </section>
 
-        <section className="section-wrap">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Blog & Artikel</p>
-              <h2>Tips dan inspirasi untuk momen spesial</h2>
-            </div>
-            <div className="article-grid">
-              {data.articles.map((article) => (
-                <div key={article.title} className="article-card">
-                  <div className="article-thumb" />
-                  <small>{article.category}</small>
-                  <h3>{article.title}</h3>
-                  <button>Baca Artikel</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+        <Blog articles={data.articles} onOpen={(slug) => navigate(`/undangan-blog/${slug}`)} />
 
         <section id="faq" className="section-wrap muted-bg">
           <div className="container faq-grid">
@@ -1018,35 +980,27 @@ const InvitationHome = () => {
         </section>
       </main>
 
-      <footer id="contact" className="site-footer invitation-footer">
-        <div className="container footer-grid">
-          <div>
-            <div className="brand"><span className="logo-mark">U</span>{data.siteName}</div>
-            <p>Platform undangan digital premium untuk momen spesial Anda.</p>
-          </div>
-          <div>
-            <h4>Kontak</h4>
-            <p>hello@undangan.id</p>
-            <p>+62 812-3456-7890</p>
-          </div>
-          <div>
-            <h4>Social</h4>
-            <p>Instagram</p>
-            <p>WhatsApp</p>
-          </div>
-          <div>
-            <h4>Quick Start</h4>
-            <p>Buat Undangan</p>
-            <p>Template</p>
-          </div>
-        </div>
-      </footer>
+      <Footer siteName={data.siteName} />
     </div>
   );
 };
 
 function App() {
   const path = useWindowPath();
+
+  if (path === '/undangan-auth') {
+    return <Auth onBack={() => navigate('/undangan')} onSuccess={() => navigate('/undangan-dashboard')} />;
+  }
+
+  if (path === '/undangan-dashboard') return <Dashboard onSignIn={() => navigate('/undangan-auth?mode=login')} />;
+  if (path === '/undangan-admin') return <AdminBilling />;
+  if (path.startsWith('/i/')) return <PublicInvitation slug={path.slice(3)} />;
+
+  if (path.startsWith('/undangan-blog/')) {
+    const data = loadData(storage.invitation, defaultInvitationData);
+    const slug = path.split('/').pop();
+    return <BlogDetail articles={data.articles} slug={slug} onBack={() => navigate('/undangan')} />;
+  }
 
   if (path === '/admin') {
     return (
@@ -1080,18 +1034,6 @@ function App() {
         dataKey={storage.nunuy}
         defaultData={defaultNunuyData}
         description="Kelola wedding package, gallery, pricing, testimonials, FAQ, contact, logo, dan hero."
-      />
-    );
-  }
-
-  if (path === '/undangan-admin') {
-    return (
-      <AdminPanel
-        site="invitation"
-        label="Undangan Admin"
-        dataKey={storage.invitation}
-        defaultData={defaultInvitationData}
-        description="Kelola template undangan, user, undangan, RSVP, theme, dan katalog."
       />
     );
   }
