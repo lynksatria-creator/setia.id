@@ -120,27 +120,75 @@ const defaultPortalData = {
 
 const defaultGibrigData = {
   siteName: 'Gibrig Entertainment',
-  tagline: 'Menyatukan hiburan, kreativitas, dan energi panggung profesional.',
+  tagline: 'Official Gibrig Entertainment',
   hero: {
-    title: 'Artist Performance & Entertainment Studio',
-    subtitle: 'Panggung, artist, event, dan pengalaman hiburan yang memorable untuk setiap momen spesial.',
-    cta: 'Booking Artist',
+    title: 'Hiburan Berkualitas, Momen Tak Terlupakan',
+    subtitle: 'Gibrig Musik Entertainment menghadirkan musik live spektakuler untuk pernikahan, khitanan, ulang tahun, dan hajatan Anda — formasi lengkap, tim profesional, harga ramah lokasi.',
+    cta: 'Lihat Paket',
+    image: 'https://customer-assets.emergentagent.com/job_a90515ef-0030-4204-8c84-537c287d5958/artifacts/qw36c2aw_WhatsApp%20Image%202026-06-11%20at%2020.08.13.jpeg',
   },
-  about: 'Gibrig Entertainment menghadirkan ekosistem hiburan modern dengan artis berbakat, crew profesional, dan pengalaman event yang elegan.',
+  about: 'Gibrig Entertainment menghadirkan musik live spektakuler untuk pernikahan, khitanan, ulang tahun, dan hajatan Anda.',
   artists: [
-    { name: 'Alya Nusa', category: 'Singer', description: 'Vocalist dengan performa stage yang energik.', price: 'Rp 3.5 Juta', active: true },
-    { name: 'Nara Vibes', category: 'DJ', description: 'Musik dan mood dance yang berkesan untuk crowd modern.', price: 'Rp 4.2 Juta', active: true },
-    { name: 'Rizki Pesta', category: 'MC', description: 'Host professional untuk acara formal dan casual.', price: 'Rp 2.8 Juta', active: true },
+    {
+      name: 'Neng Syelfi Oktora',
+      category: 'Artis Utama · Dangdut, Pop, Religi, Sunda',
+      description: 'Dikenal lewat suara merdu dan interaksi hangat bersama tamu, ia mampu menghidupkan suasana setiap hajatan dari pembuka hingga puncak acara.',
+      price: 'Menyesuaikan Lokasi',
+      image: 'https://customer-assets.emergentagent.com/job_a90515ef-0030-4204-8c84-537c287d5958/artifacts/qw36c2aw_WhatsApp%20Image%202026-06-11%20at%2020.08.13.jpeg',
+      active: true,
+    },
   ],
   packages: [
-    { name: 'Wedding Package', price: 'Rp 5 Juta', description: 'Musik dan performer untuk acara pernikahan.' },
-    { name: 'Corporate Event', price: 'Rp 8 Juta', description: 'MC, entertainment, dan stage support.' },
+    {
+      name: 'Paket 1',
+      label: 'Esensial',
+      price: 'Menyesuaikan Lokasi',
+      description: 'Pilihan ekonomis dengan formasi musik standar untuk acara intim.',
+      image: 'https://customer-assets.emergentagent.com/job_29f66553-bd67-47fa-9f27-4de4e5a9c024/artifacts/5auam5gf_WhatsApp%20Image%202026-06-11%20at%2009.47.40.jpeg',
+      items: ['Kendang', 'Melodi', 'Keyboard', 'MC', 'Singer 2 Orang', 'Soundsistem'],
+    },
+    {
+      name: 'Paket 2',
+      label: 'Populer',
+      price: 'Menyesuaikan Lokasi',
+      description: 'Formasi lengkap dengan kentrung & terompet untuk acara meriah.',
+      image: 'https://customer-assets.emergentagent.com/job_29f66553-bd67-47fa-9f27-4de4e5a9c024/artifacts/ltv7hoqj_WhatsApp%20Image%202026-06-11%20at%2009.48.02.jpeg',
+      items: ['Kendang', 'Melodi', 'Keyboard', 'Kentrung', 'Terompet', 'MC', 'Singer 2 Orang', 'Soundsistem'],
+    },
+    {
+      name: 'Paket 3',
+      label: 'Premium',
+      price: 'Menyesuaikan Lokasi',
+      description: 'Paket spesial dengan penampilan langsung Neng Syelfi Oktora.',
+      image: 'https://customer-assets.emergentagent.com/job_29f66553-bd67-47fa-9f27-4de4e5a9c024/artifacts/acnkfdp2_WhatsApp%20Image%202026-06-11%20at%2009.48.20.jpeg',
+      items: ['Kendang', 'Melodi', 'Keyboard', 'Kentrung', 'Terompet', 'Neng Syelfi Oktora', 'Singer 2 Orang', 'Soundsistem'],
+    },
   ],
   testimonials: [
-    { name: 'Sabrina', text: 'Semua artist hadir dengan profesionalitas tinggi dan penampilan luar biasa.' },
+    { name: 'Ibu Ratna', event: 'Pernikahan · Garut', text: 'Suara Neng Syelfi merdu sekali, tamu undangan ikut joget semua. Tim sangat profesional dari awal sampai selesai.' },
+    { name: 'Pak Asep', event: 'Khitanan · Cigedug', text: 'Sound system jernih, MC ramah, dan Paket 2 sangat cocok untuk acara khitanan anak saya. Recommended!' },
+    { name: 'Teh Dewi', event: 'Hajatan · Sukahurip', text: 'Booking via WhatsApp gampang banget, hari H tampil tepat waktu, formasi lengkap. Pasti pakai lagi.' },
   ],
-  contact: { phone: '+62 812-9988-8777', email: 'booking@gibrigentertainment.com' },
-  whatsapp: { number: '+6281299888777', message: 'Halo, saya tertarik dengan layanan Gibrig Entertainment.' },
+  gallery: [
+    { src: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?crop=entropy&cs=srgb&fm=jpg&w=900&q=80', caption: 'Pertunjukan live di panggung' },
+    { src: 'https://images.pexels.com/photos/15865403/pexels-photo-15865403.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940', caption: 'Resepsi pernikahan elegan' },
+    { src: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?crop=entropy&cs=srgb&fm=jpg&w=900&q=80', caption: 'Vokalis tampil di panggung' },
+    { src: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?crop=entropy&cs=srgb&fm=jpg&w=900&q=80', caption: 'Pengantin merayakan momen' },
+    { src: 'https://images.unsplash.com/photo-1583939411023-14783179e581?crop=entropy&cs=srgb&fm=jpg&w=900&q=80', caption: 'Tamu menari di acara' },
+    { src: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?crop=entropy&cs=srgb&fm=jpg&w=900&q=80', caption: 'Suasana panggung outdoor' },
+  ],
+  contact: {
+    phone: '0855-2475-2102',
+    email: '',
+    address: 'Kp Baranangsiang, Ds Sukahurip, Kec Cigedug, Kab Garut',
+  },
+  social: {
+    tiktok: '@neng_syelfi_oktora_2',
+    youtube: '@nengsyelfioktora7310',
+    instagram: '@nengsyelfiofficial',
+  },
+  footer: '© 2026 Official Gibrig Entertainment. All rights reserved.',
+  whatsapp: { number: '6285524752102', message: 'Halo Gibrig Entertainment, saya ingin booking acara.' },
 };
 
 const defaultNunuyData = {
@@ -685,11 +733,11 @@ const GibrigHome = () => {
         <div className="container nav-wrap">
           <div className="brand"><span className="logo-mark">G</span>{data.siteName}</div>
           <nav className="nav-links">
-            <a href="#about">About</a>
-            <a href="#artists">Artist</a>
-            <a href="#entertainment">Entertainment</a>
+            <a href="#about">Tentang</a>
+            <a href="#artists">Artis</a>
+            <a href="#gallery">Galeri</a>
             <a href="#packages">Paket</a>
-            <a href="#contact">Contact</a>
+            <a href="#testimonials">Testimoni</a>
           </nav>
           <button className="primary-btn" onClick={() => navigate('/gibrig-admin')}>Admin</button>
         </div>
@@ -699,13 +747,13 @@ const GibrigHome = () => {
         <section className="hero-section hero-compact">
           <div className="container hero-grid">
             <div>
-              <p className="eyebrow">Gibrig Entertainment</p>
+              <p className="eyebrow">{data.tagline}</p>
               <h1>{data.hero.title}</h1>
               <p>{data.hero.subtitle}</p>
-              <button className="primary-btn" onClick={() => openWhatsApp(data.whatsapp.number, data.whatsapp.message)}>{data.hero.cta}</button>
+              <button className="primary-btn" onClick={() => document.getElementById('packages')?.scrollIntoView({ behavior: 'smooth' })}>{data.hero.cta}</button>
             </div>
-            <div className="hero-visual gibrig-visual">
-              <div className="hero-panel"><span>Artist</span><strong>Premium performance</strong></div>
+            <div className="hero-visual gibrig-visual" style={{ backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.6)), url(${data.hero.image})`, backgroundPosition: 'center', backgroundSize: 'cover' }}>
+              <div className="hero-panel"><span>{data.artists[0].category}</span><strong>{data.artists[0].name}</strong></div>
             </div>
           </div>
         </section>
@@ -714,7 +762,7 @@ const GibrigHome = () => {
           <div className="container two-column">
             <div>
               <p className="eyebrow">About</p>
-              <h2>Creative performance for every unforgettable moment</h2>
+              <h2>Hiburan live untuk setiap momen istimewa</h2>
             </div>
             <p>{data.about}</p>
           </div>
@@ -724,12 +772,12 @@ const GibrigHome = () => {
           <div className="container">
             <div className="section-head">
               <p className="eyebrow">Artist</p>
-              <h2>Talented performers</h2>
+              <h2>Artis utama</h2>
             </div>
             <div className="artist-grid">
               {data.artists.map((artist) => (
                 <article key={artist.name} className="artist-card">
-                  <div className="artist-avatar">{artist.name[0]}</div>
+                  {artist.image ? <img className="artist-avatar" src={artist.image} alt={artist.name} style={{ objectFit: 'cover' }} /> : <div className="artist-avatar">{artist.name[0]}</div>}
                   <h3>{artist.name}</h3>
                   <small>{artist.category}</small>
                   <p>{artist.description}</p>
@@ -750,10 +798,49 @@ const GibrigHome = () => {
             <div className="pricing-grid">
               {data.packages.map((pkg) => (
                 <div key={pkg.name} className="price-card">
+                  {pkg.image && <img src={pkg.image} alt={pkg.name} style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover' }} />}
                   <h3>{pkg.name}</h3>
                   <strong>{pkg.price}</strong>
                   <p>{pkg.description}</p>
+                  {pkg.items && <ul>{pkg.items.map((item) => <li key={item}>{item}</li>)}</ul>}
+                  <button onClick={() => openWhatsApp(data.whatsapp.number, `${data.whatsapp.message} Saya tertarik dengan ${pkg.name}.`)}>Tanya Paket</button>
                 </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="gallery" className="section-wrap muted-bg">
+          <div className="container">
+            <div className="section-head">
+              <p className="eyebrow">Galeri</p>
+              <h2>Momen bersama Gibrig</h2>
+            </div>
+            <div className="portal-gallery-grid">
+              {data.gallery.map((item, index) => (
+                <figure key={item.src} className={`portal-gallery-item portal-gallery-item-${(index % 3) + 1}`}>
+                  <img src={item.src} alt={item.caption} loading="lazy" />
+                  <figcaption>{item.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="testimonials" className="section-wrap">
+          <div className="container">
+            <div className="section-head">
+              <p className="eyebrow">Testimoni</p>
+              <h2>Cerita dari keluarga dan klien</h2>
+            </div>
+            <div className="artist-grid">
+              {data.testimonials.map((testimonial) => (
+                <article key={testimonial.name} className="artist-card">
+                  <strong>★★★★★</strong>
+                  <h3>{testimonial.name}</h3>
+                  <small>{testimonial.event}</small>
+                  <p>{testimonial.text}</p>
+                </article>
               ))}
             </div>
           </div>
@@ -767,12 +854,14 @@ const GibrigHome = () => {
             </div>
             <div>
               <p>{data.contact.phone}</p>
-              <p>{data.contact.email}</p>
+              <p>{data.contact.address}</p>
+              <p>Instagram {data.social.instagram} · TikTok {data.social.tiktok} · YouTube {data.social.youtube}</p>
               <a href={`https://wa.me/${data.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(data.whatsapp.message)}`} target="_blank" rel="noreferrer">Chat WhatsApp</a>
             </div>
           </div>
         </section>
       </main>
+      <footer className="section-wrap"><div className="container"><p>{data.footer}</p></div></footer>
     </div>
   );
 };
