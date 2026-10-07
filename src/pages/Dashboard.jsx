@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { billingApi, guestbookApi, invitationsApi, paymentsApi } from '../lib/api';
+import GuestbookScanner from '../components/GuestbookScanner';
 import PublicInvitation from './PublicInvitation';
 
 const emptyForm = {
@@ -79,6 +80,64 @@ const templateGroups = {
 };
 
 const displayDate = (value) => value ? new Date(value).toLocaleDateString('id-ID', { dateStyle: 'medium' }) : 'Belum aktif';
+const normalizeWhatsAppPhone = (phone) => {
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  else if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
+  else if (digits.startsWith('8')) digits = `62${digits}`;
+  return digits.length >= 8 && digits.length <= 15 ? digits : '';
+};
+const buildWhatsAppUrl = (phone, message, invitationUrl, ticketUrl) => {
+  const digits = normalizeWhatsAppPhone(phone);
+  if (!digits || !message.trim() || !ticketUrl) return '';
+  return `https://wa.me/${digits}?text=${encodeURIComponent(`${message.trim()}\n${invitationUrl}\n\nTiket barcode masuk: ${ticketUrl}`)}`;
+};
+const buildTicketUrl = (ticketToken) => `${window.location.origin}/undangan-ticket/${encodeURIComponent(ticketToken)}`;
+const personalizeWhatsAppMessage = (message, name) => {
+  const recipientName = name.trim();
+  if (!recipientName) return '';
+  if (message.includes('{{nama}}')) return message.replaceAll('{{nama}}', recipientName);
+  return `Yth. ${recipientName},\n\n${message}`;
+};
+const parseRecipientRows = (rows) => {
+  const headers = (rows[0]?.values || []).map((header) => String(header).trim().toLowerCase().replace(/[\s_-]/g, ''));
+  const phoneHeaders = new Set(['nohp', 'nomorhp', 'phone', 'phonenumber', 'mobile', 'whatsapp', 'nowhatsapp']);
+  const nameHeaders = new Set(['nama', 'namapenerima', 'name', 'recipient', 'recipientname']);
+  const phoneColumn = headers.findIndex((header) => phoneHeaders.has(header));
+  const nameColumn = headers.findIndex((header) => nameHeaders.has(header));
+  const startRow = phoneColumn >= 0 ? 1 : 0;
+  const columnIndex = phoneColumn >= 0 ? phoneColumn : 0;
+  const recipients = [];
+  const invalidRows = [];
+  const missingNameRows = [];
+
+  for (let index = startRow; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (row.values.every((cell) => !String(cell ?? '').trim())) continue;
+    const rawNumber = String(row.values[columnIndex] ?? '').trim();
+    const normalized = normalizeWhatsAppPhone(rawNumber);
+    const recipientName = String(row.values[nameColumn >= 0 ? nameColumn : columnIndex + 1] ?? '').trim();
+    if (!normalized) {
+      invalidRows.push(row.rowNumber);
+      continue;
+    }
+    if (!recipientName) {
+      missingNameRows.push(row.rowNumber);
+      continue;
+    }
+    if (!recipients.some((recipient) => recipient.phone === normalized && recipient.name.toLowerCase() === recipientName.toLowerCase())) {
+      recipients.push({ phone: normalized, name: recipientName });
+    }
+  }
+
+  return { recipients, invalidRows, missingNameRows };
+};
+const readWorkbook = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error('File Excel tidak dapat dibaca.'));
+  reader.onload = () => resolve(reader.result);
+  reader.readAsArrayBuffer(file);
+});
 
 export default function Dashboard({ onSignIn }) {
   const { user, token, isChecking, logout } = useAuth();
@@ -95,8 +154,18 @@ export default function Dashboard({ onSignIn }) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [paymentMethodId, setPaymentMethodId] = useState('');
+  const [paymentMobile, setPaymentMobile] = useState('');
   const [activePayment, setActivePayment] = useState(null);
   const [transferReference, setTransferReference] = useState('');
+  const [whatsAppInvitationId, setWhatsAppInvitationId] = useState(null);
+  const [whatsAppPhone, setWhatsAppPhone] = useState('');
+  const [whatsAppName, setWhatsAppName] = useState('');
+  const [whatsAppRecipients, setWhatsAppRecipients] = useState('');
+  const [whatsAppQueue, setWhatsAppQueue] = useState([]);
+  const [whatsAppQueueIndex, setWhatsAppQueueIndex] = useState(0);
+  const [whatsAppMessage, setWhatsAppMessage] = useState('');
+  const [isImportingRecipients, setIsImportingRecipients] = useState(false);
+  const [isPreparingTickets, setIsPreparingTickets] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -129,7 +198,9 @@ export default function Dashboard({ onSignIn }) {
     return () => { active = false; };
   }, [token]);
 
-  const selectedPlan = billing.plans.find((plan) => plan.id === form.plan_id);
+  const selectedPlan = billing.plans.find((plan) => plan.id === (user?.is_test_account ? 'business' : form.plan_id))
+    || billing.plans.find((plan) => plan.id === form.plan_id);
+  const selectedPaymentMethod = billing.payment_methods.find((method) => method.id === paymentMethodId);
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -145,7 +216,7 @@ export default function Dashboard({ onSignIn }) {
     setSetupGroup('');
     setSetupEventType('');
     setSetupTemplateId('');
-    setForm({ ...emptyForm, plan_id: billing.plans[0]?.id || 'basic' });
+    setForm({ ...emptyForm, plan_id: user?.is_test_account && billing.plans.some((plan) => plan.id === 'business') ? 'business' : billing.plans[0]?.id || 'basic' });
   };
 
   const setupTemplates = setupGroup
@@ -305,10 +376,11 @@ export default function Dashboard({ onSignIn }) {
       rsvp_url: form.rsvp_url,
       gallery: form.gallery.split('\n').map((url) => url.trim()).filter(Boolean),
     };
-    const plan = billing.plans.find((item) => item.id === form.plan_id);
+    const plan = selectedPlan;
+    const planId = user.is_test_account ? 'business' : form.plan_id;
     const payload = { title: form.title, content };
     if (!editingId) {
-      payload.plan_id = form.plan_id;
+      payload.plan_id = planId;
       if (plan?.slug_mode === 'custom') payload.slug = form.slug;
     } else if (plan?.slug_mode === 'custom') {
       payload.slug = form.slug;
@@ -320,7 +392,11 @@ export default function Dashboard({ onSignIn }) {
         : await invitationsApi.create(token, payload);
       await refreshInvitations();
       setEditingId(saved.id);
-      setMessage(editingId ? 'Perubahan undangan tersimpan.' : 'Draft dibuat. Lanjutkan pembayaran untuk mengaktifkan masa tayang.');
+      setMessage(editingId
+        ? 'Perubahan undangan tersimpan.'
+        : user.is_test_account
+          ? 'Undangan mendapat akses Business tanpa batas dan sudah aktif selamanya. Tekan Publish agar dapat dibagikan.'
+          : 'Draft dibuat. Lanjutkan pembayaran untuk mengaktifkan masa tayang.');
       if (!editingId) setForm((current) => ({ ...current, slug: saved.slug }));
     } catch (requestError) {
       setError(requestError.message);
@@ -333,7 +409,7 @@ export default function Dashboard({ onSignIn }) {
     setError('');
     setMessage('');
     try {
-      const payment = await paymentsApi.create(token, invitation.id, paymentMethodId);
+      const payment = await paymentsApi.create(token, invitation.id, paymentMethodId, paymentMobile);
       setActivePayment(payment);
       if (payment.redirect_url) window.location.assign(payment.redirect_url);
       else setMessage('Instruksi transfer siap. Setelah transfer, kirim referensi untuk verifikasi admin.');
@@ -364,6 +440,157 @@ export default function Dashboard({ onSignIn }) {
       setMessage(`Undangan aktif dan siap dibagikan: ${window.location.origin}${result.url}`);
     } catch (requestError) {
       setError(requestError.message);
+    }
+  };
+
+  const prepareWhatsAppQueue = async (invitationId, recipientList = null) => {
+    setError('');
+    const recipientRows = whatsAppRecipients.split(/\r?\n/).map((row) => row.trim()).filter(Boolean);
+    const recipients = [];
+    const invalidRows = [];
+    const missingNameRows = [];
+    recipientRows.forEach((row, index) => {
+      const hasNameSeparator = /[|\t]/.test(row);
+      const entries = hasNameSeparator ? [row] : row.split(/[\s,;]+/).filter(Boolean);
+      entries.forEach((entry) => {
+        const [rawPhone, ...nameParts] = entry.split(/[|\t]/);
+        const phone = normalizeWhatsAppPhone(rawPhone.trim());
+        const name = nameParts.join('|').trim();
+        if (!phone) invalidRows.push(index + 1);
+        else if (!name) missingNameRows.push(index + 1);
+        else if (!recipients.some((recipient) => recipient.phone === phone)) recipients.push({ phone, name });
+      });
+    });
+    if (invalidRows.length) {
+      setError(`Periksa nomor WhatsApp yang tidak valid pada baris ${[...new Set(invalidRows)].join(', ')}.`);
+      return;
+    }
+    if (missingNameRows.length) {
+      setError(`Nama penerima wajib diisi pada baris ${[...new Set(missingNameRows)].join(', ')}. Gunakan format nomor_hp | nama_penerima.`);
+      return;
+    }
+    if (!recipients.length) {
+      setError('Masukkan setidaknya satu nomor WhatsApp penerima.');
+      return;
+    }
+    await issueInvitationTickets(invitationId, recipients);
+  };
+
+  const issueInvitationTickets = async (invitationId, recipients) => {
+    setError('');
+    setIsPreparingTickets(true);
+    try {
+      const result = await guestbookApi.createTickets(token, invitationId, recipients);
+      setWhatsAppQueue(result.tickets);
+      setWhatsAppQueueIndex(0);
+      setMessage(`${result.tickets.length} tiket barcode unik siap dibagikan.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setIsPreparingTickets(false);
+    }
+  };
+
+  const prepareBasicWhatsAppTicket = async (invitationId) => {
+    const phone = normalizeWhatsAppPhone(whatsAppPhone);
+    if (!phone || !whatsAppName.trim()) {
+      setError('Isi nama dan nomor WhatsApp penerima yang valid sebelum membuat tiket.');
+      return;
+    }
+    await issueInvitationTickets(invitationId, [{ name: whatsAppName.trim(), phone }]);
+  };
+
+  const handleTicketScan = async (scannedValue) => {
+    setError('');
+    setMessage('');
+    let ticketToken = '';
+    try {
+      const ticketUrl = new URL(scannedValue, window.location.origin);
+      const ticketPath = ticketUrl.pathname.match(/^\/undangan-ticket\/([A-Za-z0-9_-]{32,64})$/);
+      if (!['http:', 'https:'].includes(ticketUrl.protocol) || !ticketPath) {
+        throw new Error('QR yang dipindai bukan tiket barcode Undangan.id.');
+      }
+      ticketToken = ticketPath[1];
+      const result = await guestbookApi.checkInTicket(token, guestbookInvitation.id, ticketToken);
+      if (result.already_checked_in) {
+        setMessage(`${result.entry?.name || 'Tamu'} sudah tercatat check-in sebelumnya.`);
+        return;
+      }
+      setOwnerGuestbook((current) => [result.entry, ...current.filter((entry) => entry.id !== result.entry.id)]);
+      setMessage(`Check-in berhasil: ${result.entry.name}. Tamu masuk ke buku tamu acara.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const downloadRecipientTemplate = async () => {
+    setError('');
+    try {
+      const { default: ExcelJS } = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Penerima');
+      sheet.columns = [
+        { header: 'nomor_hp', key: 'nomor_hp', width: 24 },
+        { header: 'nama_penerima', key: 'nama_penerima', width: 32 },
+      ];
+      sheet.getCell('A1').numFmt = '@';
+      const content = await workbook.xlsx.writeBuffer();
+      const url = URL.createObjectURL(new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'template-nomor-penerima.xlsx';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (requestError) {
+      setError(requestError.message || 'Template Excel tidak dapat dibuat.');
+    }
+  };
+
+  const importWhatsAppRecipients = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      setError('Ukuran file maksimal 1 MB.');
+      return;
+    }
+
+    setError('');
+    setIsImportingRecipients(true);
+    try {
+      if (!file.name.toLowerCase().endsWith('.xlsx')) throw new Error('Format belum didukung. Unggah file Excel .xlsx.');
+      const [content, { default: ExcelJS }] = await Promise.all([readWorkbook(file), import('exceljs')]);
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(content);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) throw new Error('File Excel tidak memiliki sheet untuk daftar nomor.');
+      const rows = [];
+      sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        rows.push({ rowNumber, values: row.values.slice(1) });
+      });
+      const { recipients, invalidRows, missingNameRows } = parseRecipientRows(rows);
+      if (invalidRows.length) {
+        const rowList = invalidRows.slice(0, 10).join(', ');
+        const suffix = invalidRows.length > 10 ? ', …' : '';
+        throw new Error(`Nomor tidak valid pada baris ${rowList}${suffix}. Perbaiki file lalu unggah kembali.`);
+      }
+      if (missingNameRows.length) {
+        const rowList = missingNameRows.slice(0, 10).join(', ');
+        const suffix = missingNameRows.length > 10 ? ', …' : '';
+        throw new Error(`Nama penerima wajib diisi pada baris ${rowList}${suffix}. Isi kolom nama_penerima lalu unggah kembali.`);
+      }
+      if (!recipients.length) throw new Error('File belum berisi nomor HP. Isi kolom nomor_hp lalu unggah kembali.');
+      setWhatsAppRecipients(recipients.map(({ phone, name }) => `${phone} | ${name}`).join('\n'));
+      setWhatsAppQueue([]);
+      setWhatsAppQueueIndex(0);
+      const result = await guestbookApi.createTickets(token, whatsAppInvitationId, recipients);
+      setWhatsAppQueue(result.tickets);
+      setWhatsAppQueueIndex(0);
+      setMessage(`${result.tickets.length} tiket barcode unik berhasil dibuat dari file.`);
+    } catch (requestError) {
+      setError(requestError.message || 'File penerima tidak dapat dibaca.');
+    } finally {
+      setIsImportingRecipients(false);
     }
   };
 
@@ -414,8 +641,9 @@ export default function Dashboard({ onSignIn }) {
       <div className="account-layout container">
         <section className="account-main-column">
           <div className="account-heading">
-            <div><p className="eyebrow">Ruang undangan Anda</p><h1>Rancang cerita hari istimewa.</h1><p>Buat draft, edit detail acara, lalu aktifkan setelah pembayaran dikonfirmasi.</p></div>
+            <div><p className="eyebrow">Ruang undangan Anda</p><h1>Rancang cerita hari istimewa.</h1><p>{user.is_test_account ? 'Buat undangan tanpa batas dan bagikan setelah dipublikasikan.' : 'Buat draft, edit detail acara, lalu aktifkan setelah pembayaran dikonfirmasi.'}</p></div>
           </div>
+          {user.is_test_account ? <p className="account-message" role="status">Akun tester · akses Business tanpa batas. Semua undangan aktif selamanya dan tidak memerlukan pembayaran.</p> : null}
 
           {!setupComplete ? <section className="account-panel invitation-setup-panel">
             <div className="account-panel-heading"><div><span className="eyebrow">Langkah 1 dari 3</span><h2>Mulai rancangan undangan</h2></div></div>
@@ -431,7 +659,7 @@ export default function Dashboard({ onSignIn }) {
             <div className="account-panel-heading"><div><span className="eyebrow">{editingId ? 'Edit undangan' : 'Undangan baru'}</span><h2>{editingId ? 'Perbarui detail acara' : 'Mulai dengan detail acara'}</h2></div>{editingId ? <button className="text-button" onClick={resetForm}>Buat draft baru</button> : null}</div>
             <form className="invitation-editor-form" onSubmit={saveInvitation}>
               <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder="Pernikahan Aulia & Farhan" /></label>
-              <label>Paket<select value={form.plan_id} disabled={Boolean(editingId)} onChange={(event) => updateField('plan_id', event.target.value)}>{billing.plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · Rp {Number(plan.price).toLocaleString('id-ID')} · {plan.duration_days} hari</option>)}</select></label>
+              <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_test_account} onChange={(event) => updateField('plan_id', event.target.value)}>{billing.plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · Rp {Number(plan.price).toLocaleString('id-ID')} · {plan.duration_days} hari</option>)}</select></label>
               {selectedPlan?.slug_mode === 'custom' ? <label>Link pilihan<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} required minLength={3} maxLength={64} placeholder="aulia-farhan" /><small>URL publik: {window.location.host}/i/{form.slug || 'link-pilihan'}</small></label> : <p className="form-hint">Paket Basic memakai link otomatis setelah draft dibuat.</p>}
               <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => updateField('event_type', event.target.value)}>{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
               <div className="template-picker-field">
@@ -493,21 +721,59 @@ export default function Dashboard({ onSignIn }) {
               <div className="account-invitation-list">
                 {invitations.map((invitation) => {
                   const plan = billing.plans.find((item) => item.id === invitation.plan_id);
-                  const active = ['active', 'published'].includes(invitation.status) && new Date(invitation.active_until) > new Date();
+                  const active = user.is_test_account || (['active', 'published'].includes(invitation.status) && new Date(invitation.active_until) > new Date());
+                  const invitationUrl = `${window.location.origin}/i/${invitation.slug}`;
+                  const isPremiumPlan = plan?.id === 'premium';
+                  const isBusinessPlan = plan?.id === 'business';
+                  const isBasicPlan = plan?.id === 'basic';
+                  const currentTicket = whatsAppQueue[whatsAppQueueIndex];
+                  const recipientInvitationUrl = currentTicket
+                    ? `${invitationUrl}?ticket=${encodeURIComponent(currentTicket.token)}`
+                    : invitationUrl;
+                  const whatsAppUrl = buildWhatsAppUrl(
+                    whatsAppInvitationId === invitation.id ? currentTicket?.phone || '' : '',
+                    personalizeWhatsAppMessage(whatsAppMessage, currentTicket?.name || ''),
+                    recipientInvitationUrl,
+                    currentTicket ? buildTicketUrl(currentTicket.token) : '',
+                  );
                   return (
                     <article className="account-invitation-card" key={invitation.id}>
-                      <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{plan?.name || invitation.plan_id} · aktif sampai {displayDate(invitation.active_until)}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p></div>
+                      <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p></div>
                       <div className="account-card-actions">
                         <button className="secondary-btn" onClick={() => setPreviewInvitation(invitation)}>Preview</button>
                         <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
                         <button className="secondary-btn" onClick={() => editInvitation(invitation)}>Edit</button>
                         {active && invitation.status !== 'published' ? <button className="primary-btn" onClick={() => publishInvitation(invitation)}>Publish</button> : null}
+                        {active && invitation.status === 'published' && (isBasicPlan || isPremiumPlan || isBusinessPlan) ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
                         {!active ? <>
                           <label className="payment-method-select">Metode<select value={paymentMethodId} onChange={(event) => setPaymentMethodId(event.target.value)}>{billing.payment_methods.map((method) => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label>
-                          <button className="primary-btn" disabled={!paymentMethodId} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(plan?.price || 0).toLocaleString('id-ID')}</button>
+                          {selectedPaymentMethod?.provider === 'mayar' ? <label className="payment-method-select">Nomor ponsel untuk invoice Mayar<input type="tel" inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" value={paymentMobile} onChange={(event) => setPaymentMobile(event.target.value)} /></label> : null}
+                          <button className="primary-btn" disabled={!paymentMethodId || (selectedPaymentMethod?.provider === 'mayar' && !paymentMobile.trim())} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(plan?.price || 0).toLocaleString('id-ID')}</button>
                         </> : null}
                         {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/i/${invitation.slug}`} target="_blank" rel="noreferrer">Buka link ↗</a> : null}
                       </div>
+                      {whatsAppInvitationId === invitation.id ? <div className="invitation-whatsapp-form">
+                        <h4>{isBasicPlan ? 'Kirim WhatsApp ke satu penerima' : 'Kirim undangan ke daftar penerima'}</h4>
+                        {isBasicPlan ? <><label>Nama penerima undangan<input type="text" autoComplete="name" value={whatsAppName} onChange={(event) => { setWhatsAppName(event.target.value); setWhatsAppQueue([]); }} placeholder="Nama penerima" /></label><label>Nomor WhatsApp penerima <span>Gunakan nomor Indonesia seperti 081234567890.</span><input type="tel" inputMode="tel" autoComplete="tel" value={whatsAppPhone} onChange={(event) => { setWhatsAppPhone(event.target.value); setWhatsAppQueue([]); }} placeholder="08xxxxxxxxxx" /></label></> : <div className="whatsapp-recipient-import">
+                          <div><button type="button" className="whatsapp-template-download" onClick={downloadRecipientTemplate}>Download template .xlsx</button><span>Isi kolom nomor_hp dan nama_penerima untuk tiap tamu.</span></div>
+                          <label>Upload daftar nomor (.xlsx)<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={importWhatsAppRecipients} disabled={isImportingRecipients} /></label>
+                          {isImportingRecipients ? <span className="form-hint">Memproses file…</span> : null}
+                          <label>Daftar penerima <span>Satu penerima per baris dengan format nomor_hp | nama_penerima.</span><textarea rows={4} value={whatsAppRecipients} onChange={(event) => { setWhatsAppRecipients(event.target.value); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); }} placeholder={'081234567890 | Andi\n081298765432 | Siti'} /></label>
+                          {whatsAppQueue.length ? <p className="form-hint">{whatsAppQueue.length} nomor siap di antrean.</p> : null}
+                        </div>}
+                        <label>Pesan <span>Gunakan {'{{nama}}'} untuk menyisipkan nama penerima; jika dihapus, sapaan nama ditambahkan otomatis.</span><textarea rows={3} maxLength={1000} value={whatsAppMessage} onChange={(event) => setWhatsAppMessage(event.target.value)} /></label>
+                        <p className="form-hint">Setiap penerima mendapatkan tautan undangan dan tiket barcode unik. Panitia dapat memindai tiket untuk mencatat kehadiran. Setelah mengirim pesan di WhatsApp, kembali ke dashboard dan konfirmasi untuk membuka chat berikutnya.</p>
+                        <div className="whatsapp-bulk-actions">
+                          {isPremiumPlan || isBusinessPlan ? <>
+                            {whatsAppRecipients.trim() && !whatsAppQueue.length ? <button type="button" className="secondary-btn" disabled={isPreparingTickets} onClick={() => prepareWhatsAppQueue(invitation.id)}>{isPreparingTickets ? 'Membuat tiket…' : 'Buat tiket & siapkan antrean'}</button> : null}
+                            {whatsAppQueue.length ? <><span>Penerima {whatsAppQueueIndex + 1} dari {whatsAppQueue.length} · {whatsAppQueue[whatsAppQueueIndex]?.name}</span><a className={`primary-btn ${!whatsAppUrl ? 'is-disabled' : ''}`} href={whatsAppUrl || undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!whatsAppUrl}>Buka chat WhatsApp</a>{whatsAppQueueIndex < whatsAppQueue.length - 1 ? <button type="button" className="secondary-btn" onClick={() => setWhatsAppQueueIndex((index) => index + 1)}>Sudah terkirim, lanjut</button> : <span>Antrean selesai. Pastikan pesan untuk penerima terakhir sudah dikirim.</span>}</> : null}
+                          </> : <>
+                            {!whatsAppQueue.length ? <button type="button" className="secondary-btn" disabled={isPreparingTickets} onClick={() => prepareBasicWhatsAppTicket(invitation.id)}>{isPreparingTickets ? 'Membuat tiket…' : 'Buat tiket barcode'}</button> : null}
+                            {whatsAppQueue.length ? <><span>Tiket unik untuk {currentTicket?.name}</span><a className={`primary-btn ${!whatsAppUrl ? 'is-disabled' : ''}`} href={whatsAppUrl || undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!whatsAppUrl}>Buka WhatsApp</a></> : null}
+                          </>}
+                          <button type="button" className="secondary-btn" onClick={() => setWhatsAppInvitationId(null)}>Tutup</button>
+                        </div>
+                      </div> : null}
                     </article>
                   );
                 })}
@@ -515,7 +781,7 @@ export default function Dashboard({ onSignIn }) {
             )}
           </section>
 
-          {guestbookInvitation ? <section className="account-panel guestbook-management-panel"><div className="account-panel-heading"><div><span className="eyebrow">Tamu undangan</span><h2>RSVP, ucapan, dan buku tamu</h2></div><button className="text-button" onClick={() => setGuestbookInvitation(null)}>Tutup</button></div><div className="guestbook-summary"><strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span><strong>{ownerGuestbook.length}</strong><span>total kiriman</span></div><div className="owner-guestbook-list">{ownerGuestbook.length ? ownerGuestbook.map((entry) => <article key={entry.id} className={entry.status === 'hidden' ? 'is-hidden' : ''}><div><strong>{entry.name}</strong><span>{entry.attendance} · {entry.guests} tamu</span><p>{entry.message}</p></div><div><button onClick={() => moderateGuestbook(entry, entry.status === 'visible' ? 'hidden' : 'visible')}>{entry.status === 'visible' ? 'Sembunyikan' : 'Tampilkan'}</button><button className="danger-text" onClick={() => removeGuestbook(entry)}>Hapus</button></div></article>) : <p className="form-hint">Belum ada RSVP atau ucapan untuk undangan ini.</p>}</div></section> : null}
+          {guestbookInvitation ? <section className="account-panel guestbook-management-panel"><div className="account-panel-heading"><div><span className="eyebrow">Tamu undangan</span><h2>RSVP, ucapan, dan buku tamu</h2><p>{guestbookInvitation.title}</p></div><button className="text-button" onClick={() => setGuestbookInvitation(null)}>Tutup</button></div><div className="guestbook-summary"><strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span><strong>{ownerGuestbook.filter((entry) => entry.source === 'barcode_check_in').length}</strong><span>check-in barcode</span><strong>{ownerGuestbook.length}</strong><span>total kiriman</span></div><div className="guestbook-checkin"><h3>Scan tiket barcode tamu</h3><p>Pemindaian hanya mencatat kehadiran untuk undangan ini. Tiket yang sama tidak dapat check-in dua kali.</p><GuestbookScanner onScan={handleTicketScan} /></div><div className="owner-guestbook-list">{ownerGuestbook.length ? ownerGuestbook.map((entry) => <article key={entry.id} className={entry.status === 'hidden' ? 'is-hidden' : ''}><div><strong>{entry.name}</strong><span>{entry.source === 'barcode_check_in' ? `Check-in barcode · ${new Date(entry.checked_in_at || entry.created_at).toLocaleString('id-ID')}` : `${entry.attendance} · ${entry.guests} tamu`}</span><p>{entry.message}</p></div><div>{entry.source === 'barcode_check_in' ? null : <><button onClick={() => moderateGuestbook(entry, entry.status === 'visible' ? 'hidden' : 'visible')}>{entry.status === 'visible' ? 'Sembunyikan' : 'Tampilkan'}</button><button className="danger-text" onClick={() => removeGuestbook(entry)}>Hapus</button></>}</div></article>) : <p className="form-hint">Belum ada RSVP, check-in, atau ucapan untuk undangan ini.</p>}</div></section> : null}
 
           {previewInvitation ? (
             <section className="account-panel invitation-preview-panel">
@@ -524,7 +790,7 @@ export default function Dashboard({ onSignIn }) {
             </section>
           ) : null}
         </section>
-        <aside className="account-side-column"><section className="account-panel"><span className="eyebrow">Pilihan paket</span><h2>Waktu tayang dan link mengikuti paket.</h2>{billing.plans.map((plan) => <div className="account-plan-row" key={plan.id}><strong>{plan.name}</strong><span>{plan.duration_days} hari</span><small>{plan.slug_mode === 'custom' ? 'Link pilihan' : 'Link otomatis'} · maks. {plan.max_invitations || 1} undangan</small><b>Rp {Number(plan.price).toLocaleString('id-ID')}</b></div>)}</section><p className="account-secure-note">Pembayaran gateway divalidasi server. Undangan tidak bisa dibagikan sebelum pembayaran terkonfirmasi.</p></aside>
+        <aside className="account-side-column"><section className="account-panel"><span className="eyebrow">{user.is_test_account ? 'Akses akun tester' : 'Pilihan paket'}</span><h2>{user.is_test_account ? 'Semua fitur, tanpa batas waktu.' : 'Waktu tayang dan link mengikuti paket.'}</h2>{user.is_test_account ? <div className="account-plan-row"><strong>Business · QA</strong><span>Selamanya</span><small>Undangan tanpa batas · semua fitur aktif · tanpa pembayaran</small><b>AKTIF</b></div> : billing.plans.map((plan) => <div className="account-plan-row" key={plan.id}><strong>{plan.name}</strong><span>{plan.duration_days} hari</span><small>{plan.slug_mode === 'custom' ? 'Link pilihan' : 'Link otomatis'} · maks. {plan.max_invitations || 1} undangan</small><b>Rp {Number(plan.price).toLocaleString('id-ID')}</b></div>)}</section>{user.is_test_account ? null : <p className="account-secure-note">Pembayaran gateway divalidasi server. Undangan tidak bisa dibagikan sebelum pembayaran terkonfirmasi.</p>}</aside>
       </div>
     </main>
   );

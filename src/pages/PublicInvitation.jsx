@@ -123,6 +123,9 @@ const templateCopy = {
 export default function PublicInvitation({ slug, invitation: initialInvitation = null }) {
   const [invitation, setInvitation] = useState(initialInvitation);
   const [error, setError] = useState('');
+  const [inviteeName, setInviteeName] = useState('');
+  const [inviteeLoading, setInviteeLoading] = useState(false);
+  const [inviteeError, setInviteeError] = useState('');
   const [isOpened, setIsOpened] = useState(false);
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [selectedImage, setSelectedImage] = useState(null);
@@ -133,6 +136,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const [isGuestSubmitting, setIsGuestSubmitting] = useState(false);
   const musicRef = useRef(null);
   const contentRef = useRef(null);
+  const ticketToken = initialInvitation ? '' : new URLSearchParams(window.location.search).get('ticket') || '';
 
   useEffect(() => {
     if (initialInvitation) {
@@ -145,6 +149,27 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       .catch((requestError) => { if (active) setError(requestError.message); });
     return () => { active = false; };
   }, [initialInvitation, slug]);
+
+  useEffect(() => {
+    if (!ticketToken) {
+      setInviteeName('');
+      setInviteeError('');
+      setInviteeLoading(false);
+      return undefined;
+    }
+    let active = true;
+    setInviteeLoading(true);
+    setInviteeError('');
+    guestbookApi.getTicket(ticketToken)
+      .then((ticket) => { if (active) setInviteeName(ticket.name); })
+      .catch((requestError) => {
+        if (!active) return;
+        setInviteeName('');
+        setInviteeError(requestError.message);
+      })
+      .finally(() => { if (active) setInviteeLoading(false); });
+    return () => { active = false; };
+  }, [ticketToken]);
 
   useEffect(() => {
     if (!invitation) return undefined;
@@ -237,7 +262,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     <main className={`public-invitation-page public-template-${templateClass} wedding-frame-${frameClass} ${isOpened ? 'is-opened' : ''}`} style={customStyle}>
       <section className="wedding-cover" style={content.cover_image ? { backgroundImage: `linear-gradient(180deg, rgba(24, 22, 18, 0.08), rgba(24, 22, 18, 0.58)), url("${content.cover_image}")` } : undefined}>
         <div className="wedding-ornament wedding-ornament-top">{theme.ornament}</div>
-        <div className="wedding-cover-inner"><p className="wedding-kicker">{copy.kicker}</p><h1>{groomName || content.honoree_name || invitation.title}<span>&amp;</span>{brideName || ''}</h1><p className="wedding-cover-date">{content.event_date ? new Date(content.event_date).toLocaleDateString('id-ID', { dateStyle: 'full' }) : 'Save the date'}{content.event_time ? ` · ${content.event_time}` : ''}</p><button className="wedding-open-button" onClick={openInvitation}>BUKA UNDANGAN</button></div>
+        <div className="wedding-cover-inner"><p className="wedding-kicker">{copy.kicker}</p>{inviteeName ? <p className="wedding-recipient-name"><span>Kepada Yth.</span><strong>{inviteeName}</strong></p> : null}{inviteeError ? <p className="wedding-recipient-error" role="alert">Nama penerima tiket tidak dapat diverifikasi.</p> : null}<h1>{groomName || content.honoree_name || invitation.title}<span>&amp;</span>{brideName || ''}</h1><p className="wedding-cover-date">{content.event_date ? new Date(content.event_date).toLocaleDateString('id-ID', { dateStyle: 'full' }) : 'Save the date'}{content.event_time ? ` · ${content.event_time}` : ''}</p><button className="wedding-open-button" disabled={inviteeLoading || Boolean(ticketToken && inviteeError)} onClick={openInvitation}>{inviteeLoading ? 'MEMUAT NAMA TAMU…' : 'BUKA UNDANGAN'}</button></div>
         <div className="wedding-ornament wedding-ornament-bottom">{theme.ornament}</div>
       </section>
 

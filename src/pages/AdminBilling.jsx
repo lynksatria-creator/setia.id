@@ -84,7 +84,7 @@ export default function AdminBilling() {
     setConfig((current) => ({
       ...current,
       payment_methods: current.payment_methods.map((method) => method.id === methodId
-        ? { ...method, [field]: value, ...(field === 'provider' && value === 'midtrans' && !method.payment_code ? { payment_code: 'gopay' } : {}) }
+        ? { ...method, [field]: value }
         : method),
     }));
   };
@@ -97,7 +97,6 @@ export default function AdminBilling() {
         id,
         name: 'Transfer bank baru',
         provider: 'manual',
-        payment_code: null,
         enabled: true,
         bank_name: '',
         account_name: '',
@@ -182,7 +181,7 @@ export default function AdminBilling() {
 
   return (
     <main className="billing-admin-shell">
-      <header className="billing-admin-header"><a className="brand" href="/undangan"><span className="logo-mark">U</span>Undangan.id <small>ADMIN</small></a><div><span>{config?.gateway_ready ? 'Midtrans siap' : 'Midtrans belum dikonfigurasi'}</span><button onClick={() => loadDashboard(token)}>Muat ulang</button><button onClick={logout}>Keluar</button></div></header>
+      <header className="billing-admin-header"><a className="brand" href="/undangan"><span className="logo-mark">U</span>Undangan.id <small>ADMIN</small></a><div><span>{config?.gateway_ready ? 'Mayar siap' : 'Mayar belum dikonfigurasi'}</span><button onClick={() => loadDashboard(token)}>Muat ulang</button><button onClick={logout}>Keluar</button></div></header>
       <div className="billing-admin-layout">
         <aside className="billing-admin-sidebar"><p className="eyebrow">Pengelolaan</p><button className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Paket & pembayaran</button><button className={activeTab === 'payments' ? 'active' : ''} onClick={() => setActiveTab('payments')}>Verifikasi pembayaran <span>{payments.filter((payment) => payment.status === 'pending' && payment.provider === 'manual').length}</span></button><button className={activeTab === 'invitations' ? 'active' : ''} onClick={() => setActiveTab('invitations')}>Undangan aktif <span>{invitations.length}</span></button></aside>
         <section className="billing-admin-content">
@@ -193,7 +192,7 @@ export default function AdminBilling() {
 
           {activeTab === 'billing' && config ? (
             <>
-              <section className="account-panel admin-config-panel"><div className="account-panel-heading"><div><span className="eyebrow">Hak akses dan waktu tayang</span><h2>Konfigurasi paket</h2></div><span className="gateway-state">{config.gateway_ready ? 'Server key tersedia' : 'Isi MIDTRANS_SERVER_KEY di backend/.env'}</span></div>
+              <section className="account-panel admin-config-panel"><div className="account-panel-heading"><div><span className="eyebrow">Hak akses dan waktu tayang</span><h2>Konfigurasi paket</h2></div><span className="gateway-state">{config.gateway_ready ? 'API Key Mayar tersedia' : 'Konfigurasikan API Key Mayar di backend/.env'}</span></div>
                 <div className="billing-plan-list">{config.plans.map((plan) => <article className="billing-plan-editor" key={plan.id}>
                   <div className="billing-plan-heading"><strong>{plan.name}</strong><label className="toggle-label"><input type="checkbox" checked={plan.enabled} onChange={(event) => updatePlan(plan.id, 'enabled', event.target.checked)} />Aktif</label></div>
                   <div className="billing-plan-fields"><label>Nama<input value={plan.name} onChange={(event) => updatePlan(plan.id, 'name', event.target.value)} /></label><label>Harga (Rp)<input type="number" min="1" value={plan.price} onChange={(event) => updatePlan(plan.id, 'price', Number(event.target.value))} /></label><label>Masa aktif (hari)<input type="number" min="1" max="3650" value={plan.duration_days} onChange={(event) => updatePlan(plan.id, 'duration_days', Number(event.target.value))} /></label><label>Maks. undangan<input type="number" min="1" max="1000" value={plan.max_invitations || 1} onChange={(event) => updatePlan(plan.id, 'max_invitations', Number(event.target.value))} /></label><label>Jenis link<select value={plan.slug_mode} onChange={(event) => updatePlan(plan.id, 'slug_mode', event.target.value)}><option value="generated">Otomatis</option><option value="custom">Pilihan pemilik</option></select></label></div>
@@ -203,8 +202,8 @@ export default function AdminBilling() {
               <section className="account-panel admin-config-panel"><div className="account-panel-heading"><div><span className="eyebrow">Gateway dan pembayaran manual</span><h2>Metode pembayaran</h2></div><button className="secondary-btn" onClick={addManualMethod}>Tambah rekening / metode</button></div>
                 <div className="billing-method-list">{config.payment_methods.map((method) => <article className="billing-method-editor" key={method.id}>
                   <div className="billing-plan-heading"><label>Nama metode<input value={method.name} onChange={(event) => updateMethod(method.id, 'name', event.target.value)} /></label><label className="toggle-label"><input type="checkbox" checked={method.enabled} onChange={(event) => updateMethod(method.id, 'enabled', event.target.checked)} />Tersedia</label></div>
-                  <div className="billing-plan-fields"><label>Jenis<select value={method.provider} onChange={(event) => updateMethod(method.id, 'provider', event.target.value)}><option value="midtrans">Midtrans checkout</option><option value="manual">Manual / transfer</option></select></label>{method.provider === 'midtrans' ? <label>Metode gateway<select value={method.payment_code || 'gopay'} onChange={(event) => updateMethod(method.id, 'payment_code', event.target.value)}><option value="gopay">GoPay</option><option value="qris">QRIS</option><option value="bank_transfer">Virtual account</option></select></label> : <><label>Bank / penyedia<input value={method.bank_name || ''} onChange={(event) => updateMethod(method.id, 'bank_name', event.target.value)} /></label><label>Nama pemilik<input value={method.account_name || ''} onChange={(event) => updateMethod(method.id, 'account_name', event.target.value)} /></label><label>Nomor rekening / tujuan<input value={method.account_number || ''} onChange={(event) => updateMethod(method.id, 'account_number', event.target.value)} /></label></>}</div>
-                  {method.provider === 'manual' ? <label>Instruksi transfer<textarea rows={2} value={method.instructions || ''} onChange={(event) => updateMethod(method.id, 'instructions', event.target.value)} /></label> : <p className="form-hint">Server key Midtrans disimpan di backend/.env dan tidak dikirim ke browser.</p>}
+                  <div className="billing-plan-fields"><label>Jenis<select value={method.provider} onChange={(event) => updateMethod(method.id, 'provider', event.target.value)}><option value="mayar">Mayar checkout</option><option value="manual">Manual / transfer</option></select></label>{method.provider === 'manual' ? <><label>Bank / penyedia<input value={method.bank_name || ''} onChange={(event) => updateMethod(method.id, 'bank_name', event.target.value)} /></label><label>Nama pemilik<input value={method.account_name || ''} onChange={(event) => updateMethod(method.id, 'account_name', event.target.value)} /></label><label>Nomor rekening / tujuan<input value={method.account_number || ''} onChange={(event) => updateMethod(method.id, 'account_number', event.target.value)} /></label></> : null}</div>
+                  {method.provider === 'manual' ? <label>Instruksi transfer<textarea rows={2} value={method.instructions || ''} onChange={(event) => updateMethod(method.id, 'instructions', event.target.value)} /></label> : <p className="form-hint">Checkout memakai invoice Mayar. Simpan API Key hanya di backend/.env, bukan di browser.</p>}
                   <button className="text-button danger-text" onClick={() => setConfig((current) => ({ ...current, payment_methods: current.payment_methods.filter((item) => item.id !== method.id) }))}>Hapus metode</button>
                 </article>)}</div>
                 <button className="primary-btn" onClick={saveBilling} disabled={!config.payment_methods.length}>Simpan seluruh konfigurasi</button>

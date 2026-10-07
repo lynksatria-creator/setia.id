@@ -1,12 +1,11 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-import hashlib
-import hmac
 import logging
 import os
 from pathlib import Path
 import re
+import secrets
 import uuid
 from typing import Literal
 
@@ -18,7 +17,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pymongo.errors import DuplicateKeyError
 
 
@@ -83,20 +82,12 @@ class PlanConfig(BaseModel):
 class PaymentMethodConfig(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9-]{2,32}$")
     name: str = Field(min_length=2, max_length=60)
-    provider: Literal["midtrans", "manual"]
-    payment_code: Literal["gopay", "qris", "bank_transfer"] | None = None
+    provider: Literal["mayar", "manual"]
     enabled: bool = True
     bank_name: str | None = Field(default=None, max_length=60)
     account_name: str | None = Field(default=None, max_length=80)
     account_number: str | None = Field(default=None, max_length=40)
     instructions: str | None = Field(default=None, max_length=500)
-
-    @model_validator(mode="after")
-    def require_midtrans_code(self):
-        if self.provider == "midtrans" and self.payment_code is None:
-            raise ValueError("Metode Midtrans harus memilih payment_code.")
-        return self
-
 
 class BillingConfigUpdate(BaseModel):
     plans: list[PlanConfig] = Field(min_length=1, max_length=10)
@@ -118,6 +109,7 @@ class InvitationUpdate(BaseModel):
 
 class PaymentCreate(BaseModel):
     payment_method_id: str
+    mobile: str | None = Field(default=None, min_length=8, max_length=24)
 
 
 class PaymentProof(BaseModel):
@@ -133,6 +125,27 @@ class GuestbookEntryCreate(BaseModel):
 
 class GuestbookModeration(BaseModel):
     status: Literal["visible", "hidden"]
+
+
+class InvitationTicketRecipient(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(pattern=r"^[0-9]{8,15}$")
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str):
+        name = value.strip()
+        if len(name) < 2:
+            raise ValueError("Nama penerima minimal 2 karakter.")
+        return name
+
+
+class InvitationTicketBatch(BaseModel):
+    recipients: list[InvitationTicketRecipient] = Field(min_length=1, max_length=1000)
+
+
+class InvitationTicketCheckIn(BaseModel):
+    ticket_token: str = Field(min_length=32, max_length=64)
 
 
 class AdminActivationUpdate(BaseModel):
@@ -153,10 +166,12 @@ DEFAULT_BILLING_CONFIG = {
         {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": True, "features": ["100 undangan aktif", "Custom link", "Statistik lengkap"]},
     ],
     "payment_methods": [
-        {"id": "gopay-qris", "name": "GoPay / QRIS", "provider": "midtrans", "payment_code": "gopay", "enabled": True},
+        {"id": "mayar", "name": "Mayar checkout", "provider": "mayar", "enabled": True},
         {"id": "bank-transfer", "name": "Transfer bank", "provider": "manual", "enabled": False, "bank_name": "", "account_name": "", "account_number": "", "instructions": "Pembayaran diverifikasi oleh admin."},
     ],
 }
+
+TEST_ACCOUNT_ACTIVE_UNTIL = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc).isoformat()
 
 
 def get_jwt_secret():
@@ -177,6 +192,17 @@ async def get_billing_config():
         for plan in saved.get("plans", []):
             default_plan = next((item for item in DEFAULT_BILLING_CONFIG["plans"] if item["id"] == plan["id"]), None)
             plan.setdefault("max_invitations", default_plan["max_invitations"] if default_plan else 1)
+        for method in saved.get("payment_methods", []):
+            if method.get("provider") == "midtrans":
+                if method.get("id") == "bank-transfer" or any(
+                    method.get(field) for field in ("bank_name", "account_name", "account_number")
+                ):
+                    method["provider"] = "manual"
+                else:
+                    method["provider"] = "mayar"
+                    if method.get("name") in {"GoPay", "QRIS", "GoPay / QRIS"}:
+                        method["name"] = "Mayar checkout"
+                method.pop("payment_code", None)
         return saved
     await db.platform_settings.update_one(
         {"key": "billing"},
@@ -264,55 +290,79 @@ def public_payment(payment):
     }
 
 
-async def create_midtrans_snap(payment, user, enabled_payments):
-    server_key = os.environ.get("MIDTRANS_SERVER_KEY", "")
-    if not server_key:
-        raise HTTPException(status_code=503, detail="MIDTRANS_SERVER_KEY belum dikonfigurasi.")
+def mayar_api_base_url():
+    return "https://api.mayar.io/hl/v2" if os.environ.get("MAYAR_IS_SANDBOX", "false").lower() == "true" else "https://api.mayar.id/hl/v2"
 
-    production = os.environ.get("MIDTRANS_IS_PRODUCTION", "false").lower() == "true"
-    host = "https://app.midtrans.com" if production else "https://app.sandbox.midtrans.com"
-    app_url = os.environ.get("PUBLIC_APP_URL", "http://localhost:3000").rstrip("/")
-    payload = {
-        "transaction_details": {
-            "order_id": payment["order_id"],
-            "gross_amount": payment["amount"],
-        },
-        "customer_details": {
-            "first_name": user["full_name"],
-            "email": user["email"],
-        },
-        "item_details": [{
-            "id": payment["plan_id"],
-            "price": payment["amount"],
-            "quantity": 1,
-            "name": payment["plan_name"][:50],
-        }],
-        "enabled_payments": enabled_payments,
-        "callbacks": {"finish": f"{app_url}/undangan-dashboard?payment={payment['id']}"},
-    }
 
+async def mayar_request(method, path, **kwargs):
+    api_key = os.environ.get("MAYAR_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="MAYAR_API_KEY belum dikonfigurasi.")
     try:
         async with httpx.AsyncClient(timeout=20) as client_http:
-            response = await client_http.post(
-                f"{host}/snap/v1/transactions",
-                json=payload,
-                auth=(server_key, ""),
+            response = await client_http.request(
+                method,
+                f"{mayar_api_base_url()}{path}",
+                headers={"Authorization": api_key},
+                **kwargs,
             )
         response.raise_for_status()
     except httpx.HTTPStatusError as error:
-        logger.warning("Midtrans rejected order %s with status %s", payment["order_id"], error.response.status_code)
-        raise HTTPException(status_code=502, detail="Gateway menolak pembayaran. Periksa konfigurasi merchant.") from None
+        logger.warning("Mayar API rejected request with status %s", error.response.status_code)
+        raise HTTPException(status_code=502, detail="Mayar menolak permintaan pembayaran. Periksa konfigurasi API Key.") from None
     except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="Gateway pembayaran tidak dapat dihubungi.") from None
+        raise HTTPException(status_code=502, detail="API Mayar tidak dapat dihubungi.") from None
+    try:
+        result = response.json()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="Mayar mengirim respons yang tidak valid.") from None
+    if not isinstance(result, dict) or not isinstance(result.get("data"), dict):
+        raise HTTPException(status_code=502, detail="Mayar mengirim format respons yang tidak dikenal.")
+    if result.get("statusCode") not in {None, 200}:
+        logger.warning("Mayar API returned status %s", result["statusCode"])
+        raise HTTPException(status_code=502, detail="Mayar tidak berhasil memproses permintaan.")
+    return result["data"]
 
-    result = response.json()
-    if not result.get("redirect_url"):
-        raise HTTPException(status_code=502, detail="Gateway tidak mengembalikan halaman pembayaran.")
-    return result["redirect_url"]
+
+async def create_mayar_invoice(payment, user, mobile):
+    now = datetime.now(timezone.utc)
+    invoice = await mayar_request(
+        "POST",
+        "/invoices/create",
+        json={
+            "name": user["full_name"],
+            "email": user["email"],
+            "mobile": mobile,
+            "description": f"Undangan.id {payment['plan_name']} · {payment['order_id']}",
+            "expiredAt": (now + timedelta(hours=24)).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            "items": [{
+                "quantity": 1,
+                "rate": payment["amount"],
+                "description": f"Paket {payment['plan_name']} - Undangan.id",
+            }],
+            "extraData": {
+                "noCustomer": payment["id"],
+                "idProd": payment["plan_id"],
+            },
+        },
+    )
+    invoice_id = invoice.get("id")
+    redirect_url = invoice.get("link") or invoice.get("paymentUrl")
+    if not isinstance(invoice_id, str) or not isinstance(redirect_url, str) or not redirect_url.startswith("https://"):
+        raise HTTPException(status_code=502, detail="Mayar tidak mengembalikan ID invoice dan tautan pembayaran yang valid.")
+    payment["mayar_invoice_id"] = invoice_id
+    if isinstance(invoice.get("transactionId"), str):
+        payment["mayar_transaction_id"] = invoice["transactionId"]
+    return redirect_url
 
 
 def public_user(user):
-    return {"id": user["id"], "full_name": user["full_name"], "email": user["email"]}
+    return {
+        "id": user["id"],
+        "full_name": user["full_name"],
+        "email": user["email"],
+        "is_test_account": user.get("is_test_account") is True,
+    }
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
@@ -370,7 +420,7 @@ async def get_public_billing_config():
 @api_router.get("/admin/billing/config")
 async def get_admin_billing_config(_admin=Depends(require_admin)):
     config = await get_billing_config()
-    return {**config, "gateway_ready": bool(os.environ.get("MIDTRANS_SERVER_KEY"))}
+    return {**config, "gateway_ready": bool(os.environ.get("MAYAR_API_KEY"))}
 
 
 @api_router.put("/admin/billing/config")
@@ -385,7 +435,7 @@ async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depen
         {"$set": config},
         upsert=True,
     )
-    return {**config, "gateway_ready": bool(os.environ.get("MIDTRANS_SERVER_KEY"))}
+    return {**config, "gateway_ready": bool(os.environ.get("MAYAR_API_KEY"))}
 
 
 @api_router.post("/auth/register")
@@ -442,6 +492,13 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
     if plan is None:
         raise HTTPException(status_code=422, detail="Paket tidak tersedia.")
 
+    has_test_access = current_user.get("is_test_account") is True
+    if has_test_access:
+        plan = next(
+            (item for item in config["plans"] if item["id"] == "business" and item.get("enabled", True)),
+            next((item for item in config["plans"] if item.get("slug_mode") == "custom" and item.get("enabled", True)), plan),
+        )
+
     if plan["slug_mode"] == "custom" and not payload.slug:
         raise HTTPException(status_code=422, detail="Paket ini memerlukan link undangan pilihan Anda.")
     if plan["slug_mode"] == "generated" and payload.slug:
@@ -459,7 +516,8 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
         "title": payload.title.strip(),
         "slug": slug,
         "content": payload.content,
-        "status": "draft",
+        "status": "active" if has_test_access else "draft",
+        "active_until": TEST_ACCOUNT_ACTIVE_UNTIL if has_test_access else None,
         "payment_id": None,
         "created_at": now,
         "updated_at": now,
@@ -579,6 +637,145 @@ async def create_public_guestbook(slug: str, payload: GuestbookEntryCreate):
     return public_guestbook_entry(entry)
 
 
+def public_invitation_ticket(ticket, invitation):
+    content = invitation.get("content", {})
+    return {
+        "name": ticket["name"],
+        "invitation_title": invitation["title"],
+        "slug": invitation["slug"],
+        "event_date": content.get("event_date"),
+        "event_time": content.get("event_time"),
+        "venue": content.get("venue"),
+        "checked_in_at": ticket.get("checked_in_at"),
+    }
+
+
+@api_router.get("/public/invitation-tickets/{ticket_token}")
+async def get_public_invitation_ticket(ticket_token: str):
+    ticket = await db.invitation_tickets.find_one({"token": ticket_token}, {"_id": 0})
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Tiket undangan tidak ditemukan.")
+    invitation = await db.invitations.find_one(
+        {"id": ticket["invitation_id"]},
+        {"_id": 0, "id": 1, "title": 1, "slug": 1, "content": 1},
+    )
+    if invitation is None:
+        raise HTTPException(status_code=404, detail="Undangan untuk tiket ini tidak ditemukan.")
+    return public_invitation_ticket(ticket, invitation)
+
+
+@api_router.post("/invitations/{invitation_id}/tickets")
+async def create_invitation_tickets(
+    invitation_id: str,
+    payload: InvitationTicketBatch,
+    current_user=Depends(get_current_user),
+):
+    invitation = await get_owned_invitation(invitation_id, current_user["id"])
+    if invitation.get("status") != "published" or datetime.fromisoformat(invitation["active_until"]) <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=409, detail="Publish undangan yang masih aktif sebelum membuat tiket barcode.")
+    if invitation.get("plan_id") == "basic" and len(payload.recipients) > 1:
+        raise HTTPException(status_code=403, detail="Paket Basic hanya dapat membuat satu tiket penerima per permintaan.")
+
+    tickets_collection = db.invitation_tickets
+    await tickets_collection.create_index([("token", 1)], unique=True)
+    await tickets_collection.create_index(
+        [("invitation_id", 1), ("phone", 1), ("name", 1)],
+        unique=True,
+    )
+    tickets = []
+    for recipient in payload.recipients:
+        identity = {
+            "invitation_id": invitation_id,
+            "phone": recipient.phone,
+            "name": recipient.name.strip(),
+        }
+        ticket = await tickets_collection.find_one(identity, {"_id": 0})
+        if ticket is None:
+            ticket = {
+                "id": str(uuid.uuid4()),
+                **identity,
+                "owner_id": current_user["id"],
+                "token": secrets.token_urlsafe(32),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            try:
+                await tickets_collection.insert_one(ticket)
+            except DuplicateKeyError:
+                ticket = await tickets_collection.find_one(identity, {"_id": 0})
+                if ticket is None:
+                    raise
+        tickets.append({
+            "id": ticket["id"],
+            "name": ticket["name"],
+            "phone": ticket["phone"],
+            "token": ticket["token"],
+            "checked_in_at": ticket.get("checked_in_at"),
+        })
+    return {"tickets": tickets}
+
+
+async def ensure_ticket_guestbook_entry(ticket, invitation_id: str, owner_id: str):
+    entry = await db.guestbook_entries.find_one({"ticket_id": ticket["id"]}, {"_id": 0})
+    if entry is not None:
+        return entry
+    checked_in_at = ticket["checked_in_at"]
+    entry = {
+        "id": ticket["id"],
+        "ticket_id": ticket["id"],
+        "invitation_id": invitation_id,
+        "owner_id": owner_id,
+        "name": ticket["name"],
+        "message": "Check-in kehadiran melalui barcode undangan.",
+        "attendance": "attending",
+        "guests": 1,
+        "status": "hidden",
+        "source": "barcode_check_in",
+        "created_at": checked_in_at,
+        "checked_in_at": checked_in_at,
+    }
+    try:
+        await db.guestbook_entries.insert_one(entry)
+    except DuplicateKeyError:
+        entry = await db.guestbook_entries.find_one({"ticket_id": ticket["id"]}, {"_id": 0})
+    return entry
+
+
+@api_router.post("/invitations/{invitation_id}/check-in")
+async def check_in_invitation_ticket(
+    invitation_id: str,
+    payload: InvitationTicketCheckIn,
+    current_user=Depends(get_current_user),
+):
+    await get_owned_invitation(invitation_id, current_user["id"])
+    ticket = await db.invitation_tickets.find_one(
+        {"invitation_id": invitation_id, "token": payload.ticket_token},
+        {"_id": 0},
+    )
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Barcode tidak cocok dengan undangan ini.")
+
+    await db.guestbook_entries.create_index([("ticket_id", 1)], unique=True, sparse=True)
+    if ticket.get("checked_in_at"):
+        entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, current_user["id"])
+        return {"already_checked_in": True, "entry": entry}
+
+    checked_in_at = datetime.now(timezone.utc).isoformat()
+    result = await db.invitation_tickets.update_one(
+        {"id": ticket["id"], "checked_in_at": {"$exists": False}},
+        {"$set": {"checked_in_at": checked_in_at}},
+    )
+    if not result.modified_count:
+        ticket = await db.invitation_tickets.find_one({"id": ticket["id"]}, {"_id": 0})
+        if ticket is None:
+            raise HTTPException(status_code=404, detail="Tiket undangan tidak ditemukan.")
+        entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, current_user["id"])
+        return {"already_checked_in": True, "entry": entry}
+
+    ticket["checked_in_at"] = checked_in_at
+    entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, current_user["id"])
+    return {"already_checked_in": False, "entry": entry}
+
+
 @api_router.get("/invitations/{invitation_id}/guestbook")
 async def list_my_guestbook(invitation_id: str, current_user=Depends(get_current_user)):
     await get_owned_invitation(invitation_id, current_user["id"])
@@ -676,7 +873,17 @@ async def create_invitation_payment(invitation_id: str, payload: PaymentCreate, 
             "instructions": method.get("instructions"),
         }
     else:
-        redirect_url = await create_midtrans_snap(payment, current_user, [method["payment_code"]])
+        mobile = re.sub(r"[\s()-]", "", payload.mobile or "")
+        if mobile.startswith("0"):
+            mobile = f"+62{mobile[1:]}"
+        elif mobile.startswith("8"):
+            mobile = f"+62{mobile}"
+        elif mobile.startswith("62"):
+            mobile = f"+{mobile}"
+        digits = re.sub(r"\D", "", mobile)
+        if not 8 <= len(digits) <= 15:
+            raise HTTPException(status_code=422, detail="Masukkan nomor ponsel yang valid untuk pembayaran Mayar.")
+        redirect_url = await create_mayar_invoice(payment, current_user, mobile)
         payment["redirect_url"] = redirect_url
     await db.payment_orders.insert_one(payment)
     await db.invitations.update_one(
@@ -712,43 +919,55 @@ async def submit_transfer_reference(payment_id: str, payload: PaymentProof, curr
     return {"status": "pending", "message": "Referensi transfer terkirim untuk diverifikasi admin."}
 
 
-@api_router.post("/payments/midtrans/notification")
-async def midtrans_notification(payload: dict):
-    server_key = os.environ.get("MIDTRANS_SERVER_KEY", "")
-    if not server_key:
-        raise HTTPException(status_code=503, detail="Gateway pembayaran belum dikonfigurasi.")
-    try:
-        order_id = payload["order_id"]
-        status_code = payload["status_code"]
-        gross_amount = payload["gross_amount"]
-        supplied_signature = payload["signature_key"]
-        amount_matches = Decimal(gross_amount) > 0
-    except (KeyError, InvalidOperation, TypeError):
-        raise HTTPException(status_code=400, detail="Notifikasi pembayaran tidak lengkap.") from None
+@api_router.post("/payments/mayar/webhook")
+async def mayar_webhook(payload: dict):
+    if not os.environ.get("MAYAR_API_KEY"):
+        raise HTTPException(status_code=503, detail="Gateway Mayar belum dikonfigurasi.")
+    if payload.get("event") != "payment.received":
+        return {"status": "ignored"}
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Notifikasi Mayar tidak lengkap.")
 
-    expected_signature = hashlib.sha512(f"{order_id}{status_code}{gross_amount}{server_key}".encode("utf-8")).hexdigest()
-    if not hmac.compare_digest(expected_signature, str(supplied_signature)):
-        raise HTTPException(status_code=401, detail="Signature pembayaran tidak valid.")
+    identifiers = {
+        str(data[key])
+        for key in ("id", "transactionId", "paymentLinkTransactionId", "productId", "paymentLinkId")
+        if data.get(key)
+    }
+    extra_data = data.get("extraData")
+    if isinstance(extra_data, dict) and extra_data.get("noCustomer"):
+        identifiers.add(str(extra_data["noCustomer"]))
+    if not identifiers:
+        raise HTTPException(status_code=400, detail="ID transaksi Mayar tidak ditemukan.")
 
-    payment = await db.payment_orders.find_one({"order_id": order_id, "provider": "midtrans"}, {"_id": 0})
+    payment = await db.payment_orders.find_one(
+        {
+            "provider": "mayar",
+            "$or": [
+                {"id": {"$in": list(identifiers)}},
+                {"order_id": {"$in": list(identifiers)}},
+                {"mayar_invoice_id": {"$in": list(identifiers)}},
+                {"mayar_transaction_id": {"$in": list(identifiers)}},
+            ],
+        },
+        {"_id": 0},
+    )
     if payment is None:
-        raise HTTPException(status_code=404, detail="Order pembayaran tidak ditemukan.")
-    try:
-        amount_matches = amount_matches and Decimal(gross_amount) == Decimal(payment["amount"])
-    except (InvalidOperation, TypeError):
-        amount_matches = False
-    if not amount_matches:
-        raise HTTPException(status_code=400, detail="Nominal notifikasi tidak sesuai order.")
+        raise HTTPException(status_code=404, detail="Order Mayar tidak ditemukan.")
 
-    provider_status = payload.get("transaction_status", "pending")
-    fraud_status = payload.get("fraud_status")
-    if provider_status == "settlement" or (provider_status == "capture" and fraud_status in {None, "accept"}):
-        status = "paid"
-    elif provider_status in {"deny", "cancel", "expire"}:
-        status = "failed"
-    else:
-        status = "pending"
-    await set_payment_status(payment, status, provider_status)
+    invoice_id = payment.get("mayar_invoice_id")
+    if not invoice_id:
+        raise HTTPException(status_code=409, detail="Order belum memiliki ID invoice Mayar.")
+    invoice = await mayar_request("GET", f"/invoices/{invoice_id}")
+    try:
+        invoice_amount = Decimal(str(invoice["amount"]))
+    except (KeyError, InvalidOperation, TypeError):
+        raise HTTPException(status_code=502, detail="Detail invoice Mayar tidak lengkap.") from None
+    if invoice.get("id") != invoice_id or invoice_amount != Decimal(payment["amount"]):
+        raise HTTPException(status_code=400, detail="Invoice Mayar tidak sesuai dengan order.")
+
+    if str(invoice.get("status", "")).lower() == "paid":
+        await set_payment_status(payment, "paid", "paid")
     return {"status": "ok"}
 
 

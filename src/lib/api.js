@@ -7,14 +7,34 @@ export async function apiRequest(path, { token, ...options } = {}) {
   }
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
-  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error('Tidak dapat terhubung ke API Undangan.id. Pastikan backend berjalan di port 8000 dan MongoDB tersedia.');
+    }
+    throw error;
+  }
+
+  let payload = null;
+  if (response.status !== 204 && response.headers.get('content-type')?.includes('application/json')) {
+    try {
+      payload = await response.json();
+    } catch {
+      if (response.ok) throw new Error('API Undangan.id mengirim respons JSON yang tidak valid.');
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(payload?.detail || 'Permintaan tidak dapat diproses.');
+    if (typeof payload?.detail === 'string' && payload.detail) throw new Error(payload.detail);
+    if (response.status >= 500) {
+      throw new Error(`API Undangan.id mengalami gangguan (HTTP ${response.status}). Pastikan backend dan MongoDB aktif.`);
+    }
+    throw new Error(`Permintaan tidak dapat diproses (HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}).`);
   }
 
   return payload;
@@ -41,15 +61,26 @@ export const guestbookApi = {
   listPublic: (slug) => apiRequest(`/public/invitations/${encodeURIComponent(slug)}/guestbook`),
   createPublic: (slug, data) => apiRequest(`/public/invitations/${encodeURIComponent(slug)}/guestbook`, { method: 'POST', body: JSON.stringify(data) }),
   listOwner: (token, invitationId) => apiRequest(`/invitations/${invitationId}/guestbook`, { token }),
+  createTickets: (token, invitationId, recipients) => apiRequest(`/invitations/${invitationId}/tickets`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ recipients }),
+  }),
+  checkInTicket: (token, invitationId, ticketToken) => apiRequest(`/invitations/${invitationId}/check-in`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ ticket_token: ticketToken }),
+  }),
+  getTicket: (ticketToken) => apiRequest(`/public/invitation-tickets/${encodeURIComponent(ticketToken)}`),
   moderate: (token, invitationId, entryId, status) => apiRequest(`/invitations/${invitationId}/guestbook/${entryId}`, { token, method: 'PATCH', body: JSON.stringify({ status }) }),
   remove: (token, invitationId, entryId) => apiRequest(`/invitations/${invitationId}/guestbook/${entryId}`, { token, method: 'DELETE' }),
 };
 
 export const paymentsApi = {
-  create: (token, invitationId, paymentMethodId) => apiRequest(`/invitations/${invitationId}/payments`, {
+  create: (token, invitationId, paymentMethodId, mobile) => apiRequest(`/invitations/${invitationId}/payments`, {
     token,
     method: 'POST',
-    body: JSON.stringify({ payment_method_id: paymentMethodId }),
+    body: JSON.stringify({ payment_method_id: paymentMethodId, mobile }),
   }),
   get: (token, id) => apiRequest(`/payments/${id}`, { token }),
   submitTransferReference: (token, id, transferReference) => apiRequest(`/payments/${id}/proof`, {

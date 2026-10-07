@@ -10,6 +10,7 @@ import Templates, { createPreviewInvitation, slugify } from './pages/Templates';
 import Dashboard from './pages/Dashboard';
 import AdminBilling from './pages/AdminBilling';
 import PublicInvitation from './pages/PublicInvitation';
+import GuestTicket from './pages/GuestTicket';
 
 const storage = {
   portal: 'portal-cms',
@@ -49,40 +50,54 @@ const saveData = (key, value) => {
 };
 
 const defaultPortalData = {
-  siteName: 'Portal Iklan',
-  logo: 'G',
+  siteName: 'Portal.id',
+  logo: 'P',
+  logoImage: '',
   hero: {
-    title: 'Rayakan momen penting dengan cerita yang terasa milik Anda.',
-    subtitle:
-      'Dari perencanaan pernikahan bersama Nunuy Nadhifa Wedding hingga undangan digital elegan dari Undangan.id, setiap detail dibuat lebih personal.',
-    cta: 'Rencanakan Acara dengan Nunuy Nadhifa Wedding',
-    secondary: 'Buat Undangan dengan Undangan.id',
-    tertiary: 'Hiburan bersama Gibrig Entertainment',
+    eyebrow: 'CREATIVE BRANDS · ONE PORTAL',
+    title: 'Temukan partner terbaik untuk momen istimewa Anda.',
+    subtitle: 'Wedding yang penuh makna, musik yang menghidupkan suasana, dan undangan digital yang merangkai cerita.',
+    image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1500&q=90',
+    cta: 'Jelajahi pilihan kami',
   },
   services: [
     {
-      name: 'GIBRIG ENTERTAINMENT',
-      description: 'Jasa entertainment dan hiburan profesional untuk berbagai acara.',
-      button: 'Kunjungi Website',
-      href: '/gibrig',
-      accent: '#8b5cf6',
-    },
-    {
       name: 'NUNUY NADHIFA WEDDING',
-      description:
-        'Wedding planner dan dekorasi personal untuk hari istimewa yang tertata indah dari awal hingga akhir.',
+      description: 'Wedding planner dan dekorasi personal untuk merancang hari istimewa yang terasa anggun, intim, dan penuh makna.',
       button: 'Konsultasi Wedding',
       href: '/nunuy-nadhifa-wedding',
+      image: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1200&q=85',
       accent: '#ec4899',
+      headingFont: 'Cormorant Garamond',
+      bodyFont: 'DM Sans',
     },
     {
-      name: 'UNDANGAN DIGITAL',
-      description: 'Undangan online berdesain premium, lengkap dengan RSVP, peta lokasi, galeri, dan musik.',
+      name: 'Musik.id',
+      description: 'Hadirkan musik dan hiburan yang dinamis untuk menciptakan suasana acara yang tak terlupakan.',
+      button: 'Jelajahi Musik.id',
+      href: '/gibrig',
+      image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=85',
+      accent: '#d09046',
+      headingFont: 'Space Grotesk',
+      bodyFont: 'DM Sans',
+    },
+    {
+      name: 'Undangan.id',
+      description: 'Undangan online minimalis dan mudah dibagikan, lengkap dengan RSVP, peta lokasi, galeri, dan musik.',
       button: 'Lihat Undangan.id',
       href: '/undangan',
+      image: 'https://images.unsplash.com/photo-1523438885200-e635ba2c371e?auto=format&fit=crop&w=1200&q=85',
       accent: '#10b981',
+      headingFont: 'DM Sans',
+      bodyFont: 'DM Sans',
     },
   ],
+  ads: {
+    top: { enabled: true, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', image: '', href: '#contact' },
+    midFeed: { enabled: true, label: 'FEATURED PARTNER', title: 'Buat momen Anda lebih istimewa', image: '', href: '/nunuy-nadhifa-wedding' },
+    sidebar: { enabled: true, label: 'DIREKOMENDASIKAN', title: 'Cerita indah dimulai dari sini', image: '', href: '/undangan' },
+    floatingBottom: { enabled: true, label: 'Punya acara dalam waktu dekat?', title: 'Mari rencanakan bersama', image: '', href: '/nunuy-nadhifa-wedding' },
+  },
   gallery: [
     'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1100&q=85',
     'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1100&q=85',
@@ -108,13 +123,21 @@ const defaultPortalData = {
   },
   whatsapp: { number: '+6281234567890', message: 'Halo, saya tertarik dengan layanan portal iklan.' },
   socials: ['Instagram', 'TikTok', 'YouTube'],
-  footer: '© 2026 Portal Iklan • Crafted for premium digital brands',
+  footer: '© 2026 Portal.id • Tiga brand, satu cerita.',
   theme: {
     primary: '#203f35',
     secondary: '#f6f0e7',
     accent: '#bd755d',
     background: '#fbf9f4',
-    font: 'DM Sans',
+    headingFont: 'Cormorant Garamond',
+    bodyFont: 'DM Sans',
+    radius: 12,
+    spacing: 24,
+    preset: 'soft-elegant-pastel',
+    animations: true,
+    animationDelay: 120,
+    animationDuration: 650,
+    elementAnimations: { hero: true, brandCards: true, ads: true },
   },
 };
 
@@ -275,6 +298,29 @@ const themeLibrary = [
   { name: 'Romantic Pink', primary: '#ec4899', secondary: '#fdf2f8', accent: '#be185d', background: '#fff7fb', font: 'Playfair Display' },
 ];
 
+const portalPresets = [
+  { id: 'glassmorphism-luxury', name: 'Glassmorphism Luxury', description: 'Kaca berlapis, pastel transparan, dan glow halus.' },
+  { id: 'neumorphism-clean', name: 'Neumorphism Clean', description: 'Monokrom lembut dengan bayangan timbul dan inset.' },
+  { id: 'cinematic-parallax', name: 'Cinematic Parallax', description: 'Visual sinematik dengan kedalaman dan reveal bertahap.' },
+  { id: 'minimalist-monochromatic', name: 'Minimalist Monochromatic', description: 'Kontras hitam-putih, serif elegan, dan garis ekspansif.' },
+  { id: 'neon-cyberpunk', name: 'Neon Cyberpunk / Dynamic Night', description: 'Mode gelap, garis neon berpendar, dan pulse.' },
+  { id: 'soft-elegant-pastel', name: 'Soft Elegant Pastel', description: 'Nuansa champagne dan rose dengan zoom lembut.' },
+  { id: 'fluid-liquid-gradient', name: 'Fluid Liquid Gradient', description: 'Gradient bergerak dengan elemen mengambang.' },
+  { id: 'geometric-bauhaus', name: 'Geometric Bauhaus', description: 'Bidang warna tegas dan komposisi geometris.' },
+  { id: 'retro-vintage-paper', name: 'Retro Vintage Paper', description: 'Tekstur kertas klasik dengan interaksi tilt.' },
+  { id: 'modern-card-stacking', name: 'Modern Card Stacking', description: 'Card bertumpuk dengan efek flip dan depth.' },
+  { id: 'split-screen-interactive', name: 'Split-Screen Interactive', description: 'Kolom brand melebar secara interaktif.' },
+  { id: 'bento-grid-showcase', name: 'Bento Grid Showcase', description: 'Grid modular modern dengan scale-up.' },
+  { id: 'dark-mode-obsidian', name: 'Dark Mode Obsidian', description: 'Hitam matte dengan shimmer metalik.' },
+  { id: 'aurora-borealis-wave', name: 'Aurora Borealis Wave', description: 'Pendaran hijau-ungu bergerak perlahan.' },
+  { id: 'floating-bubble-particles', name: 'Floating Bubble / Particles', description: 'Partikel lembut yang mengikuti gerak pointer.' },
+  { id: 'isomorphic-3d-tilt', name: 'Isomorphic 3D Tilt', description: 'Card miring dan merespons pointer.' },
+  { id: 'typographic-bold-focus', name: 'Typographic Bold Focus', description: 'Headline besar dengan ticker berjalan.' },
+  { id: 'frosted-mesh-light', name: 'Frosted Mesh Light', description: 'Permukaan kristal dengan reveal blur.' },
+  { id: 'interactive-spotlight', name: 'Interactive Spotlight', description: 'Sorotan warna mengikuti posisi pointer.' },
+  { id: 'elastic-spring-motion', name: 'Elastic Spring Motion', description: 'Transisi antarmuka dengan gerak membal.' },
+];
+
 const navItems = [
   { label: 'Beranda', href: '#top' },
   { label: 'Wedding', href: '#brands' },
@@ -284,6 +330,32 @@ const navItems = [
 ];
 
 const formatPath = (path) => path || '/';
+
+const normalizePortalData = (data) => {
+  const saved = data && typeof data === 'object' ? data : {};
+  const savedServices = Array.isArray(saved.services) ? saved.services : [];
+  return {
+    ...defaultPortalData,
+    ...saved,
+    hero: { ...defaultPortalData.hero, ...(saved.hero || {}) },
+    services: defaultPortalData.services.map((service, index) => ({
+      ...service,
+      ...(savedServices.find((item) => item.href === service.href) || savedServices[index] || {}),
+    })),
+    ads: Object.fromEntries(Object.entries(defaultPortalData.ads).map(([key, value]) => [
+      key,
+      { ...value, ...(saved.ads?.[key] || {}) },
+    ])),
+    theme: {
+      ...defaultPortalData.theme,
+      ...(saved.theme || {}),
+      elementAnimations: { ...defaultPortalData.theme.elementAnimations, ...(saved.theme?.elementAnimations || {}) },
+    },
+    contact: { ...defaultPortalData.contact, ...(saved.contact || {}) },
+    whatsapp: { ...defaultPortalData.whatsapp, ...(saved.whatsapp || {}) },
+    socials: Array.isArray(saved.socials) ? saved.socials : defaultPortalData.socials,
+  };
+};
 
 const useWindowPath = () => {
   const [path, setPath] = useState(formatPath(window.location.pathname));
@@ -365,8 +437,11 @@ const AdminLogin = ({ site, label, onLogin, credentials }) => {
 const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], description }) => {
   const [credentials, setCredentials] = useState({ username: defaultAdmins[site].username, passwordHash: '' });
   const [loggedIn, setLoggedIn] = useState(false);
-  const [formData, setFormData] = useState(() => loadData(dataKey, defaultData));
+  const [formData, setFormData] = useState(() => site === 'admin'
+    ? normalizePortalData(loadData(dataKey, defaultData))
+    : loadData(dataKey, defaultData));
   const [themeName, setThemeName] = useState('Luxury Gold');
+  const [configMessage, setConfigMessage] = useState('');
 
   useEffect(() => {
     const loadCreds = async () => {
@@ -398,6 +473,35 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
   const saveDraft = () => {
     saveData(dataKey, formData);
     alert('Draft berhasil disimpan di perangkat ini.');
+  };
+
+  const exportPortalConfig = () => {
+    const blob = new Blob([JSON.stringify(formData, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'portal-id-config.json';
+    link.click();
+    window.URL.revokeObjectURL(url);
+    setConfigMessage('Konfigurasi berhasil diekspor.');
+  };
+
+  const importPortalConfig = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const imported = JSON.parse(await file.text());
+      if (!imported || typeof imported !== 'object' || !imported.hero || !Array.isArray(imported.services) || imported.services.length !== 3 || !imported.theme || !imported.ads) {
+        throw new Error('Format konfigurasi tidak sesuai. Pastikan file memiliki hero, 3 brand, theme, dan ads.');
+      }
+      setFormData(normalizePortalData(imported));
+      setConfigMessage('Konfigurasi berhasil dimuat. Tekan Publish untuk menerapkannya.');
+    } catch (error) {
+      setConfigMessage(error instanceof SyntaxError ? 'File bukan JSON yang valid.' : error.message);
+    } finally {
+      event.target.value = '';
+    }
   };
 
   const preview = () => {
@@ -477,6 +581,12 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
               Nama Website
               <input value={formData.siteName || ''} onChange={(event) => updateField('siteName', event.target.value)} />
             </label>
+            {site === 'admin' ? (
+              <>
+                <label>Teks logo<input value={formData.logo || ''} onChange={(event) => updateField('logo', event.target.value)} /></label>
+                <label>URL gambar logo<input value={formData.logoImage || ''} onChange={(event) => updateField('logoImage', event.target.value)} /></label>
+              </>
+            ) : null}
             <label>
               WhatsApp Number
               <input value={formData.whatsapp?.number || ''} onChange={(event) => updateField('whatsapp.number', event.target.value)} />
@@ -491,6 +601,104 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             </label>
           </div>
         </section>
+
+        {site === 'admin' ? (
+          <>
+            <section className="admin-panel-block portal-cms-block">
+              <div className="portal-admin-section-heading">
+                <div>
+                  <h3>Portal.id · Content Studio</h3>
+                  <p className="muted">Kelola hero, tiga brand utama, materi visual, dan area iklan portal.</p>
+                </div>
+                <div className="portal-config-actions">
+                  <button type="button" className="ghost" onClick={exportPortalConfig}>Ekspor JSON</button>
+                  <label className="portal-import-button">Impor JSON<input type="file" accept="application/json,.json" onChange={importPortalConfig} /></label>
+                </div>
+              </div>
+              {configMessage ? <p className="portal-config-message" role="status">{configMessage}</p> : null}
+              <h4>Hero section</h4>
+              <div className="form-grid">
+                <label>Eyebrow<input value={formData.hero.eyebrow || ''} onChange={(event) => updateField('hero.eyebrow', event.target.value)} /></label>
+                <label>Judul utama<input value={formData.hero.title || ''} onChange={(event) => updateField('hero.title', event.target.value)} /></label>
+                <label className="portal-form-wide">Deskripsi<input value={formData.hero.subtitle || ''} onChange={(event) => updateField('hero.subtitle', event.target.value)} /></label>
+                <label>CTA<input value={formData.hero.cta || ''} onChange={(event) => updateField('hero.cta', event.target.value)} /></label>
+                <label>URL gambar hero<input value={formData.hero.image || ''} onChange={(event) => updateField('hero.image', event.target.value)} /></label>
+              </div>
+              <h4>Brand showcase · 3 kartu utama</h4>
+              <div className="portal-admin-brand-list">
+                {formData.services.map((service, index) => (
+                  <fieldset className="portal-admin-brand" key={`${service.href}-${index}`}>
+                    <legend>Brand 0{index + 1}</legend>
+                    <div className="form-grid">
+                      <label>Nama<input value={service.name || ''} onChange={(event) => updateField(`services.${index}.name`, event.target.value)} /></label>
+                      <label>CTA<input value={service.button || ''} onChange={(event) => updateField(`services.${index}.button`, event.target.value)} /></label>
+                      <label className="portal-form-wide">Deskripsi<input value={service.description || ''} onChange={(event) => updateField(`services.${index}.description`, event.target.value)} /></label>
+                      <label>URL website<input value={service.href || ''} onChange={(event) => updateField(`services.${index}.href`, event.target.value)} /></label>
+                      <label>URL gambar kartu<input value={service.image || ''} onChange={(event) => updateField(`services.${index}.image`, event.target.value)} /></label>
+                      <label>Warna aksen<input type="color" value={service.accent || '#203f35'} onChange={(event) => updateField(`services.${index}.accent`, event.target.value)} /></label>
+                      <label>Google Font · heading<input value={service.headingFont || ''} onChange={(event) => updateField(`services.${index}.headingFont`, event.target.value)} placeholder="Cormorant Garamond" /></label>
+                      <label>Google Font · body<input value={service.bodyFont || ''} onChange={(event) => updateField(`services.${index}.bodyFont`, event.target.value)} placeholder="DM Sans" /></label>
+                    </div>
+                  </fieldset>
+                ))}
+              </div>
+            </section>
+
+            <section className="admin-panel-block">
+              <h3>Ad Slot Manager</h3>
+              <p className="muted">Aktifkan, ubah materi, dan atur tautan setiap slot iklan.</p>
+              <div className="portal-admin-ad-grid">
+                {[
+                  ['top', 'Top Banner'],
+                  ['midFeed', 'Mid-Feed Banner'],
+                  ['sidebar', 'Sidebar'],
+                  ['floatingBottom', 'Floating Bottom'],
+                ].map(([key, title]) => (
+                  <fieldset className="portal-admin-ad" key={key}>
+                    <legend>{title}</legend>
+                    <label className="portal-checkbox-label"><input type="checkbox" checked={Boolean(formData.ads[key].enabled)} onChange={(event) => updateField(`ads.${key}.enabled`, event.target.checked)} /> Slot aktif</label>
+                    <label>Label<input value={formData.ads[key].label || ''} onChange={(event) => updateField(`ads.${key}.label`, event.target.value)} /></label>
+                    <label>Judul<input value={formData.ads[key].title || ''} onChange={(event) => updateField(`ads.${key}.title`, event.target.value)} /></label>
+                    <label>URL gambar<input value={formData.ads[key].image || ''} onChange={(event) => updateField(`ads.${key}.image`, event.target.value)} /></label>
+                    <label>URL tujuan<input value={formData.ads[key].href || ''} onChange={(event) => updateField(`ads.${key}.href`, event.target.value)} /></label>
+                  </fieldset>
+                ))}
+              </div>
+            </section>
+
+            <section className="admin-panel-block">
+              <h3>Preset, Theme & Motion</h3>
+              <div className="form-grid portal-theme-controls">
+                <label className="portal-form-wide">20 template preset
+                  <select value={formData.theme.preset || portalPresets[5].id} onChange={(event) => updateField('theme.preset', event.target.value)}>
+                    {portalPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name} — {preset.description}</option>)}
+                  </select>
+                </label>
+                <label>Warna utama<input type="color" value={formData.theme.primary || '#203f35'} onChange={(event) => updateField('theme.primary', event.target.value)} /></label>
+                <label>Warna permukaan<input type="color" value={formData.theme.secondary || '#f6f0e7'} onChange={(event) => updateField('theme.secondary', event.target.value)} /></label>
+                <label>Warna aksen<input type="color" value={formData.theme.accent || '#bd755d'} onChange={(event) => updateField('theme.accent', event.target.value)} /></label>
+                <label>Warna latar<input type="color" value={formData.theme.background || '#fbf9f4'} onChange={(event) => updateField('theme.background', event.target.value)} /></label>
+                <label>Google Font · heading<input value={formData.theme.headingFont || ''} onChange={(event) => updateField('theme.headingFont', event.target.value)} /></label>
+                <label>Google Font · body<input value={formData.theme.bodyFont || ''} onChange={(event) => updateField('theme.bodyFont', event.target.value)} /></label>
+                <label>Radius kartu (px)<input type="number" min="0" max="48" value={formData.theme.radius ?? 12} onChange={(event) => updateField('theme.radius', Number(event.target.value))} /></label>
+                <label>Jarak grid (px)<input type="number" min="8" max="64" value={formData.theme.spacing ?? 24} onChange={(event) => updateField('theme.spacing', Number(event.target.value))} /></label>
+                <label className="portal-checkbox-label"><input type="checkbox" checked={formData.theme.animations !== false} onChange={(event) => updateField('theme.animations', event.target.checked)} /> Animasi global aktif</label>
+                <label className="portal-checkbox-label"><input type="checkbox" checked={formData.theme.elementAnimations?.hero !== false} onChange={(event) => updateField('theme.elementAnimations.hero', event.target.checked)} /> Animasi hero aktif</label>
+                <label className="portal-checkbox-label"><input type="checkbox" checked={formData.theme.elementAnimations?.brandCards !== false} onChange={(event) => updateField('theme.elementAnimations.brandCards', event.target.checked)} /> Animasi kartu brand aktif</label>
+                <label className="portal-checkbox-label"><input type="checkbox" checked={formData.theme.elementAnimations?.ads !== false} onChange={(event) => updateField('theme.elementAnimations.ads', event.target.checked)} /> Animasi slot iklan aktif</label>
+                <label>Delay animasi (ms)<input type="number" min="0" max="2000" value={formData.theme.animationDelay ?? 120} onChange={(event) => updateField('theme.animationDelay', Number(event.target.value))} /></label>
+                <label>Durasi animasi (ms)<input type="number" min="100" max="3000" value={formData.theme.animationDuration ?? 650} onChange={(event) => updateField('theme.animationDuration', Number(event.target.value))} /></label>
+              </div>
+              <div className="portal-preset-catalog">
+                {portalPresets.map((preset, index) => (
+                  <button type="button" key={preset.id} className={formData.theme.preset === preset.id ? 'portal-preset-chip is-selected' : 'portal-preset-chip'} onClick={() => updateField('theme.preset', preset.id)}>
+                    <span>{String(index + 1).padStart(2, '0')}</span>{preset.name}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </>
+        ) : null}
 
         {customFields.length ? (
           <section className="admin-panel-block">
@@ -537,14 +745,14 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
   );
 };
 
-const PortalHome = () => {
+const LegacyPortalHome = () => {
   const portalData = useMemo(() => loadData(storage.portal, defaultPortalData), []);
 
   return (
     <div className="site-shell theme-portal">
       <header className="topbar portal-topbar">
         <div className="container nav-wrap portal-nav-wrap">
-          <a className="brand portal-brand" href="#top"><span className="logo-mark">{portalData.logo}</span><span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span></a>
+          <a className="brand portal-brand" href="#top"><span className="logo-mark">{portalData.logoImage ? <img src={portalData.logoImage} alt="" /> : portalData.logo}</span><span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span></a>
           <nav className="nav-links portal-nav-links" aria-label="Navigasi utama">
             {navItems.map((item) => (
               <a key={item.label} href={item.href}>{item.label}</a>
@@ -720,6 +928,163 @@ const PortalHome = () => {
           </div>
         </div>
       </footer>
+    </div>
+  );
+};
+
+const PortalHome = () => {
+  const portalData = useMemo(() => normalizePortalData(loadData(storage.portal, defaultPortalData)), []);
+  const { theme } = portalData;
+  const portalStyle = {
+    '--primary': theme.primary,
+    '--accent': theme.accent,
+    '--portal-surface': theme.secondary,
+    '--portal-background': theme.background,
+    '--portal-radius': `${theme.radius}px`,
+    '--portal-gap': `${theme.spacing}px`,
+    '--portal-heading-font': `'${theme.headingFont}', Georgia, serif`,
+    '--portal-body-font': `'${theme.bodyFont}', sans-serif`,
+    '--portal-animation-delay': `${theme.animationDelay}ms`,
+    '--portal-animation-duration': `${theme.animationDuration}ms`,
+  };
+
+  useEffect(() => {
+    const fonts = [...new Set([
+      theme.headingFont,
+      theme.bodyFont,
+      ...portalData.services.flatMap((service) => [service.headingFont, service.bodyFont]),
+    ].filter((font) => typeof font === 'string' && font.trim()))];
+    if (!fonts.length) return;
+    const fontLink = document.getElementById('portal-google-fonts') || document.createElement('link');
+    fontLink.id = 'portal-google-fonts';
+    fontLink.rel = 'stylesheet';
+    fontLink.href = `https://fonts.googleapis.com/css2?${fonts.map((font) => `family=${encodeURIComponent(font.trim()).replace(/%20/g, '+')}:wght@400;500;600;700`).join('&')}&display=swap`;
+    if (!fontLink.parentNode) document.head.appendChild(fontLink);
+  }, [theme.headingFont, theme.bodyFont, portalData.services]);
+
+  const openLink = (href) => {
+    if (href?.startsWith('/')) navigate(href);
+    else if (href) window.open(href, '_blank', 'noopener,noreferrer');
+  };
+
+  const renderAd = (key, className) => {
+    const slot = portalData.ads[key];
+    if (!slot?.enabled) return null;
+    return (
+      <a className={`portal-ad-slot ${className}`} href={slot.href || '#contact'} onClick={(event) => {
+        if (slot.href?.startsWith('/')) {
+          event.preventDefault();
+          navigate(slot.href);
+        }
+      }}>
+        {slot.image ? <img src={slot.image} alt="" loading="lazy" /> : null}
+        <span className="portal-ad-copy">
+          <small>{slot.label}</small>
+          <strong>{slot.title}</strong>
+          <span className="portal-ad-cta">Pelajari lebih lanjut <span aria-hidden="true">↗</span></span>
+        </span>
+        <span className="portal-ad-badge">IKLAN</span>
+      </a>
+    );
+  };
+
+  const presetClass = `portal-preset-${(theme.preset || portalPresets[5].id).replace(/[^a-z0-9-]/g, '')}`;
+
+  const trackSpotlight = (event) => {
+    if (!event.currentTarget.classList.contains('portal-preset-interactive-spotlight') && !event.currentTarget.classList.contains('portal-preset-floating-bubble-particles')) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty('--pointer-x', `${event.clientX - bounds.left}px`);
+    event.currentTarget.style.setProperty('--pointer-y', `${event.clientY - bounds.top}px`);
+  };
+
+  return (
+    <div className={`site-shell theme-portal portal-home ${presetClass} ${theme.animations === false ? 'portal-motion-off' : ''} ${theme.elementAnimations?.hero === false ? 'portal-hero-motion-off' : ''} ${theme.elementAnimations?.brandCards === false ? 'portal-card-motion-off' : ''} ${theme.elementAnimations?.ads === false ? 'portal-ad-motion-off' : ''}`} style={portalStyle} data-preset={theme.preset} onMouseMove={trackSpotlight}>
+      <header className="topbar portal-topbar">
+        <div className="container nav-wrap portal-nav-wrap">
+          <a className="brand portal-brand" href="#top">
+            <span className="logo-mark">{portalData.logoImage ? <img src={portalData.logoImage} alt="" /> : portalData.logo}</span>
+            <span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span>
+          </a>
+          <nav className="nav-links portal-nav-links" aria-label="Navigasi utama">
+            <a href="#brands">Brand</a>
+            <a href="#advertise">Beriklan</a>
+            <a href="#contact">Kontak</a>
+          </nav>
+          <button className="portal-admin-button" onClick={() => navigate('/admin')}>Admin</button>
+        </div>
+      </header>
+
+      {renderAd('top', 'portal-ad-top')}
+
+      <main id="top">
+        <section className="portal-home-hero">
+          <div className="container portal-home-hero-grid">
+            <div className="portal-home-hero-copy">
+              <p className="eyebrow">{portalData.hero.eyebrow}</p>
+              <h1>{portalData.hero.title}</h1>
+              <p className="portal-home-hero-description">{portalData.hero.subtitle}</p>
+              <button className="primary-btn" onClick={() => document.getElementById('brands')?.scrollIntoView({ behavior: 'smooth' })}>{portalData.hero.cta}<span aria-hidden="true"> ↓</span></button>
+              <div className="portal-hero-links" aria-label="Kunjungi website utama">
+                {portalData.services.map((service) => (
+                  <button key={service.href} onClick={() => openLink(service.href)}>{service.name}<span aria-hidden="true">↗</span></button>
+                ))}
+              </div>
+            </div>
+            <div className="portal-home-hero-image">
+              <img src={portalData.hero.image} alt="Momen perayaan yang dirancang dengan indah" />
+              <span>PORTAL.ID · CURATED FOR YOUR MOMENTS</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="brands" className="portal-home-brands">
+          <div className="container">
+            <div className="portal-home-section-heading">
+              <p className="eyebrow">TIGA BRAND · SATU PORTAL</p>
+              <h2>Semua yang Anda butuhkan<br />untuk sebuah perayaan.</h2>
+              <p>Pilih partner yang tepat untuk merancang, menghidupkan, dan membagikan momen paling berarti.</p>
+            </div>
+            <div className="portal-showcase-grid">
+              {portalData.services.map((service, index) => (
+                <article className={`portal-showcase-card portal-showcase-card-${index + 1}`} key={`${service.name}-${index}`} style={{ '--brand-accent': service.accent, '--brand-heading-font': `'${service.headingFont}', Georgia, serif`, '--brand-body-font': `'${service.bodyFont}', sans-serif` }}>
+                  <button className="portal-showcase-image" onClick={() => openLink(service.href)} aria-label={`Kunjungi ${service.name}`}>
+                    <img src={service.image} alt={`Visual ${service.name}`} loading="lazy" />
+                    <span>0{index + 1} / 03</span>
+                  </button>
+                  <div className="portal-showcase-copy">
+                    <h3>{service.name}</h3>
+                    <p>{service.description}</p>
+                    <button className="portal-showcase-link" onClick={() => openLink(service.href)}>{service.button}<span aria-hidden="true">↗</span></button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {renderAd('midFeed', 'portal-ad-mid')}
+
+        <section id="advertise" className="portal-advertise-section">
+          <div className="container portal-advertise-layout">
+            <div>
+              <p className="eyebrow">ADVERTISE WITH US</p>
+              <h2>Jangkau audiens yang merayakan momen penting.</h2>
+              <p>Tempatkan brand Anda di ruang yang relevan untuk calon pengantin, keluarga, dan penyelenggara acara.</p>
+            </div>
+            {renderAd('sidebar', 'portal-ad-sidebar')}
+          </div>
+        </section>
+      </main>
+
+      <footer id="contact" className="portal-home-footer">
+        <div className="container portal-footer-inner">
+          <a className="brand portal-brand" href="#top">          <span className="logo-mark">{portalData.logoImage ? <img src={portalData.logoImage} alt="" /> : portalData.logo}</span><span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span></a>
+          <p>{portalData.footer}</p>
+          <div><a href={`mailto:${portalData.contact.email}`}>{portalData.contact.email}</a><span>{portalData.contact.phone}</span></div>
+        </div>
+      </footer>
+
+      {renderAd('floatingBottom', 'portal-ad-floating')}
     </div>
   );
 };
@@ -1106,6 +1471,7 @@ function App() {
 
   if (path === '/undangan-dashboard') return <Dashboard onSignIn={() => navigate('/undangan-auth?mode=login')} />;
   if (path === '/undangan-admin') return <AdminBilling />;
+  if (path.startsWith('/undangan-ticket/')) return <GuestTicket ticketToken={path.slice('/undangan-ticket/'.length)} />;
   if (path.startsWith('/i/')) return <PublicInvitation slug={path.slice(3)} />;
 
   if (path.startsWith('/undangan-blog/')) {
