@@ -1,9 +1,13 @@
 import copy
 import asyncio
+import hashlib
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from pymongo.errors import DuplicateKeyError
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from backend import server
 
@@ -118,6 +122,75 @@ def test_saved_midtrans_checkout_config_migrates_to_mayar(monkeypatch):
     assert migrated["payment_methods"][0]["name"] == "Mayar checkout"
     assert "payment_code" not in migrated["payment_methods"][0]
     assert migrated["payment_methods"][1]["provider"] == "manual"
+
+
+class FakeCursor:
+    def __init__(self, documents):
+        self.documents = copy.deepcopy(documents)
+
+    async def to_list(self, length):
+        return self.documents[:length]
+
+
+class FakeAdvertisementUsers:
+    def __init__(self, affiliate, owner):
+        self.affiliate = affiliate
+        self.owner = owner
+
+    def find(self, _query, _projection=None):
+        return FakeCursor([self.affiliate])
+
+    async def find_one(self, query, _projection=None):
+        return self.owner if query.get("id") == self.owner["id"] else None
+
+
+class FakeBusinessInvitations:
+    def __init__(self):
+        self.invitation = {
+            "id": "business-invitation",
+            "owner_id": "business-owner",
+            "plan_id": "business",
+            "status": "published",
+            "active_until": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
+        }
+
+    async def find_one(self, _query, _projection=None):
+        return self.invitation
+
+
+class FakeEmptySettings:
+    async def find_one(self, _query, _projection=None):
+        return None
+
+    async def update_one(self, _query, _update, upsert=False):
+        return None
+
+
+class FakeLockedAffiliatePrograms:
+    def __init__(self, program):
+        self.program = program
+
+    async def find_one(self, _query, _projection=None):
+        return copy.deepcopy(self.program)
+
+
+class FakeInvitationLimit:
+    async def count_documents(self, _query):
+        return 2
+
+
+class FakeWritableCollection:
+    def __init__(self):
+        self.documents = []
+
+    async def create_index(self, _field, unique=False):
+        return None
+
+    async def find_one(self, query, _projection=None):
+        return next((copy.deepcopy(item) for item in self.documents if all(item.get(key) == value for key, value in query.items())), None)
+
+    async def insert_one(self, document):
+        self.documents.append(copy.deepcopy(document))
 
 
 def test_health_endpoint_is_public():
@@ -424,3 +497,165 @@ def test_regular_user_still_gets_a_draft_without_tester_access(monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "draft"
     assert response.json()["active_until"] is None
+
+
+def test_public_affiliate_ad_requires_active_business_owner(monkeypatch):
+    affiliate = {
+        "id": "affiliate-1",
+        "owner_id": "business-owner",
+        "role": "affiliate",
+        "active": True,
+        "ad_active": True,
+        "ad_title": "Promo undangan",
+        "ad_description": "Paket undangan digital",
+        "ad_url": "https://example.com/promo",
+        "ad_image": "https://example.com/promo.jpg",
+        "full_name": "Mitra Undangan",
+    }
+    owner = {"id": "business-owner", "role": "user"}
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        users=FakeAdvertisementUsers(affiliate, owner),
+        invitations=FakeBusinessInvitations(),
+    ))
+
+    response = TestClient(server.app).get("/api/public/advertisements")
+
+    assert response.status_code == 200
+    assert response.json() == [{
+        "id": "affiliate-1",
+        "title": "Promo undangan",
+        "description": "Paket undangan digital",
+        "url": "https://example.com/promo",
+        "image": "https://example.com/promo.jpg",
+        "advertiser": "Mitra Undangan",
+    }]
+
+
+def test_affiliate_ad_url_rejects_non_http_urls():
+    with pytest.raises(ValidationError):
+        server.AffiliateCreate(
+            full_name="Affiliate Test",
+            email="affiliate@example.com",
+            password="password123",
+            basic_quota=1,
+            ad_url="javascript:alert(1)",
+        )
+
+
+def test_dashboard_admin_cannot_read_invitation_drafts(monkeypatch):
+    monkeypatch.setattr(server, "db", SimpleNamespace(invitations=FakeCollection({
+        "id": "invitation-draft",
+        "owner_id": "owner-1",
+        "status": "draft",
+    })))
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: {
+        "id": "admin-1",
+        "owner_id": "owner-1",
+        "role": "dashboard_admin",
+        "active": True,
+    })
+
+    response = TestClient(server.app).get("/api/invitations/invitation-draft")
+
+    assert response.status_code == 404
+
+
+def test_demo_account_cannot_create_more_than_two_invitations(monkeypatch):
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        platform_settings=FakeEmptySettings(),
+        invitations=FakeInvitationLimit(),
+    ))
+
+    with pytest.raises(server.HTTPException) as error:
+        asyncio.run(server.create_invitation(
+            server.InvitationCreate(plan_id="basic", title="Undangan ketiga", content={}),
+            {
+                "id": "demo-owner",
+                "role": "user",
+                "is_demo": True,
+                "demo_plan_id": "basic",
+                "demo_until": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            },
+        ))
+
+    assert error.value.status_code == 409
+    assert "2 undangan" in error.value.detail
+
+
+def test_business_affiliate_package_cannot_be_changed_after_selection(monkeypatch):
+    owner = {"id": "business-owner", "role": "user"}
+    active_business = FakeBusinessInvitations()
+    locked_program = {
+        "owner_id": owner["id"],
+        "combination_id": "premium-3",
+        "combination": {"id": "premium-3", "name": "3 Premium", "basic": 0, "premium": 3},
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        invitations=active_business,
+        platform_settings=FakeEmptySettings(),
+        affiliate_programs=FakeLockedAffiliatePrograms(locked_program),
+    ))
+
+    with pytest.raises(server.HTTPException) as error:
+        asyncio.run(server.select_affiliate_combination(
+            server.AffiliateProgramUpdate(combination_id="basic-8"),
+            owner,
+        ))
+
+    assert error.value.status_code == 409
+    assert "tidak dapat diubah" in error.value.detail
+
+
+def test_demo_account_expiration_is_enforced():
+    expired = {
+        "role": "user",
+        "is_demo": True,
+        "demo_until": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+    }
+
+    assert asyncio.run(server.demo_account_expired(expired)) is True
+
+
+def test_demo_account_requires_positive_days_or_hours():
+    with pytest.raises(ValidationError):
+        server.DemoAccountCreate(
+            full_name="Demo User",
+            email="demo@example.com",
+            password="password123",
+            plan_id="business",
+            combination_id="premium-3",
+            duration_days=0,
+            duration_hours=0,
+        )
+
+
+def test_super_admin_creates_demo_with_locked_package_and_custom_expiration(monkeypatch):
+    users = FakeWritableCollection()
+    programs = FakeWritableCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        platform_settings=FakeEmptySettings(),
+        users=users,
+        affiliate_programs=programs,
+    ))
+    payload = server.DemoAccountCreate(
+        full_name="Demo Business",
+        email="demo-business@example.com",
+        password="password123",
+        plan_id="business",
+        combination_id="basic-8",
+        duration_days=2,
+        duration_hours=3,
+    )
+    started_at = datetime.now(timezone.utc)
+
+    account = asyncio.run(server.create_demo_account(payload, {"email": "admin@example.com"}))
+
+    user = users.documents[0]
+    program = programs.documents[0]
+    remaining = datetime.fromisoformat(account["demo_until"]) - started_at
+    assert account["plan_id"] == "business"
+    assert timedelta(days=2, hours=3) <= remaining <= timedelta(days=2, hours=3, seconds=1)
+    assert user["is_demo"] is True
+    assert user["demo_plan_id"] == "business"
+    assert program["combination_id"] == "basic-8"
+    assert program["combination"]["basic"] == 8

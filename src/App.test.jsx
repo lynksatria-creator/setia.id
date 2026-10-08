@@ -3,6 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import ExcelJS from 'exceljs';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
+import { getThemeCatalog } from './lib/themeCatalog';
+import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
+import { regionalInvitationTemplates } from './lib/regionalInvitationTemplates';
+import PublicInvitation from './pages/PublicInvitation';
 
 const renderApp = () => render(<AuthProvider><App /></AuthProvider>);
 
@@ -20,7 +25,7 @@ test('renders the main portal marketing homepage', () => {
 });
 
 test('portal admin exposes the preset catalog and JSON configuration actions', async () => {
-  localStorage.setItem('admin-session', JSON.stringify({ loggedIn: true, username: 'admin' }));
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
   window.history.pushState({}, '', '/admin');
   render(<App />);
 
@@ -29,7 +34,7 @@ test('portal admin exposes the preset catalog and JSON configuration actions', a
   expect(screen.getByRole('button', { name: /elastic spring motion/i })).toBeDefined();
   expect(screen.getByRole('button', { name: /ekspor json/i })).toBeDefined();
   expect(screen.getByText(/impor json/i)).toBeDefined();
-  localStorage.removeItem('admin-session');
+  sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
 });
 
 test('shows a helpful message when the Undangan.id API is unavailable', async () => {
@@ -45,6 +50,37 @@ test('shows a helpful message when the Undangan.id API is unavailable', async ()
   const alert = await screen.findByRole('alert');
   expect(alert.textContent).toMatch(/backend berjalan di port 8000 dan MongoDB tersedia/i);
   vi.unstubAllGlobals();
+});
+
+test('shows active affiliate advertisements on the Undangan.id homepage', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url) => {
+    const path = new URL(url, window.location.origin).pathname;
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => path.endsWith('/billing/config') ? { plans: [] } : [{
+        id: 'affiliate-1',
+        title: 'Promo undangan',
+        description: 'Diskon untuk undangan premium.',
+        url: 'https://example.com/promo',
+        image: 'https://example.com/promo.jpg',
+        advertiser: 'Mitra Undangan',
+      }],
+    };
+  }));
+  window.history.pushState({}, '', '/undangan');
+  const app = renderApp();
+
+  try {
+    const link = await screen.findByRole('link', { name: 'Lihat penawaran' });
+    expect(screen.getByRole('heading', { name: 'Pilihan dari mitra Undangan.id' })).toBeDefined();
+    expect(link.getAttribute('href')).toBe('https://example.com/promo');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  } finally {
+    app.unmount();
+    vi.unstubAllGlobals();
+  }
 });
 
 test('shows a scannable QR code for an invitation template', () => {
@@ -121,6 +157,57 @@ test('renders a unique QR ticket page for a guest', async () => {
   vi.unstubAllGlobals();
 });
 
+test('provides distinct invitation designs for all 38 Indonesian provinces', () => {
+  expect(regionalInvitationTemplates).toHaveLength(38);
+  expect(new Set(regionalInvitationTemplates.map((template) => template.province)).size).toBe(38);
+  expect(new Set(regionalInvitationTemplates.map((template) => template.id)).size).toBe(38);
+  expect(regionalInvitationTemplates.every((template) => template.description.includes(template.province))).toBe(true);
+});
+
+test('shows the formal invitation cover, named guest, regional design, and cover video', () => {
+  window.history.pushState({}, '', '/i/demo?to=Keluarga%20Bapak%20Andi');
+  const invitation = {
+    id: 'demo-birthday',
+    title: 'Ulang Tahun Nara',
+    slug: 'ulang-tahun-nara',
+    content: {
+      event_type: 'Ulang Tahun Anak',
+      honoree_name: 'Nara',
+      province: 'Bali',
+      template_id: 'regional-bali',
+      event_date: '2026-12-12',
+      video_url: 'https://example.com/party.mp4',
+    },
+  };
+  const { container } = render(<PublicInvitation invitation={invitation} />);
+
+  expect(screen.getAllByText('UNDANGAN RESMI')).toHaveLength(2);
+  expect(screen.getByText('Keluarga Bapak Andi')).toBeDefined();
+  expect(screen.getAllByRole('heading', { name: 'Nara' }).length).toBeGreaterThan(0);
+  expect(screen.getByText(/Bali · Inspirasi Endek Bali/)).toBeDefined();
+  expect(container.querySelector('.wedding-cover-video').getAttribute('src')).toBe('https://example.com/party.mp4');
+  expect(container.querySelector('.wedding-couple')).toBeNull();
+  expect(container.querySelector('.wedding-honoree')).not.toBeNull();
+});
+
+test('filters Undangan.id templates by category and can show all categories', () => {
+  window.history.pushState({}, '', '/undangan');
+  const { container } = renderApp();
+
+  expect(container.querySelectorAll('.template-card')).toHaveLength(1);
+  expect(screen.getByRole('heading', { name: 'Template Pernikahan' })).toBeDefined();
+  expect(screen.queryByRole('button', { name: /Khitanan/ })).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: /Aqiqah/ }));
+  expect(container.querySelectorAll('.template-card')).toHaveLength(1);
+  expect(screen.getByRole('heading', { name: 'Template Aqiqah' })).toBeDefined();
+  expect(container.querySelector('.template-card .template-tag').textContent).toBe('Aqiqah');
+
+  fireEvent.click(screen.getByRole('button', { name: /Semua/ }));
+  expect(container.querySelectorAll('.template-card')).toHaveLength(6);
+  expect(screen.getByRole('heading', { name: 'Desain undangan yang siap Anda gunakan' })).toBeDefined();
+});
+
 test('renders the registration form on the register route', () => {
   sessionStorage.clear();
   window.history.pushState({}, '', '/undangan-auth?mode=register');
@@ -158,14 +245,18 @@ const mountPublishedInvitationDashboard = (planId) => {
   };
   sessionStorage.setItem('undangan.id.session', JSON.stringify({
     access_token: 'test-token',
-    user: { id: 'user-1', full_name: 'Test User', email: 'test@example.com', is_test_account: false },
+    user: { id: 'user-1', full_name: 'Test User', email: 'test@example.com', role: 'user', is_test_account: false },
   }));
   vi.stubGlobal('fetch', vi.fn(async (url, options) => {
     const path = new URL(url, window.location.origin).pathname;
     const payload = path.endsWith('/auth/me')
-      ? { user: { id: 'user-1', full_name: 'Test User', email: 'test@example.com', is_test_account: false } }
+      ? { user: { id: 'user-1', full_name: 'Test User', email: 'test@example.com', role: 'user', is_test_account: false } }
       : path.endsWith('/billing/config')
         ? { plans: [{ id: planId, name: planId, price: 599000, duration_days: 365 }], payment_methods: [] }
+        : path.endsWith('/dashboard-admins')
+          ? { eligible: true, max_admins: 3, admins: [] }
+          : path.endsWith('/affiliate-program')
+            ? { eligible: true, program: null, combinations: [], affiliates: [] }
         : path.endsWith('/tickets')
           ? { tickets: JSON.parse(options.body).recipients.map((recipient, index) => ({
             ...recipient,
@@ -265,13 +356,184 @@ test('Business package prepares WhatsApp recipients in sequence', async () => {
   sessionStorage.clear();
 });
 
-test('shows the server-authenticated admin login page', () => {
+test('shows the unified super admin login page', () => {
   sessionStorage.clear();
+  window.history.pushState({}, '', '/setia-creative-admin');
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: 'Super Admin' })).toBeDefined();
+  expect(screen.getByLabelText('Email admin')).toBeDefined();
+});
+
+test.each([
+  ['/gibrig', /artist performance & entertainment studio/i],
+  ['/nunuy-nadhifa-wedding', /wedding experience that feels like a fairytale/i],
+  ['/undangan', /buat undangan digital premium/i],
+])('keeps the public website at %s free of admin buttons', (path, heading) => {
+  window.history.pushState({}, '', path);
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: heading })).toBeDefined();
+  expect(screen.queryByRole('button', { name: /^admin$/i })).toBeNull();
+});
+
+test('keeps the unified super admin login page on a trailing-slash route', () => {
+  sessionStorage.clear();
+  window.history.pushState({}, '', '/setia-creative-admin/');
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: 'Super Admin' })).toBeDefined();
+  expect(screen.getByLabelText('Email admin')).toBeDefined();
+});
+
+test('super admin home links to all admin panels and public websites', () => {
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  window.history.pushState({}, '', '/setia-creative-admin');
+  renderApp();
+
+  expect(screen.getByRole('link', { name: /portal admin/i }).getAttribute('href')).toBe('/portal-admin');
+  expect(screen.getByRole('link', { name: /gibrig admin/i }).getAttribute('href')).toBe('/gibrig-admin');
+  expect(screen.getByRole('link', { name: /nunuy wedding admin/i }).getAttribute('href')).toBe('/nunuy-admin');
+  expect(screen.getByRole('link', { name: /undangan.id website admin/i }).getAttribute('href')).toBe('/undangan-website-admin');
+  expect(screen.getByRole('link', { name: /undangan.id admin/i }).getAttribute('href')).toBe('/undangan-admin');
+  expect(screen.getByRole('link', { name: 'Nunuy Nadhifa Wedding' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
+  sessionStorage.clear();
+});
+
+test('opens Undangan.id admin from its own direct link after one super admin login', () => {
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
   window.history.pushState({}, '', '/undangan-admin');
   renderApp();
 
-  expect(screen.getByRole('heading', { name: 'Admin Undangan.id' })).toBeDefined();
-  expect(screen.getByLabelText('Email admin')).toBeDefined();
+  expect(screen.getByRole('navigation', { name: 'Navigasi super admin' })).toBeDefined();
+  expect(screen.getAllByRole('link', { name: 'Undangan.id', exact: true }).map((link) => link.getAttribute('href'))).toContain('/undangan-admin');
+  expect(window.location.pathname).toBe('/undangan-admin');
+  sessionStorage.clear();
+});
+
+test('keeps the previous Portal admin URL as an alias', () => {
+  sessionStorage.clear();
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  window.history.pushState({}, '', '/admin');
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: 'Portal Admin' })).toBeDefined();
+  expect(window.location.pathname).toBe('/admin');
+  sessionStorage.clear();
+});
+
+test('legacy admin routes require the unified super admin session', () => {
+  sessionStorage.clear();
+  window.history.pushState({}, '', '/gibrig-admin');
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: 'Super Admin' })).toBeDefined();
+  expect(screen.queryByRole('heading', { name: 'Gibrig Admin' })).toBeNull();
+});
+
+test('one super admin session opens the Portal admin link', () => {
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  window.history.pushState({}, '', '/portal-admin');
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: 'Portal Admin' })).toBeDefined();
+  expect(screen.getByRole('navigation', { name: 'Navigasi super admin' })).toBeDefined();
+  sessionStorage.clear();
+});
+
+test.each(['admin', 'gibrig', 'nunuy', 'invitation'])('provides exactly 100 original theme templates for %s', (site) => {
+  const themes = getThemeCatalog(site);
+
+  expect(themes).toHaveLength(100);
+  expect(new Set(themes.map((theme) => theme.id)).size).toBe(100);
+  expect(themes.every((theme) => /^#[\da-f]{6}$/i.test(theme.primary) && theme.layout && theme.font)).toBe(true);
+});
+
+test('admin edits content and applies theme settings to the public site', () => {
+  sessionStorage.clear();
+  localStorage.removeItem('gibrig-cms');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  window.history.pushState({}, '', '/gibrig-admin');
+  const admin = render(<App />);
+
+  fireEvent.change(screen.getByLabelText('Nama Website'), { target: { value: 'Gibrig Live Studio' } });
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Panggung Hiburan Pilihan' } });
+  fireEvent.change(screen.getByLabelText('Alamat gambar logo'), { target: { value: 'https://example.com/gibrig-logo.png' } });
+  fireEvent.change(screen.getByLabelText('Gambar utama / hero'), { target: { value: 'https://example.com/gibrig-hero.jpg' } });
+  const templates = screen.getAllByRole('button', { name: 'Terapkan template' });
+  expect(templates.length).toBeGreaterThanOrEqual(100);
+  fireEvent.click(templates[20]);
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+  const saved = JSON.parse(localStorage.getItem('gibrig-cms'));
+  expect(saved.siteName).toBe('Gibrig Live Studio');
+  expect(saved.hero.title).toBe('Panggung Hiburan Pilihan');
+  expect(saved.logoImage).toBe('https://example.com/gibrig-logo.png');
+  expect(saved.hero.image).toBe('https://example.com/gibrig-hero.jpg');
+  expect(saved.theme.layout).toBe('centered');
+
+  admin.unmount();
+  window.history.pushState({}, '', '/gibrig');
+  const publicSite = render(<App />);
+  expect(publicSite.container.querySelector('.gibrig-shell').style.getPropertyValue('--theme-primary')).toBe(saved.theme.primary);
+  expect(publicSite.container.querySelector('.gibrig-shell').style.getPropertyValue('--theme-logo-size')).toBe(`${saved.theme.logoSize}px`);
+  expect(screen.getByRole('heading', { name: 'Panggung Hiburan Pilihan' })).toBeDefined();
+  expect(screen.getByAltText('Gibrig Live Studio logo')).toBeDefined();
+  expect(screen.getByAltText('Gibrig Live Studio performance').getAttribute('src')).toBe('https://example.com/gibrig-hero.jpg');
+
+  publicSite.unmount();
+  localStorage.removeItem('gibrig-cms');
+  localStorage.removeItem('gibrig-themes');
+  sessionStorage.clear();
+}, 30000);
+
+test.each([
+  ['admin', '/portal-admin', '/', 'portal-cms'],
+  ['gibrig', '/gibrig-admin', '/gibrig', 'gibrig-cms'],
+  ['nunuy', '/nunuy-admin', '/nunuy-nadhifa-wedding', 'nunuy-cms'],
+  ['invitation', '/undangan-website-admin', '/undangan', 'invitation-cms'],
+])('publishes an independent phone and WhatsApp contact for %s', (site, adminPath, publicPath, storageKey) => {
+  const phone = '+62 811-2233-4455';
+  const whatsapp = '+62 811-9988-7766';
+  localStorage.removeItem(storageKey);
+  sessionStorage.clear();
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  window.history.pushState({}, '', adminPath);
+  const admin = render(<App />);
+
+  fireEvent.change(screen.getByLabelText('Nomor HP publik'), { target: { value: phone } });
+  fireEvent.change(screen.getByLabelText('Nomor WhatsApp'), { target: { value: whatsapp } });
+  fireEvent.change(screen.getByLabelText('Pesan pembuka WhatsApp'), { target: { value: `Halo dari ${site}` } });
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+  const saved = JSON.parse(localStorage.getItem(storageKey));
+  expect(saved.contact.phone).toBe(phone);
+  expect(saved.whatsapp.number).toBe(whatsapp);
+  expect(saved.whatsapp.message).toBe(`Halo dari ${site}`);
+
+  admin.unmount();
+  window.history.pushState({}, '', publicPath);
+  const publicSite = render(<App />);
+  const contactLink = publicSite.container.querySelector('.whatsapp-contact-link');
+  expect(contactLink.getAttribute('href')).toBe('https://wa.me/6281199887766?text=Halo%20dari%20' + site);
+  expect(contactLink.textContent).toContain(whatsapp);
+  expect(publicSite.getByText(phone)).toBeDefined();
+
+  publicSite.unmount();
+  localStorage.removeItem(storageKey);
+  sessionStorage.clear();
+}, 15000);
+
+test.each([
+  ['/gibrig', /artist performance & entertainment studio/i],
+  ['/nunuy-nadhifa-wedding', /wedding experience that feels like a fairytale/i],
+  ['/undangan', /buat undangan digital premium/i],
+])('provides a Beranda link to Portal Iklan on %s', (path, heading) => {
+  window.history.pushState({}, '', path);
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: heading })).toBeDefined();
+  expect(screen.getByRole('link', { name: 'Beranda' }).getAttribute('href')).toBe('/');
 });
 
 test('renders the Gibrig public homepage and connects booking inquiry', () => {
@@ -292,4 +554,22 @@ test('connects the invitation hero CTA to registration', () => {
   fireEvent.click(screen.getAllByRole('button', { name: /buat undangan/i })[0]);
   expect(window.location.pathname).toBe('/undangan-auth');
   expect(window.location.search).toBe('?mode=register');
+});
+
+test('creates a QR destination that routes the owner directly to a specific invitation guestbook', () => {
+  expect(createOwnerGuestbookUrl('aulia-farhan', 'https://undangan.example')).toBe(
+    'https://undangan.example/undangan-dashboard?guestbook=aulia-farhan',
+  );
+});
+
+test('preserves the guestbook destination through owner login', () => {
+  sessionStorage.clear();
+  window.history.pushState({}, '', '/undangan-dashboard?guestbook=aulia-farhan');
+  renderApp();
+
+  fireEvent.click(screen.getByRole('button', { name: /masuk \/ daftar/i }));
+  const nextPath = new URLSearchParams(window.location.search).get('next');
+  expect(window.location.pathname).toBe('/undangan-auth');
+  expect(nextPath).toBe('/undangan-dashboard?guestbook=aulia-farhan');
+  sessionStorage.clear();
 });

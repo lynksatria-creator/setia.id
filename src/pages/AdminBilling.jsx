@@ -1,20 +1,32 @@
 import { useEffect, useState } from 'react';
+import SuperAdminNav from '../components/SuperAdminNav';
 import { adminApi } from '../lib/api';
+import { SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
 
-const ADMIN_SESSION_KEY = 'undangan.id.admin.session';
 const dateTimeLocal = (value) => {
   if (!value) return '';
   const date = new Date(value);
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
 
-export default function AdminBilling() {
-  const [token, setToken] = useState(() => sessionStorage.getItem(ADMIN_SESSION_KEY));
+export default function AdminBilling({ onLogout }) {
+  const [token, setToken] = useState(() => sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [config, setConfig] = useState(null);
   const [invitations, setInvitations] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [demoAccounts, setDemoAccounts] = useState([]);
+  const [createdDemoCredentials, setCreatedDemoCredentials] = useState(null);
+  const [demoForm, setDemoForm] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    plan_id: 'business',
+    combination_id: '',
+    duration_days: 1,
+    duration_hours: 0,
+  });
   const [selectedInvitation, setSelectedInvitation] = useState(null);
   const [contentText, setContentText] = useState('');
   const [activeUntil, setActiveUntil] = useState('');
@@ -27,19 +39,26 @@ export default function AdminBilling() {
     setIsLoading(true);
     setError('');
     try {
-      const [nextConfig, nextInvitations, nextPayments] = await Promise.all([
+      const [nextConfig, nextInvitations, nextPayments, nextDemoAccounts] = await Promise.all([
         adminApi.billingConfig(authToken),
         adminApi.invitations(authToken),
         adminApi.payments(authToken),
+        adminApi.demoAccounts(authToken),
       ]);
       setConfig(nextConfig);
       setInvitations(nextInvitations);
       setPayments(nextPayments);
+      setDemoAccounts(nextDemoAccounts);
+      setDemoForm((current) => ({
+        ...current,
+        combination_id: current.combination_id || nextConfig.affiliate_combinations?.[0]?.id || '',
+      }));
     } catch (requestError) {
       setError(requestError.message);
       if (/sesi admin/i.test(requestError.message)) {
-        sessionStorage.removeItem(ADMIN_SESSION_KEY);
+        sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
         setToken(null);
+        onLogout?.();
       }
     } finally {
       setIsLoading(false);
@@ -56,7 +75,7 @@ export default function AdminBilling() {
     setIsLoading(true);
     try {
       const result = await adminApi.login({ email, password });
-      sessionStorage.setItem(ADMIN_SESSION_KEY, result.access_token);
+      sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, result.access_token);
       setToken(result.access_token);
       setPassword('');
     } catch (requestError) {
@@ -66,17 +85,29 @@ export default function AdminBilling() {
   };
 
   const logout = () => {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
     setToken(null);
     setConfig(null);
     setInvitations([]);
     setPayments([]);
+    setDemoAccounts([]);
+    setCreatedDemoCredentials(null);
+    onLogout?.();
   };
 
   const updatePlan = (planId, field, value) => {
     setConfig((current) => ({
       ...current,
       plans: current.plans.map((plan) => plan.id === planId ? { ...plan, [field]: value } : plan),
+    }));
+  };
+
+  const updateAffiliateCombination = (combinationId, field, value) => {
+    setConfig((current) => ({
+      ...current,
+      affiliate_combinations: current.affiliate_combinations.map((combination) => combination.id === combinationId
+        ? { ...combination, [field]: value }
+        : combination),
     }));
   };
 
@@ -113,9 +144,36 @@ export default function AdminBilling() {
       const saved = await adminApi.updateBillingConfig(token, {
         plans: config.plans,
         payment_methods: config.payment_methods,
+        dashboard_admin_limit: Number(config.dashboard_admin_limit),
+        affiliate_combinations: config.affiliate_combinations,
       });
       setConfig(saved);
-      setMessage('Harga, masa aktif, link paket, dan metode pembayaran tersimpan.');
+      setMessage('Paket, metode pembayaran, batas admin dashboard, dan kuota affiliate tersimpan.');
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const createDemoAccount = async (event) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    try {
+      const account = await adminApi.createDemoAccount(token, {
+        ...demoForm,
+        duration_days: Number(demoForm.duration_days),
+        duration_hours: Number(demoForm.duration_hours),
+        combination_id: demoForm.plan_id === 'business' ? demoForm.combination_id : null,
+      });
+      setDemoAccounts((current) => [account, ...current]);
+      setCreatedDemoCredentials({ email: account.email, password: demoForm.password });
+      setDemoForm((current) => ({
+        ...current,
+        full_name: '',
+        email: '',
+        password: '',
+      }));
+      setMessage(`Akun demo ${account.email} berhasil dibuat. Masa akses berakhir ${new Date(account.demo_until).toLocaleString('id-ID')}. Akun dapat mengirim maksimal 2 undangan.`);
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -166,7 +224,7 @@ export default function AdminBilling() {
   if (!token) {
     return (
       <main className="billing-admin-login">
-        <a className="brand" href="/undangan"><span className="logo-mark">U</span>Undangan.id</a>
+        <a className="brand" href="/setia-creative-admin"><span className="logo-mark">S</span>Super Admin</a>
         <form className="billing-admin-login-card" onSubmit={handleLogin}>
           <p className="eyebrow">Panel khusus</p><h1>Admin Undangan.id</h1>
           <p>Login menggunakan akun admin yang dikonfigurasi di backend.</p>
@@ -181,11 +239,12 @@ export default function AdminBilling() {
 
   return (
     <main className="billing-admin-shell">
-      <header className="billing-admin-header"><a className="brand" href="/undangan"><span className="logo-mark">U</span>Undangan.id <small>ADMIN</small></a><div><span>{config?.gateway_ready ? 'Mayar siap' : 'Mayar belum dikonfigurasi'}</span><button onClick={() => loadDashboard(token)}>Muat ulang</button><button onClick={logout}>Keluar</button></div></header>
+      <header className="billing-admin-header"><a className="brand" href="/setia-creative-admin"><span className="logo-mark">S</span>Super Admin <small>UNDANGAN.ID</small></a><div><span>{config?.gateway_ready ? 'Mayar siap' : 'Mayar belum dikonfigurasi'}</span><button onClick={() => loadDashboard(token)}>Muat ulang</button><a className="super-admin-home-link" href="/setia-creative-admin">Semua panel</a><button onClick={logout}>Keluar</button></div></header>
+      <SuperAdminNav />
       <div className="billing-admin-layout">
-        <aside className="billing-admin-sidebar"><p className="eyebrow">Pengelolaan</p><button className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Paket & pembayaran</button><button className={activeTab === 'payments' ? 'active' : ''} onClick={() => setActiveTab('payments')}>Verifikasi pembayaran <span>{payments.filter((payment) => payment.status === 'pending' && payment.provider === 'manual').length}</span></button><button className={activeTab === 'invitations' ? 'active' : ''} onClick={() => setActiveTab('invitations')}>Undangan aktif <span>{invitations.length}</span></button></aside>
+        <aside className="billing-admin-sidebar"><p className="eyebrow">Pengelolaan</p><button className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Paket & pembayaran</button><button className={activeTab === 'demo-accounts' ? 'active' : ''} onClick={() => setActiveTab('demo-accounts')}>Akun demo <span>{demoAccounts.length}</span></button><button className={activeTab === 'payments' ? 'active' : ''} onClick={() => setActiveTab('payments')}>Verifikasi pembayaran <span>{payments.filter((payment) => payment.status === 'pending' && payment.provider === 'manual').length}</span></button><button className={activeTab === 'invitations' ? 'active' : ''} onClick={() => setActiveTab('invitations')}>Undangan aktif <span>{invitations.length}</span></button></aside>
         <section className="billing-admin-content">
-          <div className="billing-admin-title"><div><p className="eyebrow">Admin workspace</p><h1>{activeTab === 'billing' ? 'Paket & metode pembayaran' : activeTab === 'payments' ? 'Verifikasi pembayaran' : 'Undangan pengguna'}</h1></div></div>
+          <div className="billing-admin-title"><div><p className="eyebrow">Admin workspace</p><h1>{activeTab === 'billing' ? 'Paket & metode pembayaran' : activeTab === 'demo-accounts' ? 'Akun demo' : activeTab === 'payments' ? 'Verifikasi pembayaran' : 'Undangan pengguna'}</h1></div></div>
           {message ? <p className="account-message" role="status">{message}</p> : null}
           {error ? <p className="form-error account-error" role="alert">{error}</p> : null}
           {isLoading && !config ? <p>Memuat data admin…</p> : null}
@@ -199,6 +258,31 @@ export default function AdminBilling() {
                   <label>Fitur paket, satu baris per fitur<textarea rows={3} value={(plan.features || []).join('\n')} onChange={(event) => updatePlan(plan.id, 'features', event.target.value.split('\n').map((item) => item.trim()).filter(Boolean))} /></label>
                 </article>)}</div>
               </section>
+              <section className="account-panel admin-config-panel">
+                <div className="account-panel-heading"><div><span className="eyebrow">Akses pemilik & reseller</span><h2>Admin dashboard dan kombinasi affiliate Business</h2></div></div>
+                <label className="billing-policy-limit">Maksimal admin dashboard tambahan per pemilik (maksimum 3)
+                  <input type="number" min="0" max="3" value={config.dashboard_admin_limit ?? 3} onChange={(event) => setConfig((current) => ({ ...current, dashboard_admin_limit: Number(event.target.value) }))} />
+                </label>
+                <p className="form-hint">Atur pilihan kombinasi untuk pemilik Business dan akun demo. Setelah pemilik mengonfirmasi satu pilihan, paket tersebut dikunci permanen dan tidak dapat diganti.</p>
+                <div className="affiliate-combination-list">
+                  {(config.affiliate_combinations || []).map((combination) => (
+                    <article className="affiliate-combination-editor" key={combination.id}>
+                      <strong>{combination.name}</strong>
+                      <div className="billing-plan-fields">
+                        <label>Nama kombinasi<input value={combination.name} onChange={(event) => updateAffiliateCombination(combination.id, 'name', event.target.value)} /></label>
+                        <label>Kuota Basic<input type="number" min="0" max="1000" value={combination.basic} onChange={(event) => updateAffiliateCombination(combination.id, 'basic', Number(event.target.value))} /></label>
+                        <label>Kuota Premium<input type="number" min="0" max="1000" value={combination.premium} onChange={(event) => updateAffiliateCombination(combination.id, 'premium', Number(event.target.value))} /></label>
+                      </div>
+                      <button className="text-button danger-text" onClick={() => setConfig((current) => ({ ...current, affiliate_combinations: current.affiliate_combinations.filter((item) => item.id !== combination.id) }))}>Hapus kombinasi</button>
+                    </article>
+                  ))}
+                  <button className="secondary-btn" onClick={() => {
+                    const id = `custom-${Date.now().toString(36)}`;
+                    setConfig((current) => ({ ...current, affiliate_combinations: [...current.affiliate_combinations, { id, name: 'Kombinasi baru', basic: 1, premium: 0 }] }));
+                  }}>Tambah kombinasi</button>
+                </div>
+                <button className="primary-btn" onClick={saveBilling}>Simpan aturan affiliate & admin</button>
+              </section>
               <section className="account-panel admin-config-panel"><div className="account-panel-heading"><div><span className="eyebrow">Gateway dan pembayaran manual</span><h2>Metode pembayaran</h2></div><button className="secondary-btn" onClick={addManualMethod}>Tambah rekening / metode</button></div>
                 <div className="billing-method-list">{config.payment_methods.map((method) => <article className="billing-method-editor" key={method.id}>
                   <div className="billing-plan-heading"><label>Nama metode<input value={method.name} onChange={(event) => updateMethod(method.id, 'name', event.target.value)} /></label><label className="toggle-label"><input type="checkbox" checked={method.enabled} onChange={(event) => updateMethod(method.id, 'enabled', event.target.checked)} />Tersedia</label></div>
@@ -207,6 +291,30 @@ export default function AdminBilling() {
                   <button className="text-button danger-text" onClick={() => setConfig((current) => ({ ...current, payment_methods: current.payment_methods.filter((item) => item.id !== method.id) }))}>Hapus metode</button>
                 </article>)}</div>
                 <button className="primary-btn" onClick={saveBilling} disabled={!config.payment_methods.length}>Simpan seluruh konfigurasi</button>
+              </section>
+            </>
+          ) : null}
+
+          {activeTab === 'demo-accounts' && config ? (
+            <>
+              <section className="account-panel admin-config-panel">
+                <div className="account-panel-heading"><div><span className="eyebrow">Akses uji coba</span><h2>Buat akun demo</h2></div></div>
+                <p className="form-hint">Akun demo otomatis dinonaktifkan setelah masa akses habis dan hanya dapat membuat maksimal 2 undangan. Pilih paket yang akan dicoba.</p>
+                <form className="demo-account-form" onSubmit={createDemoAccount}>
+                  <label>Nama pengguna<input required minLength={2} value={demoForm.full_name} onChange={(event) => setDemoForm({ ...demoForm, full_name: event.target.value })} /></label>
+                  <label>Email login<input type="email" required value={demoForm.email} onChange={(event) => setDemoForm({ ...demoForm, email: event.target.value })} /></label>
+                  <label>Kata sandi awal<input type="password" minLength={8} required value={demoForm.password} onChange={(event) => setDemoForm({ ...demoForm, password: event.target.value })} /></label>
+                  <label>Paket demo<select required value={demoForm.plan_id} onChange={(event) => setDemoForm({ ...demoForm, plan_id: event.target.value })}>{config.plans.filter((plan) => plan.enabled).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.duration_days} hari masa paket normal</option>)}</select></label>
+                  {demoForm.plan_id === 'business' ? <label>Kombinasi kuota affiliate<select required value={demoForm.combination_id} onChange={(event) => setDemoForm({ ...demoForm, combination_id: event.target.value })}><option value="">Pilih kombinasi</option>{config.affiliate_combinations.map((combination) => <option key={combination.id} value={combination.id}>{combination.name} · {combination.basic} Basic / {combination.premium} Premium</option>)}</select></label> : null}
+                  <label>Lama demo (hari)<input type="number" min="0" max="3650" value={demoForm.duration_days} onChange={(event) => setDemoForm({ ...demoForm, duration_days: Number(event.target.value) })} /></label>
+                  <label>Lama demo (jam)<input type="number" min="0" max="23" value={demoForm.duration_hours} onChange={(event) => setDemoForm({ ...demoForm, duration_hours: Number(event.target.value) })} /></label>
+                  <button className="primary-btn">Buat akun demo</button>
+                </form>
+              </section>
+              <section className="account-panel">
+                <div className="account-panel-heading"><div><span className="eyebrow">Daftar akun</span><h2>Akun demo terdaftar</h2></div><strong>{demoAccounts.length}</strong></div>
+                {createdDemoCredentials ? <p className="account-message demo-credentials" role="status">Kredensial akun demo baru — email: <strong>{createdDemoCredentials.email}</strong>, kata sandi awal: <code>{createdDemoCredentials.password}</code>. Berikan secara aman lalu <button className="text-button" onClick={() => setCreatedDemoCredentials(null)}>sembunyikan</button>.</p> : null}
+                <div className="admin-record-list">{demoAccounts.map((account) => <article className="admin-record" key={account.id}><div><strong>{account.full_name}</strong><p>{account.email} · Paket {account.plan_id}</p><small>{account.expired ? 'Demo berakhir' : 'Berakhir'} {new Date(account.demo_until).toLocaleString('id-ID')}</small></div><span className={`status-label ${account.expired ? 'status-expired' : 'status-active'}`}>{account.expired ? 'Berakhir' : 'Aktif'}</span></article>)}{!demoAccounts.length ? <p className="form-hint">Belum ada akun demo.</p> : null}</div>
               </section>
             </>
           ) : null}

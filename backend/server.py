@@ -17,8 +17,9 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from pymongo.errors import DuplicateKeyError
+from urllib.parse import urlparse
 
 
 ROOT_DIR = Path(__file__).parent
@@ -89,9 +90,108 @@ class PaymentMethodConfig(BaseModel):
     account_number: str | None = Field(default=None, max_length=40)
     instructions: str | None = Field(default=None, max_length=500)
 
+class AffiliateCombination(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9-]{2,40}$")
+    name: str = Field(min_length=2, max_length=80)
+    basic: int = Field(default=0, ge=0, le=1000)
+    premium: int = Field(default=0, ge=0, le=1000)
+
+    @model_validator(mode="after")
+    def require_positive_quota(self):
+        if self.basic + self.premium < 1:
+            raise ValueError("Kombinasi affiliate harus memiliki minimal satu kuota.")
+        return self
+
 class BillingConfigUpdate(BaseModel):
     plans: list[PlanConfig] = Field(min_length=1, max_length=10)
     payment_methods: list[PaymentMethodConfig] = Field(min_length=1, max_length=12)
+    dashboard_admin_limit: int = Field(default=3, ge=0, le=3)
+    affiliate_combinations: list[AffiliateCombination] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_affiliate_combinations(self):
+        ids = [item.id for item in self.affiliate_combinations]
+        if len(ids) != len(set(ids)):
+            raise ValueError("ID kombinasi affiliate harus unik.")
+        return self
+
+
+class DashboardAdminCreate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=80)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=72)
+
+
+class AffiliateCreate(DashboardAdminCreate):
+    basic_quota: int = Field(default=0, ge=0, le=1000)
+    premium_quota: int = Field(default=0, ge=0, le=1000)
+    ad_title: str = Field(default="", max_length=100)
+    ad_description: str = Field(default="", max_length=300)
+    ad_url: str = Field(default="", max_length=500)
+    ad_image: str = Field(default="", max_length=1000)
+
+    @model_validator(mode="after")
+    def require_affiliate_quota(self):
+        if self.basic_quota + self.premium_quota < 1:
+            raise ValueError("Affiliate harus mendapat minimal satu kuota Basic atau Premium.")
+        return self
+
+    @field_validator("ad_url", "ad_image")
+    @classmethod
+    def validate_ad_urls(cls, value):
+        if value and (urlparse(value).scheme not in {"http", "https"} or not urlparse(value).netloc):
+            raise ValueError("URL iklan harus memakai HTTP atau HTTPS.")
+        return value
+
+
+class AffiliateProgramUpdate(BaseModel):
+    combination_id: str = Field(pattern=r"^[a-z0-9-]{2,40}$")
+
+
+class DemoAccountCreate(DashboardAdminCreate):
+    plan_id: str = Field(pattern=r"^[a-z0-9-]{2,32}$")
+    combination_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]{2,40}$")
+    duration_days: int = Field(default=0, ge=0, le=3650)
+    duration_hours: int = Field(default=24, ge=0, le=23)
+
+    @model_validator(mode="after")
+    def require_positive_duration(self):
+        if self.duration_days == 0 and self.duration_hours == 0:
+            raise ValueError("Masa demo harus lebih dari nol.")
+        return self
+
+
+class AffiliateUpdate(BaseModel):
+    active: bool | None = None
+    basic_quota: int | None = Field(default=None, ge=0, le=1000)
+    premium_quota: int | None = Field(default=None, ge=0, le=1000)
+    ad_title: str | None = Field(default=None, max_length=100)
+    ad_description: str | None = Field(default=None, max_length=300)
+    ad_url: str | None = Field(default=None, max_length=500)
+    ad_image: str | None = Field(default=None, max_length=1000)
+    ad_active: bool | None = None
+
+    @field_validator("ad_url", "ad_image")
+    @classmethod
+    def validate_ad_urls(cls, value):
+        if value and (urlparse(value).scheme not in {"http", "https"} or not urlparse(value).netloc):
+            raise ValueError("URL iklan harus memakai HTTP atau HTTPS.")
+        return value
+
+
+class OwnerAdCreate(BaseModel):
+    title: str = Field(min_length=3, max_length=100)
+    description: str = Field(min_length=3, max_length=300)
+    url: str = Field(min_length=8, max_length=500)
+    image: str = Field(default="", max_length=1000)
+    active: bool = True
+
+    @field_validator("url", "image")
+    @classmethod
+    def validate_ad_urls(cls, value):
+        if value and (urlparse(value).scheme not in {"http", "https"} or not urlparse(value).netloc):
+            raise ValueError("URL iklan harus memakai HTTP atau HTTPS.")
+        return value
 
 
 class InvitationCreate(BaseModel):
@@ -169,6 +269,13 @@ DEFAULT_BILLING_CONFIG = {
         {"id": "mayar", "name": "Mayar checkout", "provider": "mayar", "enabled": True},
         {"id": "bank-transfer", "name": "Transfer bank", "provider": "manual", "enabled": False, "bank_name": "", "account_name": "", "account_number": "", "instructions": "Pembayaran diverifikasi oleh admin."},
     ],
+    "dashboard_admin_limit": 3,
+    "affiliate_combinations": [
+        {"id": "basic-5-premium-1", "name": "5 Basic + 1 Premium", "basic": 5, "premium": 1},
+        {"id": "basic-1-premium-2", "name": "1 Basic + 2 Premium", "basic": 1, "premium": 2},
+        {"id": "premium-3", "name": "3 Premium", "basic": 0, "premium": 3},
+        {"id": "basic-8", "name": "8 Basic", "basic": 8, "premium": 0},
+    ],
 }
 
 TEST_ACCOUNT_ACTIVE_UNTIL = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc).isoformat()
@@ -203,6 +310,8 @@ async def get_billing_config():
                     if method.get("name") in {"GoPay", "QRIS", "GoPay / QRIS"}:
                         method["name"] = "Mayar checkout"
                 method.pop("payment_code", None)
+        saved.setdefault("dashboard_admin_limit", DEFAULT_BILLING_CONFIG["dashboard_admin_limit"])
+        saved.setdefault("affiliate_combinations", DEFAULT_BILLING_CONFIG["affiliate_combinations"])
         return saved
     await db.platform_settings.update_one(
         {"key": "billing"},
@@ -237,6 +346,49 @@ async def get_owned_invitation(invitation_id: str, owner_id: str):
     if invitation is None:
         raise HTTPException(status_code=404, detail="Undangan tidak ditemukan.")
     return invitation
+
+
+async def require_dashboard_owner(user: dict):
+    if user.get("role") in {"dashboard_admin", "affiliate"}:
+        raise HTTPException(status_code=403, detail="Fitur ini hanya tersedia untuk pemilik akun.")
+    return user
+
+
+async def get_dashboard_invitation(invitation_id: str, user: dict):
+    if user.get("role") == "dashboard_admin":
+        if not user.get("active", True):
+            raise HTTPException(status_code=403, detail="Akses admin dashboard sudah dinonaktifkan.")
+        invitation = await db.invitations.find_one(
+            {"id": invitation_id, "owner_id": user.get("owner_id")},
+            {"_id": 0},
+        )
+        if invitation is None or invitation.get("status") not in {"active", "published"}:
+            raise HTTPException(status_code=404, detail="Undangan tidak ditemukan.")
+        return invitation
+    return await get_owned_invitation(invitation_id, user["id"])
+
+
+async def require_business_owner(user: dict):
+    await require_dashboard_owner(user)
+    now = datetime.now(timezone.utc).isoformat()
+    if user.get("is_demo") and user.get("demo_plan_id") == "business" and user.get("demo_until", "") > now:
+        return True
+    invitation = await db.invitations.find_one({
+        "owner_id": user["id"],
+        "plan_id": "business",
+        "status": {"$in": ["active", "published"]},
+        "active_until": {"$gt": now},
+    }, {"_id": 0, "id": 1})
+    return invitation is not None
+
+
+async def has_active_invitation_package(owner_id: str):
+    now = datetime.now(timezone.utc).isoformat()
+    return await db.invitations.count_documents({
+        "owner_id": owner_id,
+        "status": {"$in": ["active", "published"]},
+        "active_until": {"$gt": now},
+    }) > 0
 
 
 async def activate_invitation(payment):
@@ -357,12 +509,38 @@ async def create_mayar_invoice(payment, user, mobile):
 
 
 def public_user(user):
-    return {
+    result = {
         "id": user["id"],
         "full_name": user["full_name"],
         "email": user["email"],
-        "is_test_account": user.get("is_test_account") is True,
+        "role": user.get("role", "user"),
+        "active": user.get("active", True),
+        "owner_id": user.get("owner_id"),
     }
+    if user.get("is_test_account") is True:
+        result["is_test_account"] = True
+    if user.get("is_demo"):
+        result["is_demo"] = True
+        result["demo_until"] = user.get("demo_until")
+        result["demo_plan_id"] = user.get("demo_plan_id")
+    if user.get("role") == "affiliate":
+        result["basic_quota"] = user.get("basic_quota", 0)
+        result["premium_quota"] = user.get("premium_quota", 0)
+    return result
+
+
+async def demo_account_expired(user: dict):
+    account = user
+    if user.get("role") in {"dashboard_admin", "affiliate"} and user.get("owner_id"):
+        owner = await db.users.find_one({"id": user["owner_id"]}, {"_id": 0, "is_demo": 1, "demo_until": 1})
+        if owner and owner.get("is_demo"):
+            account = owner
+    if not account.get("is_demo") or not account.get("demo_until"):
+        return False
+    expires_at = datetime.fromisoformat(account["demo_until"])
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= datetime.now(timezone.utc)
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
@@ -378,6 +556,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(b
     user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
     if user is None:
         raise HTTPException(status_code=401, detail="Akun tidak ditemukan.")
+    if user.get("role") in {"dashboard_admin", "affiliate"} and not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Akses akun sudah dinonaktifkan pemilik.")
+    if await demo_account_expired(user):
+        raise HTTPException(status_code=403, detail="Masa akun demo sudah berakhir.")
     return user
 
 
@@ -430,12 +612,97 @@ async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depen
     method_ids = [method["id"] for method in config["payment_methods"]]
     if len(plan_ids) != len(set(plan_ids)) or len(method_ids) != len(set(method_ids)):
         raise HTTPException(status_code=422, detail="ID paket dan metode pembayaran harus unik.")
+    plan_by_id = {plan["id"]: plan for plan in config["plans"]}
+    for combination in config["affiliate_combinations"]:
+        if "basic" not in plan_by_id or "premium" not in plan_by_id or "business" not in plan_by_id:
+            raise HTTPException(status_code=422, detail="Paket Basic, Premium, dan Business wajib tersedia untuk aturan affiliate.")
     await db.platform_settings.update_one(
         {"key": "billing"},
         {"$set": config},
         upsert=True,
     )
     return {**config, "gateway_ready": bool(os.environ.get("MAYAR_API_KEY"))}
+
+
+@api_router.get("/admin/demo-accounts")
+async def list_demo_accounts(_admin=Depends(require_admin)):
+    accounts = await db.users.find(
+        {"is_demo": True},
+        {"_id": 0, "password_hash": 0},
+    ).sort("created_at", -1).to_list(length=500)
+    now = datetime.now(timezone.utc)
+    return [{
+        "id": account["id"],
+        "full_name": account["full_name"],
+        "email": account["email"],
+        "plan_id": account["demo_plan_id"],
+        "demo_until": account["demo_until"],
+        "expired": datetime.fromisoformat(account["demo_until"]) <= now,
+        "created_at": account.get("created_at"),
+    } for account in accounts]
+
+
+@api_router.post("/admin/demo-accounts")
+async def create_demo_account(payload: DemoAccountCreate, _admin=Depends(require_admin)):
+    config = await get_billing_config()
+    plan = next((item for item in config["plans"] if item["id"] == payload.plan_id and item.get("enabled", True)), None)
+    if plan is None:
+        raise HTTPException(status_code=422, detail="Paket demo tidak tersedia.")
+    selected_combination = None
+    if plan["id"] == "business":
+        selected_combination = next(
+            (item for item in config["affiliate_combinations"] if item["id"] == payload.combination_id),
+            None,
+        )
+        if selected_combination is None:
+            raise HTTPException(status_code=422, detail="Pilih kombinasi kuota affiliate untuk demo Business.")
+    elif payload.combination_id:
+        raise HTTPException(status_code=422, detail="Kombinasi affiliate hanya tersedia untuk demo Business.")
+
+    email = str(payload.email).lower()
+    await db.users.create_index("email", unique=True)
+    if await db.users.find_one({"email": email}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="Email sudah terdaftar.")
+    now = datetime.now(timezone.utc)
+    demo_until = now + timedelta(days=payload.duration_days, hours=payload.duration_hours)
+    user = {
+        "id": str(uuid.uuid4()),
+        "full_name": payload.full_name.strip(),
+        "email": email,
+        "password_hash": bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        "role": "user",
+        "active": True,
+        "is_demo": True,
+        "demo_plan_id": plan["id"],
+        "demo_until": demo_until.isoformat(),
+        "created_at": now.isoformat(),
+    }
+    await db.users.create_index("id", unique=True)
+    try:
+        await db.users.insert_one(user)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Email sudah terdaftar.") from None
+
+    if selected_combination:
+        await db.affiliate_programs.create_index("owner_id", unique=True)
+        await db.affiliate_programs.insert_one({
+            "owner_id": user["id"],
+            "combination_id": selected_combination["id"],
+            "combination": {
+                "id": selected_combination["id"],
+                "name": selected_combination["name"],
+                "basic": selected_combination["basic"],
+                "premium": selected_combination["premium"],
+            },
+            "updated_at": now.isoformat(),
+        })
+    return {
+        "id": user["id"],
+        "full_name": user["full_name"],
+        "email": user["email"],
+        "plan_id": user["demo_plan_id"],
+        "demo_until": user["demo_until"],
+    }
 
 
 @api_router.post("/auth/register")
@@ -451,6 +718,8 @@ async def register_user(payload: UserRegistration):
         "full_name": payload.full_name.strip(),
         "email": email,
         "password_hash": bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        "role": "user",
+        "active": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -472,6 +741,10 @@ async def login_user(payload: UserLogin):
     user = await db.users.find_one({"email": email})
     if user is None or not bcrypt.checkpw(payload.password.encode("utf-8"), user["password_hash"].encode("utf-8")):
         raise HTTPException(status_code=401, detail="Email atau kata sandi salah.")
+    if user.get("role") in {"dashboard_admin", "affiliate"} and not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Akses akun sudah dinonaktifkan pemilik.")
+    if await demo_account_expired(user):
+        raise HTTPException(status_code=403, detail="Masa akun demo sudah berakhir.")
 
     return {
         "access_token": create_access_token(user["id"]),
@@ -485,12 +758,307 @@ async def get_account(current_user: dict = Depends(get_current_user)):
     return {"user": public_user(current_user)}
 
 
+def dashboard_account_view(user):
+    return {
+        "id": user["id"],
+        "full_name": user["full_name"],
+        "email": user["email"],
+        "active": user.get("active", True),
+        "created_at": user.get("created_at"),
+    }
+
+
+@api_router.get("/dashboard-admins")
+async def list_dashboard_admins(current_user=Depends(get_current_user)):
+    if current_user.get("role") in {"dashboard_admin", "affiliate"}:
+        raise HTTPException(status_code=403, detail="Hanya pemilik akun yang dapat mengelola admin dashboard.")
+    config = await get_billing_config()
+    admins = await db.users.find(
+        {"owner_id": current_user["id"], "role": "dashboard_admin"},
+        {"_id": 0, "password_hash": 0},
+    ).to_list(length=3)
+    return {"eligible": await has_active_invitation_package(current_user["id"]),
+            "max_admins": config["dashboard_admin_limit"], "admins": [dashboard_account_view(item) for item in admins]}
+
+
+@api_router.post("/dashboard-admins")
+async def create_dashboard_admin(payload: DashboardAdminCreate, current_user=Depends(get_current_user)):
+    await require_dashboard_owner(current_user)
+    config = await get_billing_config()
+    if not await has_active_invitation_package(current_user["id"]):
+        raise HTTPException(status_code=403, detail="Admin tambahan tersedia setelah paket undangan aktif.")
+    await db.users.create_index("email", unique=True)
+    current_count = await db.users.count_documents({"owner_id": current_user["id"], "role": "dashboard_admin"})
+    if current_count >= config["dashboard_admin_limit"]:
+        raise HTTPException(status_code=409, detail="Batas admin dashboard sudah tercapai.")
+    email = str(payload.email).lower()
+    if await db.users.find_one({"email": email}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="Email sudah terdaftar.")
+    user = {
+        "id": str(uuid.uuid4()),
+        "full_name": payload.full_name.strip(),
+        "email": email,
+        "password_hash": bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        "role": "dashboard_admin",
+        "owner_id": current_user["id"],
+        "active": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        await db.users.insert_one(user)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Email sudah terdaftar.") from None
+    return dashboard_account_view(user)
+
+
+@api_router.patch("/dashboard-admins/{manager_id}")
+async def update_dashboard_admin(manager_id: str, payload: AffiliateUpdate, current_user=Depends(get_current_user)):
+    await require_dashboard_owner(current_user)
+    if payload.active is None or payload.model_fields_set != {"active"}:
+        raise HTTPException(status_code=422, detail="Ubah hanya status aktif admin dashboard.")
+    result = await db.users.update_one(
+        {"id": manager_id, "owner_id": current_user["id"], "role": "dashboard_admin"},
+        {"$set": {"active": payload.active}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Admin dashboard tidak ditemukan.")
+    manager = await db.users.find_one({"id": manager_id}, {"_id": 0, "password_hash": 0})
+    return dashboard_account_view(manager)
+
+
+@api_router.get("/affiliate-program")
+async def get_affiliate_program(current_user=Depends(get_current_user)):
+    if not await require_business_owner(current_user):
+        return {"eligible": False, "program": None, "affiliates": []}
+    config = await get_billing_config()
+    program = await db.affiliate_programs.find_one({"owner_id": current_user["id"]}, {"_id": 0})
+    combinations = config["affiliate_combinations"]
+    saved_combination = (program or {}).get("combination")
+    if saved_combination:
+        combinations = [item for item in combinations if item["id"] != saved_combination["id"]]
+        combinations = combinations + [saved_combination]
+    affiliate_docs = await db.users.find(
+        {"owner_id": current_user["id"], "role": "affiliate"},
+        {"_id": 0, "password_hash": 0},
+    ).to_list(length=500)
+    affiliates = []
+    for affiliate in affiliate_docs:
+        affiliate_invitations = await db.invitations.count_documents({"affiliate_id": affiliate["id"]})
+        affiliates.append({
+            **dashboard_account_view(affiliate),
+            "basic_quota": affiliate.get("basic_quota", 0),
+            "premium_quota": affiliate.get("premium_quota", 0),
+            "basic_used": await db.invitations.count_documents({"affiliate_id": affiliate["id"], "plan_id": "basic"}),
+            "premium_used": await db.invitations.count_documents({"affiliate_id": affiliate["id"], "plan_id": "premium"}),
+            "ad_title": affiliate.get("ad_title", ""),
+            "ad_description": affiliate.get("ad_description", ""),
+            "ad_url": affiliate.get("ad_url", ""),
+            "ad_image": affiliate.get("ad_image", ""),
+            "ad_active": affiliate.get("ad_active", False),
+            "invitation_count": affiliate_invitations,
+        })
+    return {"eligible": True, "program": program, "combinations": combinations, "affiliates": affiliates}
+
+
+@api_router.put("/affiliate-program")
+async def select_affiliate_combination(payload: AffiliateProgramUpdate, current_user=Depends(get_current_user)):
+    if not await require_business_owner(current_user):
+        raise HTTPException(status_code=403, detail="Program affiliate hanya tersedia untuk pemilik paket Business yang aktif.")
+    config = await get_billing_config()
+    combination = next((item for item in config["affiliate_combinations"] if item["id"] == payload.combination_id), None)
+    if combination is None:
+        raise HTTPException(status_code=422, detail="Kombinasi kuota affiliate tidak tersedia.")
+    saved_program = await db.affiliate_programs.find_one({"owner_id": current_user["id"]}, {"_id": 0})
+    if saved_program:
+        if saved_program.get("combination_id") != combination["id"]:
+            raise HTTPException(status_code=409, detail="Kombinasi affiliate sudah dikunci dan tidak dapat diubah.")
+        if not saved_program.get("combination"):
+            saved_program["combination"] = {
+                "id": combination["id"],
+                "name": combination["name"],
+                "basic": combination["basic"],
+                "premium": combination["premium"],
+            }
+            await db.affiliate_programs.update_one(
+                {"owner_id": current_user["id"]},
+                {"$set": {"combination": saved_program["combination"]}},
+            )
+        return saved_program
+    program = {
+        "owner_id": current_user["id"],
+        "combination_id": combination["id"],
+        "combination": {
+            "id": combination["id"],
+            "name": combination["name"],
+            "basic": combination["basic"],
+            "premium": combination["premium"],
+        },
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.affiliate_programs.create_index("owner_id", unique=True)
+    try:
+        await db.affiliate_programs.insert_one(program)
+    except DuplicateKeyError:
+        saved_program = await db.affiliate_programs.find_one({"owner_id": current_user["id"]}, {"_id": 0})
+        if saved_program and saved_program.get("combination_id") == combination["id"]:
+            return saved_program
+        raise HTTPException(status_code=409, detail="Kombinasi affiliate sudah dikunci dan tidak dapat diubah.") from None
+    return program
+
+
+@api_router.post("/affiliates")
+async def create_affiliate(payload: AffiliateCreate, current_user=Depends(get_current_user)):
+    if not await require_business_owner(current_user):
+        raise HTTPException(status_code=403, detail="Affiliate hanya tersedia untuk pemilik paket Business yang aktif.")
+    config = await get_billing_config()
+    program = await db.affiliate_programs.find_one({"owner_id": current_user["id"]}, {"_id": 0})
+    combination = (program or {}).get("combination") or next(
+        (item for item in config["affiliate_combinations"] if program and item["id"] == program.get("combination_id")),
+        None,
+    )
+    if combination is None:
+        raise HTTPException(status_code=409, detail="Pilih kombinasi kuota affiliate terlebih dahulu.")
+    affiliates = await db.users.find(
+        {"owner_id": current_user["id"], "role": "affiliate"},
+        {"_id": 0, "basic_quota": 1, "premium_quota": 1},
+    ).to_list(length=500)
+    if sum(item.get("basic_quota", 0) for item in affiliates) + payload.basic_quota > combination["basic"]:
+        raise HTTPException(status_code=409, detail="Kuota Basic affiliate melebihi batas kombinasi Business.")
+    if sum(item.get("premium_quota", 0) for item in affiliates) + payload.premium_quota > combination["premium"]:
+        raise HTTPException(status_code=409, detail="Kuota Premium affiliate melebihi batas kombinasi Business.")
+    email = str(payload.email).lower()
+    await db.users.create_index("email", unique=True)
+    if await db.users.find_one({"email": email}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="Email sudah terdaftar.")
+    affiliate = {
+        "id": str(uuid.uuid4()),
+        "full_name": payload.full_name.strip(),
+        "email": email,
+        "password_hash": bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        "role": "affiliate",
+        "owner_id": current_user["id"],
+        "active": True,
+        "basic_quota": payload.basic_quota,
+        "premium_quota": payload.premium_quota,
+        "ad_title": payload.ad_title.strip(),
+        "ad_description": payload.ad_description.strip(),
+        "ad_url": payload.ad_url.strip(),
+        "ad_image": payload.ad_image.strip(),
+        "ad_active": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.create_index("id", unique=True)
+    try:
+        await db.users.insert_one(affiliate)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Email sudah terdaftar.") from None
+    return dashboard_account_view(affiliate) | {
+        "basic_quota": affiliate["basic_quota"],
+        "premium_quota": affiliate["premium_quota"],
+        "ad_active": False,
+    }
+
+
+@api_router.patch("/affiliates/{affiliate_id}")
+async def update_affiliate(affiliate_id: str, payload: AffiliateUpdate, current_user=Depends(get_current_user)):
+    if not await require_business_owner(current_user):
+        raise HTTPException(status_code=403, detail="Hanya pemilik paket Business yang dapat mengelola affiliate.")
+    updates = payload.model_dump(exclude_unset=True)
+    affiliate = await db.users.find_one(
+        {"id": affiliate_id, "owner_id": current_user["id"], "role": "affiliate"},
+        {"_id": 0, "password_hash": 0},
+    )
+    if affiliate is None:
+        raise HTTPException(status_code=404, detail="Affiliate tidak ditemukan.")
+    config = await get_billing_config()
+    program = await db.affiliate_programs.find_one({"owner_id": current_user["id"]}, {"_id": 0})
+    combination = (program or {}).get("combination") or next(
+        (item for item in config["affiliate_combinations"] if program and item["id"] == program.get("combination_id")),
+        None,
+    )
+    if combination is None:
+        raise HTTPException(status_code=409, detail="Pilih kombinasi kuota affiliate terlebih dahulu.")
+    affiliates = await db.users.find(
+        {"owner_id": current_user["id"], "role": "affiliate", "id": {"$ne": affiliate_id}},
+        {"_id": 0, "basic_quota": 1, "premium_quota": 1},
+    ).to_list(length=500)
+    basic_quota = updates.get("basic_quota", affiliate.get("basic_quota", 0))
+    premium_quota = updates.get("premium_quota", affiliate.get("premium_quota", 0))
+    if sum(item.get("basic_quota", 0) for item in affiliates) + basic_quota > combination["basic"]:
+        raise HTTPException(status_code=409, detail="Kuota Basic affiliate melebihi batas kombinasi Business.")
+    if sum(item.get("premium_quota", 0) for item in affiliates) + premium_quota > combination["premium"]:
+        raise HTTPException(status_code=409, detail="Kuota Premium affiliate melebihi batas kombinasi Business.")
+    if basic_quota < await db.invitations.count_documents({"affiliate_id": affiliate_id, "plan_id": "basic"}) or premium_quota < await db.invitations.count_documents({"affiliate_id": affiliate_id, "plan_id": "premium"}):
+        raise HTTPException(status_code=409, detail="Kuota tidak boleh lebih rendah dari jumlah undangan yang sudah dibuat.")
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"id": affiliate_id}, {"$set": updates})
+    updated = await db.users.find_one({"id": affiliate_id}, {"_id": 0, "password_hash": 0})
+    return dashboard_account_view(updated) | {key: updated.get(key) for key in ("basic_quota", "premium_quota", "ad_title", "ad_description", "ad_url", "ad_image", "ad_active")}
+
+
+@api_router.get("/public/advertisements")
+async def list_public_advertisements():
+    ads = await db.users.find(
+        {"role": "affiliate", "active": True, "ad_active": True, "ad_title": {"$ne": ""}, "ad_url": {"$ne": ""}},
+        {"_id": 0, "id": 1, "owner_id": 1, "full_name": 1, "ad_title": 1, "ad_description": 1, "ad_url": 1, "ad_image": 1},
+    ).to_list(length=24)
+    results = []
+    owner_eligibility = {}
+    for item in ads:
+        owner_id = item.get("owner_id")
+        if owner_id not in owner_eligibility:
+            owner = await db.users.find_one({"id": owner_id}, {"_id": 0, "password_hash": 0}) if owner_id else None
+            owner_eligibility[owner_id] = bool(owner and await require_business_owner(owner))
+        if not owner_eligibility[owner_id]:
+            continue
+        url = urlparse(item["ad_url"])
+        image = urlparse(item.get("ad_image", ""))
+        if url.scheme not in {"http", "https"} or not url.netloc:
+            continue
+        if item.get("ad_image") and (image.scheme not in {"http", "https"} or not image.netloc):
+            continue
+        results.append({
+            "id": item["id"],
+            "title": item["ad_title"],
+            "description": item.get("ad_description", ""),
+            "url": item["ad_url"],
+            "image": item.get("ad_image", ""),
+            "advertiser": item["full_name"],
+        })
+    return results
+
+
 @api_router.post("/invitations")
 async def create_invitation(payload: InvitationCreate, current_user=Depends(get_current_user)):
     config = await get_billing_config()
     plan = next((item for item in config["plans"] if item["id"] == payload.plan_id and item.get("enabled", True)), None)
     if plan is None:
         raise HTTPException(status_code=422, detail="Paket tidak tersedia.")
+    owner_id = current_user["id"]
+    affiliate_id = None
+    is_affiliate = current_user.get("role") == "affiliate"
+    demo_owner = current_user if current_user.get("is_demo") else None
+    if current_user.get("role") == "dashboard_admin":
+        raise HTTPException(status_code=403, detail="Admin dashboard hanya dapat melihat buku tamu undangan.")
+    if is_affiliate:
+        owner_id = current_user.get("owner_id")
+        owner = await db.users.find_one({"id": owner_id}, {"_id": 0, "password_hash": 0}) if owner_id else None
+        if owner is None or not await require_business_owner(owner):
+            raise HTTPException(status_code=403, detail="Paket Business pemilik affiliate tidak aktif.")
+        if owner.get("is_demo"):
+            demo_owner = owner
+        if payload.plan_id not in {"basic", "premium"}:
+            raise HTTPException(status_code=403, detail="Affiliate hanya dapat membuat undangan Basic atau Premium.")
+        quota_field = f"{payload.plan_id}_quota"
+        used_count = await db.invitations.count_documents({"affiliate_id": current_user["id"], "plan_id": payload.plan_id})
+        if used_count >= current_user.get(quota_field, 0):
+            raise HTTPException(status_code=409, detail=f"Kuota {plan['name']} affiliate sudah habis.")
+        affiliate_id = current_user["id"]
+    if demo_owner:
+        if not is_affiliate and payload.plan_id != demo_owner.get("demo_plan_id"):
+            raise HTTPException(status_code=403, detail="Akun demo hanya dapat membuat undangan sesuai paket demo yang dipilih.")
+        if await db.invitations.count_documents({"owner_id": demo_owner["id"]}) >= 2:
+            raise HTTPException(status_code=409, detail="Akun demo hanya dapat membuat maksimal 2 undangan.")
 
     has_test_access = current_user.get("is_test_account") is True
     if has_test_access:
@@ -511,14 +1079,18 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
     now = datetime.now(timezone.utc).isoformat()
     invitation = {
         "id": str(uuid.uuid4()),
-        "owner_id": current_user["id"],
+        "owner_id": owner_id,
+        "sales_owner_id": owner_id,
+        "created_by": current_user["id"],
+        "affiliate_id": affiliate_id,
         "plan_id": plan["id"],
         "title": payload.title.strip(),
         "slug": slug,
         "content": payload.content,
-        "status": "active" if has_test_access else "draft",
-        "active_until": TEST_ACCOUNT_ACTIVE_UNTIL if has_test_access else None,
+        "status": "active" if has_test_access or demo_owner else "draft",
         "payment_id": None,
+        "active_until": demo_owner.get("demo_until") if demo_owner else TEST_ACCOUNT_ACTIVE_UNTIL if has_test_access else None,
+        "is_demo": bool(demo_owner),
         "created_at": now,
         "updated_at": now,
     }
@@ -532,16 +1104,25 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
 
 @api_router.get("/invitations")
 async def list_my_invitations(current_user=Depends(get_current_user)):
+    if current_user.get("role") == "affiliate":
+        return await db.invitations.find({"affiliate_id": current_user["id"]}, {"_id": 0}).to_list(length=200)
+    if current_user.get("role") == "dashboard_admin":
+        return await db.invitations.find(
+            {"owner_id": current_user.get("owner_id"), "status": {"$in": ["active", "published"]}},
+            {"_id": 0},
+        ).to_list(length=200)
     return await db.invitations.find({"owner_id": current_user["id"]}, {"_id": 0}).to_list(length=200)
 
 
 @api_router.get("/invitations/{invitation_id}")
 async def get_my_invitation(invitation_id: str, current_user=Depends(get_current_user)):
-    return await get_owned_invitation(invitation_id, current_user["id"])
+    return await get_dashboard_invitation(invitation_id, current_user)
 
 
 @api_router.patch("/invitations/{invitation_id}")
 async def update_my_invitation(invitation_id: str, payload: InvitationUpdate, current_user=Depends(get_current_user)):
+    if current_user.get("role") in {"dashboard_admin", "affiliate"}:
+        raise HTTPException(status_code=403, detail="Perubahan undangan hanya dapat dilakukan pemilik paket.")
     invitation = await get_owned_invitation(invitation_id, current_user["id"])
     updates = payload.model_dump(exclude_unset=True)
     plan_config = await get_billing_config()
@@ -566,6 +1147,8 @@ async def update_my_invitation(invitation_id: str, payload: InvitationUpdate, cu
 
 @api_router.post("/invitations/{invitation_id}/publish")
 async def publish_invitation(invitation_id: str, current_user=Depends(get_current_user)):
+    if current_user.get("role") in {"dashboard_admin", "affiliate"}:
+        raise HTTPException(status_code=403, detail="Publish undangan hanya dapat dilakukan pemilik paket.")
     invitation = await get_owned_invitation(invitation_id, current_user["id"])
     if invitation.get("status") not in {"active", "published"} or not invitation.get("active_until"):
         raise HTTPException(status_code=402, detail="Selesaikan pembayaran sebelum publish.")
@@ -778,7 +1361,7 @@ async def check_in_invitation_ticket(
 
 @api_router.get("/invitations/{invitation_id}/guestbook")
 async def list_my_guestbook(invitation_id: str, current_user=Depends(get_current_user)):
-    await get_owned_invitation(invitation_id, current_user["id"])
+    await get_dashboard_invitation(invitation_id, current_user)
     return await db.guestbook_entries.find(
         {"invitation_id": invitation_id},
         {"_id": 0},
@@ -787,6 +1370,8 @@ async def list_my_guestbook(invitation_id: str, current_user=Depends(get_current
 
 @api_router.patch("/invitations/{invitation_id}/guestbook/{entry_id}")
 async def moderate_guestbook(invitation_id: str, entry_id: str, payload: GuestbookModeration, current_user=Depends(get_current_user)):
+    if current_user.get("role") in {"dashboard_admin", "affiliate"}:
+        raise HTTPException(status_code=403, detail="Admin tambahan hanya dapat melihat buku tamu.")
     await get_owned_invitation(invitation_id, current_user["id"])
     result = await db.guestbook_entries.update_one(
         {"id": entry_id, "invitation_id": invitation_id},
@@ -799,6 +1384,8 @@ async def moderate_guestbook(invitation_id: str, entry_id: str, payload: Guestbo
 
 @api_router.delete("/invitations/{invitation_id}/guestbook/{entry_id}")
 async def delete_guestbook(invitation_id: str, entry_id: str, current_user=Depends(get_current_user)):
+    if current_user.get("role") in {"dashboard_admin", "affiliate"}:
+        raise HTTPException(status_code=403, detail="Admin tambahan hanya dapat melihat buku tamu.")
     await get_owned_invitation(invitation_id, current_user["id"])
     result = await db.guestbook_entries.delete_one({"id": entry_id, "invitation_id": invitation_id})
     if not result.deleted_count:
@@ -808,6 +1395,8 @@ async def delete_guestbook(invitation_id: str, entry_id: str, current_user=Depen
 
 @api_router.post("/invitations/{invitation_id}/payments")
 async def create_invitation_payment(invitation_id: str, payload: PaymentCreate, current_user=Depends(get_current_user)):
+    if current_user.get("is_demo"):
+        raise HTTPException(status_code=403, detail="Akun demo tidak dapat membuat pembayaran.")
     invitation = await get_owned_invitation(invitation_id, current_user["id"])
     config = await get_billing_config()
     plan = next((item for item in config["plans"] if item["id"] == invitation["plan_id"] and item.get("enabled", True)), None)
@@ -853,6 +1442,8 @@ async def create_invitation_payment(invitation_id: str, payload: PaymentCreate, 
         "id": str(uuid.uuid4()),
         "order_id": f"UND-{uuid.uuid4().hex[:20].upper()}",
         "owner_id": current_user["id"],
+        "sales_owner_id": invitation.get("sales_owner_id", current_user["id"]),
+        "affiliate_id": invitation.get("affiliate_id"),
         "invitation_id": invitation_id,
         "plan_id": plan["id"],
         "plan_name": plan["name"],
@@ -1067,7 +1658,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_origins=allowed_origins,
     allow_origin_regex=os.environ.get("CORS_ORIGIN_REGEX") or None,
-    allow_methods=["GET", "POST", "PATCH", "PUT"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiRequest, guestbookApi } from '../lib/api';
+import { getRegionalInvitationTemplate } from '../lib/regionalInvitationTemplates';
 
 const defaultStory = [
   { title: 'Pertama Bertemu', date: '2019', text: 'Sebuah pertemuan sederhana yang menjadi awal dari perjalanan panjang kami.' },
@@ -28,8 +29,8 @@ const formatCountdown = (target) => {
 const calendarUrl = (content, invitation) => {
   const eventDate = content.event_date || new Date().toISOString().slice(0, 10);
   const start = `${eventDate.replaceAll('-', '')}T${(content.event_time || '10:00').replace(':', '')}00`;
-  const title = encodeURIComponent(`Pernikahan ${content.couple_names || invitation.title}`);
-  const details = encodeURIComponent(content.opening_text || 'Undangan pernikahan');
+  const title = encodeURIComponent(`${content.event_type || 'Acara'} ${content.couple_names || content.honoree_name || invitation.title}`);
+  const details = encodeURIComponent(content.opening_text || `Undangan resmi ${content.event_type || 'acara'}`);
   const location = encodeURIComponent(`${content.venue || ''} ${content.address || ''}`.trim());
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${start}&details=${details}&location=${location}`;
 };
@@ -42,6 +43,8 @@ const videoEmbedUrl = (url) => {
   if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
   return url;
 };
+
+const isDirectVideoUrl = (url) => /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(url || '');
 
 const templateThemes = {
   'luxury-gold': { primary: '#4b3520', accent: '#b28745', background: '#fbf7ed', font: 'Cormorant Garamond, Georgia, serif', cover: 'linear-gradient(135deg, #241a13, #bb9453 48%, #594126)', ornament: '✦' },
@@ -74,6 +77,7 @@ const templateThemes = {
   tasyakuran: { primary: '#78350f', accent: '#b98b4c', background: '#fffbeb', font: 'Georgia, serif', cover: 'linear-gradient(135deg, #451a03, #a16207 55%, #e6c875)', ornament: '✦' },
   'corporate-event': { primary: '#334155', accent: '#b08b4c', background: '#f8fafc', font: 'Arial, sans-serif', cover: 'linear-gradient(135deg, #0f172a, #475569 55%, #c5a258)', ornament: '◆' },
   'custom-premium': { primary: '#6d28d9', accent: '#c09a55', background: '#faf5ff', font: 'Georgia, serif', cover: 'linear-gradient(135deg, #2e1065, #7c3aed 55%, #d8b36a)', ornament: '✦' },
+  'gen-z-editorial': { primary: '#32156b', accent: '#ff4fa3', background: '#fff3fa', font: 'Arial, sans-serif', cover: 'linear-gradient(135deg, #4c1d95, #e879f9 48%, #fb7185)', ornament: '✷' },
 };
 
 const templateFrames = {
@@ -85,6 +89,7 @@ const templateFrames = {
   'khitanan-royal': 'playful', 'aqiqah-elegant': 'soft', 'birthday-luxury': 'celebration', 'birthday-kids': 'playful',
   'graduation-gold': 'academic', anniversary: 'heart', engagement: 'heart', 'baby-shower': 'soft', tasyakuran: 'islamic',
   'corporate-event': 'geometric', 'custom-premium': 'custom',
+  'gen-z-editorial': 'genz',
 };
 
 const templateCopy = {
@@ -118,6 +123,7 @@ const templateCopy = {
   tasyakuran: { kicker: 'A Celebration of Gratitude', greeting: 'Dengan penuh syukur, kami mengundang Anda untuk berbagi doa dan kebahagiaan bersama keluarga kami.', quote: 'Syukur membuat yang sederhana terasa istimewa.', source: 'Tasyakuran', storyTitle: 'A Grateful Heart', storyText: 'Hari ini kami rayakan bukan hanya pencapaian, tetapi juga semua doa yang menyertai.', closing: 'Terima kasih telah hadir dalam syukur kami.' },
   'corporate-event': { kicker: 'A Signature Event', greeting: 'Dengan hormat, kami mengundang Anda untuk hadir dalam agenda penting dan berkesan ini.', quote: 'Ideas become impact when we build them together.', source: 'Corporate Event', storyTitle: 'The Agenda Ahead', storyText: 'Mari bertemu, bertukar gagasan, dan menciptakan momentum baru bersama.', closing: 'We look forward to welcoming you.' },
   'custom-premium': { kicker: 'Your Story, Your Signature', greeting: 'Setiap cerita memiliki warna sendiri. Mari mulai merancang momen yang sepenuhnya milik Anda.', quote: 'The most beautiful design is the one that feels like you.', source: 'Custom Premium', storyTitle: 'Made Especially for You', storyText: 'Tidak ada batas untuk membuat undangan yang mencerminkan cerita, rasa, dan karakter Anda.', closing: 'Your moment deserves a signature.' },
+  'gen-z-editorial': { kicker: 'Main Character Energy', greeting: 'Save the date! Hari spesial kami bakal makin seru kalau kamu ikut hadir. See you there!', quote: 'Make memories, take pictures, stay a little longer.', source: 'The Moodboard', storyTitle: 'Our Plot Twist', storyText: 'Dari satu momen random, sekarang jadi cerita favorit yang mau kami rayakan bareng kamu.', closing: 'Outfit ready, camera ready, let’s celebrate!' },
 };
 
 export default function PublicInvitation({ slug, invitation: initialInvitation = null }) {
@@ -198,6 +204,13 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const schedule = Array.isArray(content.schedule) && content.schedule.length ? content.schedule : defaultSchedule;
   const coupleNames = content.couple_names || invitation.title;
   const [groomName, brideName] = coupleNames.split(/\s*&\s*/);
+  const recipientName = new URLSearchParams(window.location.search).get('to')?.trim() || '';
+  const prefersReducedMotion = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const isCoupleEvent = Boolean(content.couple_names)
+    || ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy', 'Anniversary'].includes(content.event_type);
+  const honoreeName = content.honoree_name || invitation.title;
+  const eventLabel = content.event_type || 'Acara istimewa';
   const defaultEvents = content.event_type === 'Akad & Resepsi'
     ? [
       { title: 'AKAD NIKAH', date: content.event_date, time: content.event_time, venue: content.venue, address: content.address, maps_url: content.maps_url },
@@ -207,11 +220,36 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const eventItems = (Array.isArray(content.events) ? content.events : defaultEvents).filter((event) => event.date || event.venue || event.address);
   const templateClass = content.custom_design ? 'custom' : content.template_id || 'luxury-gold';
   const isTemplateDemo = Boolean(content.demo_template);
-  const copy = templateCopy[templateClass] || templateCopy['luxury-gold'];
-  const storyItems = isTemplateDemo ? [{ title: copy.storyTitle, date: 'Our chapter', text: copy.storyText }] : story;
-  const greeting = isTemplateDemo ? copy.greeting : content.opening_text || 'Dengan bahagia, kami mengundang Anda untuk hadir, berbagi cerita, dan merayakan hari istimewa bersama kami.';
-  const theme = templateThemes[templateClass] || templateThemes['luxury-gold'];
-  const frameClass = content.custom_design ? 'custom' : templateFrames[templateClass] || 'classic';
+  const regionTemplate = getRegionalInvitationTemplate(templateClass);
+  const copy = templateCopy[templateClass] || (regionTemplate ? {
+    kicker: `Nusantara · ${regionTemplate.province}`,
+    greeting: `Dengan hormat dan penuh kebahagiaan, kami mengundang Bapak/Ibu/Saudara/i untuk hadir di acara ${content.event_type || 'istimewa'} kami.`,
+    quote: 'Beragam cerita, satu ruang untuk merayakan kebersamaan.',
+    source: `Inspirasi ${regionTemplate.inspiration}`,
+    storyTitle: 'Cerita dari Nusantara',
+    storyText: `Sebuah perayaan yang kami rancang dengan sentuhan visual terinspirasi dari ${regionTemplate.inspiration}, ${regionTemplate.province}.`,
+    closing: 'Sampai bertemu di hari istimewa kami.',
+  } : templateCopy['luxury-gold']);
+  const storyItems = isTemplateDemo
+    ? [{ title: copy.storyTitle, date: 'Our chapter', text: copy.storyText }]
+    : typeof content.story === 'string' && content.story.trim()
+      ? [{ title: eventLabel, date: content.event_date || '', text: content.story }]
+      : story;
+  const storySectionTitle = isCoupleEvent ? copy.storyTitle : `Cerita ${eventLabel.toLowerCase()}`;
+  const defaultGreeting = isCoupleEvent
+    ? copy.greeting
+    : `Dengan hormat, kami mengundang Bapak/Ibu/Saudara/i untuk hadir dalam acara ${eventLabel.toLowerCase()}${honoreeName ? ` untuk ${honoreeName}` : ''}. Kehadiran dan doa Anda merupakan kebahagiaan bagi kami.`;
+  const greeting = isTemplateDemo ? copy.greeting : content.opening_text || defaultGreeting;
+  const theme = templateThemes[templateClass] || (regionTemplate ? {
+    primary: regionTemplate.colors[0],
+    accent: regionTemplate.colors[1],
+    background: regionTemplate.colors[2],
+    font: 'Arial, sans-serif',
+    cover: `linear-gradient(135deg, ${regionTemplate.colors[0]}, ${regionTemplate.colors[0]} 48%, ${regionTemplate.colors[1]})`,
+    ornament: regionTemplate.ornament,
+  } : templateThemes['luxury-gold']);
+  const frameClass = content.custom_design ? 'custom' : regionTemplate ? 'regional' : templateFrames[templateClass] || 'classic';
+  const coverVideo = content.video_url && isDirectVideoUrl(content.video_url) ? content.video_url : '';
   const customStyle = {
     '--public-primary': content.custom_design ? content.custom_primary || '#294b3e' : theme.primary,
     '--public-accent': content.custom_design ? content.custom_accent || '#995c49' : theme.accent,
@@ -260,9 +298,20 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
   return (
     <main className={`public-invitation-page public-template-${templateClass} wedding-frame-${frameClass} ${isOpened ? 'is-opened' : ''}`} style={customStyle}>
-      <section className="wedding-cover" style={content.cover_image ? { backgroundImage: `linear-gradient(180deg, rgba(24, 22, 18, 0.08), rgba(24, 22, 18, 0.58)), url("${content.cover_image}")` } : undefined}>
+      <section className={`wedding-cover${coverVideo ? ' has-cover-video' : ''}`} style={content.cover_image && !coverVideo ? { backgroundImage: `linear-gradient(180deg, rgba(24, 22, 18, 0.08), rgba(24, 22, 18, 0.58)), url("${content.cover_image}")` } : undefined}>
+        {coverVideo ? <video className="wedding-cover-video" src={coverVideo} autoPlay={!prefersReducedMotion} muted loop playsInline aria-label="Video latar undangan" /> : null}
+        <div className="wedding-cover-shimmer" aria-hidden="true" />
         <div className="wedding-ornament wedding-ornament-top">{theme.ornament}</div>
-        <div className="wedding-cover-inner"><p className="wedding-kicker">{copy.kicker}</p>{inviteeName ? <p className="wedding-recipient-name"><span>Kepada Yth.</span><strong>{inviteeName}</strong></p> : null}{inviteeError ? <p className="wedding-recipient-error" role="alert">Nama penerima tiket tidak dapat diverifikasi.</p> : null}<h1>{groomName || content.honoree_name || invitation.title}<span>&amp;</span>{brideName || ''}</h1><p className="wedding-cover-date">{content.event_date ? new Date(content.event_date).toLocaleDateString('id-ID', { dateStyle: 'full' }) : 'Save the date'}{content.event_time ? ` · ${content.event_time}` : ''}</p><button className="wedding-open-button" disabled={inviteeLoading || Boolean(ticketToken && inviteeError)} onClick={openInvitation}>{inviteeLoading ? 'MEMUAT NAMA TAMU…' : 'BUKA UNDANGAN'}</button></div>
+        <div className="wedding-cover-inner">
+          <p className="wedding-kicker">UNDANGAN RESMI</p>
+          {recipientName || inviteeName ? <p className="wedding-recipient-name"><span>Kepada Yth.</span><strong>{recipientName || inviteeName}</strong></p> : null}
+          {inviteeError ? <p className="wedding-recipient-error" role="alert">Nama penerima tiket tidak dapat diverifikasi.</p> : null}
+          <p className="wedding-event-label">{copy.kicker}</p>
+          <h1>{isCoupleEvent ? <>{groomName || invitation.title}<span>&amp;</span>{brideName || ''}</> : honoreeName}</h1>
+          <p className="wedding-cover-date">{content.event_date ? new Date(content.event_date).toLocaleDateString('id-ID', { dateStyle: 'full' }) : 'Save the date'}{content.event_time ? ` · ${content.event_time}` : ''}</p>
+          {regionTemplate ? <p className="wedding-region-label">{regionTemplate.province} · Inspirasi {regionTemplate.inspiration}</p> : null}
+          <button className="wedding-open-button" disabled={inviteeLoading || Boolean(ticketToken && inviteeError)} onClick={openInvitation}>{inviteeLoading ? 'MEMUAT NAMA TAMU…' : 'BUKA UNDANGAN'}</button>
+        </div>
         <div className="wedding-ornament wedding-ornament-bottom">{theme.ornament}</div>
       </section>
 
@@ -270,15 +319,15 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       {content.music_url && isOpened ? <button className="wedding-music-toggle" onClick={toggleMusic}>{isMusicPlaying ? 'Jeda musik' : 'Putar musik'}</button> : null}
 
       <div ref={contentRef} className="wedding-content" aria-hidden={!isOpened}>
-        <section className="wedding-section wedding-greeting"><p className="wedding-eyebrow">{copy.kicker}</p><p>{greeting}</p><span className="gold-divider">{theme.ornament}</span></section>
+        <section className="wedding-section wedding-greeting"><p className="wedding-eyebrow">{content.event_type || copy.kicker}</p><p>{greeting}</p><span className="gold-divider">{theme.ornament}</span></section>
 
-        <section className="wedding-section wedding-quote"><p>“{copy.quote}”</p><strong>{copy.source}</strong></section>
+        {isCoupleEvent ? <section className="wedding-section wedding-quote"><p>“{copy.quote}”</p><strong>{copy.source}</strong></section> : null}
 
-        <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid"><div className="wedding-person"><img src={content.groom_photo || content.cover_image || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=85'} alt={groomName || 'Mempelai pria'} /><h3>{groomName || 'Nama Mempelai Pria'}</h3><p>Putra dari<br />{content.groom_parents || 'Bapak Nama Ayah & Ibu Nama Ibu'}</p>{content.groom_instagram ? <a href={`https://instagram.com/${content.groom_instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{content.groom_instagram}</a> : null}</div><span className="wedding-ampersand">&amp;</span><div className="wedding-person"><img src={content.bride_photo || content.cover_image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=700&q=85'} alt={brideName || 'Mempelai wanita'} /><h3>{brideName || 'Nama Mempelai Wanita'}</h3><p>Putri dari<br />{content.bride_parents || 'Bapak Nama Ayah & Ibu Nama Ibu'}</p>{content.bride_instagram ? <a href={`https://instagram.com/${content.bride_instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{content.bride_instagram}</a> : null}</div></div></section>
+        {isCoupleEvent ? <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid"><div className="wedding-person"><img src={content.groom_photo || content.cover_image || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=85'} alt={groomName || 'Mempelai pria'} /><h3>{groomName || 'Nama Mempelai Pria'}</h3><p>Putra dari<br />{content.groom_parents || 'Bapak Nama Ayah & Ibu Nama Ibu'}</p>{content.groom_instagram ? <a href={`https://instagram.com/${content.groom_instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{content.groom_instagram}</a> : null}</div><span className="wedding-ampersand">&amp;</span><div className="wedding-person"><img src={content.bride_photo || content.cover_image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=700&q=85'} alt={brideName || 'Mempelai wanita'} /><h3>{brideName || 'Nama Mempelai Wanita'}</h3><p>Putri dari<br />{content.bride_parents || 'Bapak Nama Ayah & Ibu Nama Ibu'}</p>{content.bride_instagram ? <a href={`https://instagram.com/${content.bride_instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{content.bride_instagram}</a> : null}</div></div></section> : <section className="wedding-section wedding-honoree"><p className="wedding-eyebrow">ACARA SPESIAL</p><h2>{honoreeName}</h2><p>{content.story || greeting}</p></section>}
 
-        <section className="wedding-section wedding-countdown"><p className="wedding-eyebrow">MENUJU HARI BAHAGIA</p><h2>Our special day</h2><div className="countdown-grid">{Object.entries(countdown).map(([label, value]) => <div key={label}><strong>{String(value).padStart(2, '0')}</strong><span>{label}</span></div>)}</div><a className="wedding-calendar-button" href={calendarUrl(content, invitation)} target="_blank" rel="noreferrer">TAMBAHKAN KE KALENDER</a></section>
+        <section className="wedding-section wedding-countdown"><p className="wedding-eyebrow">{isCoupleEvent ? 'MENUJU HARI BAHAGIA' : 'MENUJU ACARA'}</p><h2>{isCoupleEvent ? 'Our special day' : 'Hitung mundur acara'}</h2><div className="countdown-grid">{Object.entries(countdown).map(([label, value]) => <div key={label}><strong>{String(value).padStart(2, '0')}</strong><span>{label}</span></div>)}</div><a className="wedding-calendar-button" href={calendarUrl(content, invitation)} target="_blank" rel="noreferrer">TAMBAHKAN KE KALENDER</a></section>
 
-        <section className="wedding-section wedding-story"><p className="wedding-eyebrow">{copy.storyTitle}</p><h2>{copy.storyTitle}</h2><div className="love-story-timeline">{storyItems.map((item, index) => <article key={`${item.title}-${index}`}><span>{item.date}</span><div><h3>{item.title}</h3><p>{item.text}</p>{item.image ? <img src={item.image} alt={item.title} loading="lazy" /> : null}</div></article>)}</div></section>
+        <section className="wedding-section wedding-story"><p className="wedding-eyebrow">{storySectionTitle}</p><h2>{storySectionTitle}</h2><div className="love-story-timeline">{storyItems.map((item, index) => <article key={`${item.title}-${index}`}><span>{item.date}</span><div><h3>{item.title}</h3><p>{item.text}</p>{item.image ? <img src={item.image} alt={item.title} loading="lazy" /> : null}</div></article>)}</div></section>
 
         {eventItems.length ? <section className="wedding-section wedding-events"><p className="wedding-eyebrow">SAVE THE DATE</p><h2>Detail acara</h2><div className="wedding-event-grid">{eventItems.map((event) => <article className="wedding-event-card" key={event.title}><p className="wedding-eyebrow">{event.title}</p><h3>{event.date ? new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' }) : 'Tanggal acara'}</h3><strong>{event.time || 'Waktu acara'} WIB</strong><p>{event.venue || 'Nama tempat'}<br />{event.address || 'Alamat lengkap'}</p>{event.maps_url ? <a href={event.maps_url} target="_blank" rel="noreferrer">LIHAT LOKASI ↗</a> : null}</article>)}</div></section> : null}
 
@@ -286,11 +335,11 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
         {gallery.length ? <section className="wedding-section wedding-gallery"><p className="wedding-eyebrow">MOMENTS</p><h2>Our beautiful moments</h2><div className="wedding-gallery-grid">{gallery.map((image, index) => <button key={`${image}-${index}`} onClick={() => setSelectedImage(image)}><img src={image} alt={`Momen acara ${index + 1}`} loading="lazy" /></button>)}</div></section> : null}
 
-        {content.video_url ? <section className="wedding-section wedding-video"><p className="wedding-eyebrow">OUR BEAUTIFUL MOMENTS</p><h2>Film kisah kami</h2><iframe src={videoEmbedUrl(content.video_url)} title="Video prewedding" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen /></section> : null}
+        {content.video_url && !coverVideo ? <section className="wedding-section wedding-video"><p className="wedding-eyebrow">OUR BEAUTIFUL MOMENTS</p><h2>{isCoupleEvent ? 'Film kisah kami' : 'Video acara'}</h2>{/\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(content.video_url) ? <video src={content.video_url} controls playsInline preload="metadata" /> : <iframe src={videoEmbedUrl(content.video_url)} title="Video undangan" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />}</section> : null}
 
-        <section className="wedding-section wedding-rsvp"><p className="wedding-eyebrow">YOUR PRESENCE IS A GIFT</p><h2>Konfirmasi kehadiran</h2><p>Mohon konfirmasi kehadiran dan titipkan doa terbaik untuk perjalanan kami.</p>{content.rsvp_url ? <a className="wedding-calendar-button" href={content.rsvp_url} target="_blank" rel="noreferrer">KONFIRMASI RSVP</a> : null}<form className="wedding-guest-form" onSubmit={submitGuestbook}><input value={guestForm.name} onChange={(event) => setGuestForm({ ...guestForm, name: event.target.value })} placeholder="Nama Anda" required minLength={2} /><select value={guestForm.attendance} onChange={(event) => setGuestForm({ ...guestForm, attendance: event.target.value })}><option value="attending">Saya akan hadir</option><option value="not_attending">Maaf, belum bisa hadir</option><option value="maybe">Masih tentatif</option></select><input type="number" min="1" max="10" value={guestForm.guests} onChange={(event) => setGuestForm({ ...guestForm, guests: Number(event.target.value) })} aria-label="Jumlah tamu" /><textarea value={guestForm.message} onChange={(event) => setGuestForm({ ...guestForm, message: event.target.value })} placeholder="Tulis ucapan dan doa..." required minLength={2} /><button className="wedding-calendar-button" disabled={isGuestSubmitting}>{isGuestSubmitting ? 'MENGIRIM...' : 'KIRIM RSVP & UCAPAN'}</button>{guestMessage ? <span className="wedding-guest-message" role="status">{guestMessage}</span> : null}</form></section>
+        <section className="wedding-section wedding-rsvp"><p className="wedding-eyebrow">UNDANGAN RESMI</p><h2>Konfirmasi kehadiran</h2><p>{isCoupleEvent ? 'Mohon konfirmasi kehadiran dan titipkan doa terbaik untuk perjalanan kami.' : `Mohon konfirmasi kehadiran Anda di acara ${eventLabel.toLowerCase()}.`}</p>{content.rsvp_url ? <a className="wedding-calendar-button" href={content.rsvp_url} target="_blank" rel="noreferrer">KONFIRMASI RSVP</a> : null}<form className="wedding-guest-form" onSubmit={submitGuestbook}><input value={guestForm.name} onChange={(event) => setGuestForm({ ...guestForm, name: event.target.value })} placeholder="Nama Anda" required minLength={2} /><select value={guestForm.attendance} onChange={(event) => setGuestForm({ ...guestForm, attendance: event.target.value })}><option value="attending">Saya akan hadir</option><option value="not_attending">Maaf, belum bisa hadir</option><option value="maybe">Masih tentatif</option></select><input type="number" min="1" max="10" value={guestForm.guests} onChange={(event) => setGuestForm({ ...guestForm, guests: Number(event.target.value) })} aria-label="Jumlah tamu" /><textarea value={guestForm.message} onChange={(event) => setGuestForm({ ...guestForm, message: event.target.value })} placeholder="Tulis ucapan dan doa..." required minLength={2} /><button className="wedding-calendar-button" disabled={isGuestSubmitting}>{isGuestSubmitting ? 'MENGIRIM...' : 'KIRIM RSVP & UCAPAN'}</button>{guestMessage ? <span className="wedding-guest-message" role="status">{guestMessage}</span> : null}</form></section>
         <section className="wedding-section wedding-guestbook"><p className="wedding-eyebrow">BUKU TAMU</p><h2>Ucapan untuk kami</h2><div className="wedding-guestbook-list">{guestbook.length ? guestbook.map((entry) => <article key={entry.id}><strong>{entry.name}</strong><span>{entry.attendance === 'attending' ? 'Akan hadir' : entry.attendance === 'maybe' ? 'Masih tentatif' : 'Belum bisa hadir'}{entry.guests > 1 ? ` · ${entry.guests} tamu` : ''}</span><p>{entry.message}</p></article>) : <p>Jadilah yang pertama meninggalkan ucapan.</p>}</div></section>
-        <section className="wedding-section wedding-closing"><p>{isTemplateDemo ? copy.closing : 'Terima kasih atas doa dan kasih yang mengiringi langkah kami.'}</p><h2>{coupleNames}</h2><span>{copy.kicker}</span></section>
+        <section className="wedding-section wedding-closing"><p>{isTemplateDemo ? copy.closing : isCoupleEvent ? 'Terima kasih atas doa dan kasih yang mengiringi langkah kami.' : 'Terima kasih atas perhatian dan kesediaan Anda untuk hadir.'}</p><h2>{isCoupleEvent ? coupleNames : honoreeName}</h2><span>{copy.kicker}</span></section>
       </div>
 
       {selectedImage ? <div className="wedding-lightbox" role="dialog" aria-label="Preview foto" onClick={() => setSelectedImage(null)}><button onClick={() => setSelectedImage(null)} aria-label="Tutup preview">×</button><img src={selectedImage} alt="Preview momen acara" /></div> : null}

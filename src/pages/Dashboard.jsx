@@ -1,14 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../context/AuthContext';
-import { billingApi, guestbookApi, invitationsApi, paymentsApi } from '../lib/api';
+import { billingApi, dashboardManagementApi, guestbookApi, invitationsApi, paymentsApi } from '../lib/api';
 import GuestbookScanner from '../components/GuestbookScanner';
 import PublicInvitation from './PublicInvitation';
+import { createOwnerGuestbookUrl } from '../lib/ownerGuestbookUrl';
+import { regionalInvitationTemplates } from '../lib/regionalInvitationTemplates';
 
 const emptyForm = {
   title: '',
   plan_id: 'basic',
   slug: '',
   event_type: 'Pernikahan',
+  province: '',
   template_id: 'luxury-gold',
   custom_design: false,
   custom_primary: '#294b3e',
@@ -22,8 +26,8 @@ const emptyForm = {
   venue: '',
   address: '',
   maps_url: '',
-  story: 'Cerita acara pernikahan',
-  opening_text: 'Dengan bahagia, kami mengundang Anda untuk hadir dan merayakan hari istimewa kami bersama.',
+  story: '',
+  opening_text: '',
   music_url: '',
   video_url: '',
   rsvp_url: '',
@@ -61,6 +65,7 @@ const invitationTemplates = [
   { id: 'tasyakuran', name: 'Tasyakuran', category: 'Keluarga', description: 'Syukur dan hangat', colors: ['#92400e', '#fffbeb'] },
   { id: 'corporate-event', name: 'Corporate / Event', category: 'Umum', description: 'Profesional dan modern', colors: ['#334155', '#f8fafc'] },
   { id: 'custom-premium', name: 'Custom Premium', category: 'Custom', description: 'Bebas dirancang sendiri', colors: ['#7c3aed', '#faf5ff'] },
+  { id: 'gen-z-editorial', name: 'Gen Z Editorial', category: 'Gen Z', description: 'Gradient pop, sticker mood, dan tipografi editorial', colors: ['#7c3aed', '#ffb4d9'] },
 ];
 
 const eventGroups = [
@@ -73,10 +78,10 @@ const eventGroups = [
 const weddingEventTypes = ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy', 'Anniversary'];
 
 const templateGroups = {
-  Pernikahan: ['Pernikahan'],
-  'Acara Islami & Keluarga': ['Islami', 'Keluarga'],
-  'Anak & Pendidikan': ['Keluarga', 'Perayaan', 'Pendidikan'],
-  'Acara Umum': ['Umum', 'Custom', 'Nusantara'],
+  Pernikahan: ['Pernikahan', 'Gen Z'],
+  'Acara Islami & Keluarga': ['Islami', 'Keluarga', 'Gen Z'],
+  'Anak & Pendidikan': ['Keluarga', 'Perayaan', 'Pendidikan', 'Gen Z'],
+  'Acara Umum': ['Umum', 'Custom', 'Nusantara', 'Gen Z'],
 };
 
 const displayDate = (value) => value ? new Date(value).toLocaleDateString('id-ID', { dateStyle: 'medium' }) : 'Belum aktif';
@@ -149,6 +154,7 @@ export default function Dashboard({ onSignIn }) {
   const [demoTemplate, setDemoTemplate] = useState(null);
   const [setupComplete, setSetupComplete] = useState(false);
   const [setupGroup, setSetupGroup] = useState('');
+  const [setupProvince, setSetupProvince] = useState('');
   const [setupEventType, setSetupEventType] = useState('');
   const [setupTemplateId, setSetupTemplateId] = useState('');
   const [form, setForm] = useState(emptyForm);
@@ -170,6 +176,18 @@ export default function Dashboard({ onSignIn }) {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [recipientNames, setRecipientNames] = useState({});
+  const [qrInvitationId, setQrInvitationId] = useState('');
+  const openedGuestbookSlug = useRef('');
+  const [dashboardAdmins, setDashboardAdmins] = useState({ eligible: false, max_admins: 3, admins: [] });
+  const [affiliateProgram, setAffiliateProgram] = useState({ eligible: false, program: null, combinations: [], affiliates: [] });
+  const [selectedAffiliateCombination, setSelectedAffiliateCombination] = useState('');
+  const [affiliateQuotaEdits, setAffiliateQuotaEdits] = useState({});
+  const [dashboardAdminForm, setDashboardAdminForm] = useState({ full_name: '', email: '', password: '' });
+  const [affiliateForm, setAffiliateForm] = useState({
+    full_name: '', email: '', password: '', basic_quota: 0, premium_quota: 0,
+    ad_title: '', ad_description: '', ad_url: '', ad_image: '',
+  });
 
   useEffect(() => {
     if (!token) {
@@ -195,12 +213,38 @@ export default function Dashboard({ onSignIn }) {
         .catch(() => {});
     }
 
+    if (user?.role === 'user') {
+      Promise.all([dashboardManagementApi.admins(), dashboardManagementApi.affiliateProgram()])
+        .then(([adminResult, affiliateResult]) => {
+          if (!active) return;
+          setDashboardAdmins(adminResult);
+          setAffiliateProgram(affiliateResult);
+          setSelectedAffiliateCombination(affiliateResult.program?.combination_id || '');
+        })
+        .catch((requestError) => { if (active) setError(requestError.message); });
+    }
     return () => { active = false; };
-  }, [token]);
+  }, [token, user?.role]);
 
   const selectedPlan = billing.plans.find((plan) => plan.id === (user?.is_test_account ? 'business' : form.plan_id))
     || billing.plans.find((plan) => plan.id === form.plan_id);
   const selectedPaymentMethod = billing.payment_methods.find((method) => method.id === paymentMethodId);
+  const affiliatePlanCounts = {
+    basic: invitations.filter((invitation) => invitation.plan_id === 'basic').length,
+    premium: invitations.filter((invitation) => invitation.plan_id === 'premium').length,
+  };
+  const availablePlans = user?.role === 'affiliate'
+    ? billing.plans.filter((plan) => ['basic', 'premium'].includes(plan.id)
+      && affiliatePlanCounts[plan.id] < (user[`${plan.id}_quota`] || 0))
+    : user?.is_demo
+      ? billing.plans.filter((plan) => plan.id === user.demo_plan_id)
+    : billing.plans;
+
+  useEffect(() => {
+    if (user?.role === 'affiliate' && !editingId && !availablePlans.some((plan) => plan.id === form.plan_id) && availablePlans[0]) {
+      setForm((current) => ({ ...current, plan_id: availablePlans[0].id }));
+    }
+  }, [availablePlans, editingId, form.plan_id, user?.role]);
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -210,18 +254,135 @@ export default function Dashboard({ onSignIn }) {
     setInvitations(await invitationsApi.list(token));
   };
 
+  const refreshBusinessManagement = async () => {
+    const [admins, program] = await Promise.all([
+      dashboardManagementApi.admins(),
+      dashboardManagementApi.affiliateProgram(),
+    ]);
+    setDashboardAdmins(admins);
+    setAffiliateProgram(program);
+    setSelectedAffiliateCombination(program.program?.combination_id || '');
+  };
+
+  const createDashboardAdmin = async (event) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    try {
+      await dashboardManagementApi.createAdmin(token, dashboardAdminForm);
+      setDashboardAdminForm({ full_name: '', email: '', password: '' });
+      await refreshBusinessManagement();
+      setMessage('Admin dashboard berhasil dibuat. Berikan email dan kata sandi secara aman kepada admin tersebut.');
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const toggleDashboardAdmin = async (admin) => {
+    setError('');
+    try {
+      await dashboardManagementApi.setAdminActive(token, admin.id, !admin.active);
+      await refreshBusinessManagement();
+      setMessage(`Akses ${admin.full_name} ${admin.active ? 'dinonaktifkan' : 'diaktifkan'}.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const saveAffiliateCombination = async () => {
+    setError('');
+    const selected = affiliateProgram.combinations.find((combination) => combination.id === selectedAffiliateCombination);
+    if (!selected) {
+      setError('Pilih kombinasi kuota yang tersedia.');
+      return;
+    }
+    if (!window.confirm(
+      `Anda memilih ${selected.name}: ${selected.basic} Basic dan ${selected.premium} Premium untuk seluruh jaringan affiliate.\n\nPERINGATAN: setelah dikonfirmasi, kombinasi paket ini tidak dapat diubah. Apakah Anda bersedia memilih paket ini?`,
+    )) return;
+    try {
+      await dashboardManagementApi.selectAffiliateCombination(token, selectedAffiliateCombination);
+      await refreshBusinessManagement();
+      setMessage('Kombinasi kuota affiliate disimpan.');
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const createAffiliate = async (event) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    try {
+      await dashboardManagementApi.createAffiliate(token, {
+        ...affiliateForm,
+        basic_quota: Number(affiliateForm.basic_quota),
+        premium_quota: Number(affiliateForm.premium_quota),
+      });
+      setAffiliateForm({
+        full_name: '', email: '', password: '', basic_quota: 0, premium_quota: 0,
+        ad_title: '', ad_description: '', ad_url: '', ad_image: '',
+      });
+      await refreshBusinessManagement();
+      setMessage('Affiliate berhasil didaftarkan. Semua penjualan dan pembayaran tetap tercatat pada pemilik paket Business.');
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const updateAffiliateAccess = async (affiliate, changes) => {
+    setError('');
+    try {
+      await dashboardManagementApi.updateAffiliate(token, affiliate.id, changes);
+      await refreshBusinessManagement();
+      setMessage('Akses dan pengaturan affiliate diperbarui.');
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const saveAffiliateQuota = async (affiliate) => {
+    const quota = affiliateQuotaEdits[affiliate.id] || {};
+    setError('');
+    try {
+      await dashboardManagementApi.updateAffiliate(token, affiliate.id, {
+        basic_quota: Number(quota.basic ?? affiliate.basic_quota),
+        premium_quota: Number(quota.premium ?? affiliate.premium_quota),
+      });
+      setAffiliateQuotaEdits((current) => {
+        const next = { ...current };
+        delete next[affiliate.id];
+        return next;
+      });
+      await refreshBusinessManagement();
+      setMessage(`Kuota affiliate ${affiliate.full_name} diperbarui.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
   const resetForm = () => {
     setEditingId(null);
     setSetupComplete(false);
     setSetupGroup('');
+    setSetupProvince('');
     setSetupEventType('');
     setSetupTemplateId('');
-    setForm({ ...emptyForm, plan_id: user?.is_test_account && billing.plans.some((plan) => plan.id === 'business') ? 'business' : billing.plans[0]?.id || 'basic' });
+    setForm({ ...emptyForm, plan_id: user?.is_demo
+      ? user.demo_plan_id
+      : user?.is_test_account && billing.plans.some((plan) => plan.id === 'business')
+        ? 'business'
+        : billing.plans[0]?.id || 'basic' });
   };
 
-  const setupTemplates = setupGroup
-    ? invitationTemplates.filter((template) => templateGroups[setupGroup]?.includes(template.category))
-    : [];
+  const setupTemplates = setupProvince
+    ? regionalInvitationTemplates.filter((template) => template.province === setupProvince)
+    : setupGroup
+      ? invitationTemplates.filter((template) => templateGroups[setupGroup]?.includes(template.category))
+      : [];
+  const editorTemplates = form.province
+    ? regionalInvitationTemplates.filter((template) => template.province === form.province)
+    : invitationTemplates.filter((template) => templateGroups[setupGroup]?.includes(template.category));
+  const provinceGroups = [...new Set(regionalInvitationTemplates.map((template) => template.islandGroup))];
 
   const demoInvitation = demoTemplate ? {
     id: `demo-${demoTemplate.id}`,
@@ -229,6 +390,7 @@ export default function Dashboard({ onSignIn }) {
     slug: 'template-demo',
     content: {
       event_type: 'Pernikahan',
+      province: demoTemplate.province || '',
       demo_template: true,
       template_id: demoTemplate.id,
       couple_names: 'Aulia & Farhan',
@@ -247,12 +409,20 @@ export default function Dashboard({ onSignIn }) {
   } : null;
 
   const beginInvitation = () => {
+    if (user.is_demo && invitations.length >= 2) {
+      setError('Akun demo hanya dapat membuat maksimal 2 undangan.');
+      return;
+    }
+    if (user.role === 'affiliate' && availablePlans.length === 0) {
+      setError('Kuota undangan affiliate sudah habis. Hubungi pemilik paket Business.');
+      return;
+    }
     if (!setupGroup || !setupEventType || !setupTemplateId) {
       setError('Pilih kelompok acara, jenis acara, dan template terlebih dahulu.');
       return;
     }
     setError('');
-    setForm((current) => ({ ...current, event_type: setupEventType, template_id: setupTemplateId, custom_design: false }));
+    setForm((current) => ({ ...current, event_type: setupEventType, province: setupProvince, template_id: setupTemplateId, custom_design: false }));
     setSetupComplete(true);
   };
 
@@ -262,6 +432,7 @@ export default function Dashboard({ onSignIn }) {
     setEditingId(invitation.id);
     setSetupComplete(true);
     setSetupGroup(eventGroup);
+    setSetupProvince(content.province || '');
     setSetupEventType(content.event_type || 'Pernikahan');
     setSetupTemplateId(content.template_id || 'luxury-gold');
     setForm({
@@ -270,6 +441,7 @@ export default function Dashboard({ onSignIn }) {
       plan_id: invitation.plan_id,
       slug: invitation.slug || '',
       event_type: content.event_type || 'Pernikahan',
+      province: content.province || '',
       template_id: content.template_id || 'luxury-gold',
       custom_design: Boolean(content.custom_design),
       custom_primary: content.custom_primary || '#294b3e',
@@ -333,6 +505,15 @@ export default function Dashboard({ onSignIn }) {
     }
   };
 
+  useEffect(() => {
+    if (guestbookInvitation) {
+      const guestbookPanel = document.querySelector('.guestbook-management-panel');
+      if (typeof guestbookPanel?.scrollIntoView === 'function') {
+        guestbookPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, [guestbookInvitation]);
+
   const handleGalleryUpload = async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
@@ -351,11 +532,16 @@ export default function Dashboard({ onSignIn }) {
 
   const saveInvitation = async (event) => {
     event.preventDefault();
+    if (user.is_demo && !editingId && invitations.length >= 2) {
+      setError('Akun demo hanya dapat membuat maksimal 2 undangan.');
+      return;
+    }
     setError('');
     setMessage('');
     setIsSaving(true);
     const content = {
       event_type: form.event_type,
+      province: form.province,
       template_id: form.template_id,
       custom_design: form.custom_design,
       custom_primary: form.custom_primary,
@@ -396,6 +582,8 @@ export default function Dashboard({ onSignIn }) {
         ? 'Perubahan undangan tersimpan.'
         : user.is_test_account
           ? 'Undangan mendapat akses Business tanpa batas dan sudah aktif selamanya. Tekan Publish agar dapat dibagikan.'
+        : user.is_demo
+          ? 'Undangan demo aktif. Anda dapat membagikannya selama masa uji coba.'
           : 'Draft dibuat. Lanjutkan pembayaran untuk mengaktifkan masa tayang.');
       if (!editingId) setForm((current) => ({ ...current, slug: saved.slug }));
     } catch (requestError) {
@@ -594,6 +782,12 @@ export default function Dashboard({ onSignIn }) {
     }
   };
 
+  const recipientLink = (invitation, recipientName) => {
+    const url = new URL(`/i/${encodeURIComponent(invitation.slug)}`, window.location.origin);
+    if (recipientName.trim()) url.searchParams.set('to', recipientName.trim());
+    return url.toString();
+  };
+
   const openGuestbook = async (invitation) => {
     setGuestbookInvitation(invitation);
     try {
@@ -602,6 +796,16 @@ export default function Dashboard({ onSignIn }) {
       setError(requestError.message);
     }
   };
+
+  useEffect(() => {
+    if (!token || !invitations.length) return;
+    const requestedSlug = new URLSearchParams(window.location.search).get('guestbook');
+    if (!requestedSlug || openedGuestbookSlug.current === requestedSlug) return;
+    const requestedInvitation = invitations.find((invitation) => invitation.slug === requestedSlug);
+    if (!requestedInvitation) return;
+    openedGuestbookSlug.current = requestedSlug;
+    openGuestbook(requestedInvitation);
+  }, [invitations, token]);
 
   const moderateGuestbook = async (entry, status) => {
     try {
@@ -638,39 +842,111 @@ export default function Dashboard({ onSignIn }) {
         <a className="brand" href="/undangan"><span className="logo-mark">U</span>Undangan.id</a>
         <div><span>{user.full_name}</span><button onClick={() => { logout(); onSignIn(); }}>Keluar</button></div>
       </header>
-      <div className="account-layout container">
+      <div className={`account-layout container ${user.role !== 'user' ? 'account-layout-restricted' : ''}`}>
         <section className="account-main-column">
           <div className="account-heading">
             <div><p className="eyebrow">Ruang undangan Anda</p><h1>Rancang cerita hari istimewa.</h1><p>{user.is_test_account ? 'Buat undangan tanpa batas dan bagikan setelah dipublikasikan.' : 'Buat draft, edit detail acara, lalu aktifkan setelah pembayaran dikonfirmasi.'}</p></div>
           </div>
           {user.is_test_account ? <p className="account-message" role="status">Akun tester · akses Business tanpa batas. Semua undangan aktif selamanya dan tidak memerlukan pembayaran.</p> : null}
+          {user.is_demo ? <section className="account-panel demo-account-notice" role="status"><strong>Akun demo · Paket {user.demo_plan_id}</strong><p>Akses berakhir {new Date(user.demo_until).toLocaleString('id-ID')}. Akun demo hanya dapat mengirim maksimal 2 undangan{user.demo_plan_id === 'business' ? ' untuk seluruh jaringan akun' : ''} dan tidak dapat melakukan pembayaran.</p><span>{invitations.length}/2 undangan digunakan</span></section> : null}
 
-          {!setupComplete ? <section className="account-panel invitation-setup-panel">
+          {user.role === 'user' ? (
+            <section className="account-panel dashboard-admin-management">
+              <div className="account-panel-heading"><div><span className="eyebrow">Tim acara</span><h2>Admin dashboard buku tamu</h2></div><strong>{dashboardAdmins.admins.length}/{dashboardAdmins.max_admins}</strong></div>
+              <p className="form-hint">Buat maksimal tiga akun admin tambahan. Mereka dapat melihat QR undangan dan membaca buku tamu, tetapi tidak dapat mengedit atau mengelola pembayaran.</p>
+              {!dashboardAdmins.eligible ? <p className="form-hint">Kelola admin tersedia setelah Anda memiliki undangan dengan paket aktif.</p> : null}
+              {dashboardAdmins.eligible && dashboardAdmins.admins.length < dashboardAdmins.max_admins ? (
+                <form className="affiliate-create-form" onSubmit={createDashboardAdmin}>
+                  <label>Nama admin<input required minLength={2} value={dashboardAdminForm.full_name} onChange={(event) => setDashboardAdminForm({ ...dashboardAdminForm, full_name: event.target.value })} /></label>
+                  <label>Email login<input type="email" required value={dashboardAdminForm.email} onChange={(event) => setDashboardAdminForm({ ...dashboardAdminForm, email: event.target.value })} /></label>
+                  <label>Kata sandi awal<input type="password" minLength={8} required value={dashboardAdminForm.password} onChange={(event) => setDashboardAdminForm({ ...dashboardAdminForm, password: event.target.value })} /></label>
+                  <button className="primary-btn">Buat admin</button>
+                </form>
+              ) : null}
+              {dashboardAdmins.admins.map((admin) => (
+                <article className="managed-account-row" key={admin.id}>
+                  <div><strong>{admin.full_name}</strong><span>{admin.email}</span></div>
+                  <span className={`status-label ${admin.active ? 'status-active' : 'status-expired'}`}>{admin.active ? 'Aktif' : 'Nonaktif'}</span>
+                  <button className="secondary-btn" onClick={() => toggleDashboardAdmin(admin)}>{admin.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
+                </article>
+              ))}
+            </section>
+          ) : null}
+
+          {user.role === 'user' && affiliateProgram.eligible ? (
+            <section className="account-panel affiliate-management-panel">
+              <div className="account-panel-heading"><div><span className="eyebrow">Paket Business</span><h2>Kelola affiliate & iklan</h2></div><span className="status-label status-active">Penjualan milik Anda</span></div>
+              <p className="form-hint">Semua pesanan dari jaringan affiliate tercatat dan dibayar kepada pemilik paket Business. Alokasi paket untuk seluruh affiliate mengikuti satu kombinasi yang diatur Super Admin.</p>
+              <div className="affiliate-program-controls">
+                <label>Kombinasi kuota affiliate<select value={selectedAffiliateCombination} disabled={Boolean(affiliateProgram.program?.combination_id)} onChange={(event) => setSelectedAffiliateCombination(event.target.value)}><option value="">Pilih kombinasi</option>{affiliateProgram.combinations.map((combination) => <option key={combination.id} value={combination.id}>{combination.name} · {combination.basic} Basic / {combination.premium} Premium</option>)}</select></label>
+                {affiliateProgram.program?.combination_id
+                  ? <p className="form-hint affiliate-lock-warning">Kombinasi ini sudah dikunci dan tidak dapat diganti.</p>
+                  : <button className="secondary-btn" type="button" disabled={!selectedAffiliateCombination} onClick={saveAffiliateCombination}>Konfirmasi paket affiliate</button>}
+              </div>
+              {selectedAffiliateCombination ? (
+                <>
+                  <form className="affiliate-create-form" onSubmit={createAffiliate}>
+                    <h3>Daftarkan affiliate</h3>
+                    <label>Nama lengkap<input required minLength={2} value={affiliateForm.full_name} onChange={(event) => setAffiliateForm({ ...affiliateForm, full_name: event.target.value })} /></label>
+                    <label>Email login<input type="email" required value={affiliateForm.email} onChange={(event) => setAffiliateForm({ ...affiliateForm, email: event.target.value })} /></label>
+                    <label>Kata sandi awal<input type="password" minLength={8} required value={affiliateForm.password} onChange={(event) => setAffiliateForm({ ...affiliateForm, password: event.target.value })} /></label>
+                    <label>Kuota Basic<input type="number" min="0" value={affiliateForm.basic_quota} onChange={(event) => setAffiliateForm({ ...affiliateForm, basic_quota: Number(event.target.value) })} /></label>
+                    <label>Kuota Premium<input type="number" min="0" value={affiliateForm.premium_quota} onChange={(event) => setAffiliateForm({ ...affiliateForm, premium_quota: Number(event.target.value) })} /></label>
+                    <label>Judul iklan publik<input value={affiliateForm.ad_title} onChange={(event) => setAffiliateForm({ ...affiliateForm, ad_title: event.target.value })} placeholder="Promo undangan premium" /></label>
+                    <label>Deskripsi iklan<textarea value={affiliateForm.ad_description} onChange={(event) => setAffiliateForm({ ...affiliateForm, ad_description: event.target.value })} rows={2} /></label>
+                    <label>Link tujuan iklan<input type="url" value={affiliateForm.ad_url} onChange={(event) => setAffiliateForm({ ...affiliateForm, ad_url: event.target.value })} placeholder="https://..." /></label>
+                    <label>URL gambar iklan<input type="url" value={affiliateForm.ad_image} onChange={(event) => setAffiliateForm({ ...affiliateForm, ad_image: event.target.value })} placeholder="https://..." /></label>
+                    <button className="primary-btn">Daftarkan affiliate</button>
+                  </form>
+                  <div className="affiliate-list">
+                    {affiliateProgram.affiliates.map((affiliate) => (
+                      <article className="managed-account-row affiliate-account-row" key={affiliate.id}>
+                        <div><strong>{affiliate.full_name}</strong><span>{affiliate.email}</span><small>{affiliate.basic_used}/{affiliate.basic_quota} Basic · {affiliate.premium_used}/{affiliate.premium_quota} Premium</small></div>
+                        <label>Basic<input type="number" min={affiliate.basic_used} max="1000" value={affiliateQuotaEdits[affiliate.id]?.basic ?? affiliate.basic_quota} onChange={(event) => setAffiliateQuotaEdits((current) => ({ ...current, [affiliate.id]: { ...current[affiliate.id], basic: Number(event.target.value) } }))} /></label>
+                        <label>Premium<input type="number" min={affiliate.premium_used} max="1000" value={affiliateQuotaEdits[affiliate.id]?.premium ?? affiliate.premium_quota} onChange={(event) => setAffiliateQuotaEdits((current) => ({ ...current, [affiliate.id]: { ...current[affiliate.id], premium: Number(event.target.value) } }))} /></label>
+                        <button className="secondary-btn" onClick={() => saveAffiliateQuota(affiliate)}>Simpan kuota</button>
+                        <label className="toggle-label"><input type="checkbox" checked={affiliate.ad_active} onChange={(event) => updateAffiliateAccess(affiliate, { ad_active: event.target.checked })} />Iklan tampil</label>
+                        <span className={`status-label ${affiliate.active ? 'status-active' : 'status-expired'}`}>{affiliate.active ? 'Aktif' : 'Nonaktif'}</span>
+                        <button className="secondary-btn" onClick={() => updateAffiliateAccess(affiliate, { active: !affiliate.active, ad_active: false })}>{affiliate.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
+                      </article>
+                    ))}
+                    {!affiliateProgram.affiliates.length ? <p className="form-hint">Belum ada affiliate yang didaftarkan.</p> : null}
+                  </div>
+                </>
+              ) : <p className="form-hint">Pilih kombinasi kuota untuk mulai mendaftarkan affiliate.</p>}
+            </section>
+          ) : null}
+
+          {user.role === 'dashboard_admin' ? (
+            <section className="account-panel"><p className="eyebrow">Akses admin buku tamu</p><h2>Anda dapat melihat undangan dan RSVP pemilik.</h2><p>Pengaturan paket, pembayaran, dan perubahan undangan hanya tersedia bagi pemilik paket.</p></section>
+          ) : !setupComplete ? <section className="account-panel invitation-setup-panel">
             <div className="account-panel-heading"><div><span className="eyebrow">Langkah 1 dari 3</span><h2>Mulai rancangan undangan</h2></div></div>
             <p className="setup-intro">Pilih kelompok acara, jenis undangan, dan template agar form berikutnya menyesuaikan kebutuhan Anda.</p>
             <div className="setup-grid">
               <label>Kelompok acara<select value={setupGroup} onChange={(event) => { setSetupGroup(event.target.value); setSetupEventType(''); setSetupTemplateId(''); }}><option value="">Pilih kelompok</option>{eventGroups.map((group) => <option key={group.label} value={group.label}>{group.label}</option>)}</select></label>
               <label>Jenis acara<select value={setupEventType} disabled={!setupGroup} onChange={(event) => setSetupEventType(event.target.value)}><option value="">Pilih jenis acara</option>{eventGroups.find((group) => group.label === setupGroup)?.options.map((option) => <option key={option}>{option}</option>)}</select></label>
             </div>
-            <div className="setup-template-section"><span className="form-label">Jenis template</span><div className="setup-template-grid">{setupTemplates.map((template) => <button type="button" key={template.id} className={`setup-template-card ${setupTemplateId === template.id ? 'selected' : ''}`} onClick={() => setSetupTemplateId(template.id)}><span className="template-choice-swatch" style={{ background: `linear-gradient(135deg, ${template.colors[0]}, ${template.colors[1]})` }} /><strong>{template.name}</strong><small>{template.category}</small></button>)}</div></div>
-            {setupGroup ? <p className="form-hint">Menampilkan {setupTemplates.length} template yang sesuai untuk kelompok {setupGroup}.</p> : null}
+            <label className="province-select-field">Inspirasi daerah (opsional)<select value={setupProvince} disabled={!setupGroup} onChange={(event) => { const province = event.target.value; setSetupProvince(province); setSetupTemplateId(regionalInvitationTemplates.find((template) => template.province === province)?.id || ''); }}><option value="">Semua gaya daerah dan tema acara</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province}</option>)}</optgroup>)}</select><small className="form-hint">Tersedia inspirasi visual untuk seluruh 38 provinsi Indonesia.</small></label>
+            <div className="setup-template-section"><span className="form-label">{setupProvince ? `Template daerah · ${setupProvince}` : 'Jenis template'}</span><div className="setup-template-grid">{setupTemplates.map((template) => <button type="button" key={template.id} className={`setup-template-card ${setupTemplateId === template.id ? 'selected' : ''}`} onClick={() => setSetupTemplateId(template.id)}><span className="template-choice-swatch" style={{ background: `linear-gradient(135deg, ${template.colors[0]}, ${template.colors[1]})` }} /><strong>{template.name}</strong><small>{template.province ? `${template.islandGroup} · ${template.inspiration}` : template.category}</small></button>)}</div></div>
+            {setupGroup ? <p className="form-hint">Menampilkan {setupTemplates.length} template{setupProvince ? ` daerah ${setupProvince}` : ` yang sesuai untuk kelompok ${setupGroup}`}.</p> : null}
             <button className="primary-btn setup-continue-button" onClick={beginInvitation}>Lanjutkan ke isi data</button>
           </section> : <section className="account-panel invitation-editor-panel">
             <div className="account-panel-heading"><div><span className="eyebrow">{editingId ? 'Edit undangan' : 'Undangan baru'}</span><h2>{editingId ? 'Perbarui detail acara' : 'Mulai dengan detail acara'}</h2></div>{editingId ? <button className="text-button" onClick={resetForm}>Buat draft baru</button> : null}</div>
             <form className="invitation-editor-form" onSubmit={saveInvitation}>
               <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder="Pernikahan Aulia & Farhan" /></label>
-              <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_test_account} onChange={(event) => updateField('plan_id', event.target.value)}>{billing.plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · Rp {Number(plan.price).toLocaleString('id-ID')} · {plan.duration_days} hari</option>)}</select></label>
+              <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_test_account || user.is_demo} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {user.role === 'affiliate' ? `kuota tersisa ${(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}` : `Rp ${Number(plan.price).toLocaleString('id-ID')}`} · {plan.duration_days} hari</option>)}</select></label>
               {selectedPlan?.slug_mode === 'custom' ? <label>Link pilihan<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} required minLength={3} maxLength={64} placeholder="aulia-farhan" /><small>URL publik: {window.location.host}/i/{form.slug || 'link-pilihan'}</small></label> : <p className="form-hint">Paket Basic memakai link otomatis setelah draft dibuat.</p>}
-              <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => updateField('event_type', event.target.value)}>{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
+              <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; setSetupGroup(group); updateField('event_type', eventType); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
+              <label>Inspirasi daerah<select value={form.province} onChange={(event) => { const province = event.target.value; const regionalTemplate = regionalInvitationTemplates.find((template) => template.province === province); setForm((current) => ({ ...current, province, ...(!province && current.template_id.startsWith('regional-') ? { template_id: 'luxury-gold' } : {}), ...(regionalTemplate ? { template_id: regionalTemplate.id, custom_design: false } : {}) })); }}><option value="">Tidak memakai gaya daerah khusus</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province} · {template.inspiration}</option>)}</optgroup>)}</select></label>
               <div className="template-picker-field">
-                <span className="form-label">Pilih template</span>
+                <span className="form-label">Pilih template {form.province ? `· ${form.province}` : ''}</span>
                 <div className="template-picker">
-                  {invitationTemplates.map((template) => (
+                  {editorTemplates.map((template) => (
                     <article key={template.id} className={`template-choice ${form.template_id === template.id && !form.custom_design ? 'selected' : ''}`}>
-                      <button type="button" className="template-choice-select" onClick={() => setForm((current) => ({ ...current, template_id: template.id, custom_design: false }))}>
+                      <button type="button" className="template-choice-select" onClick={() => setForm((current) => ({ ...current, province: template.province || '', template_id: template.id, custom_design: false }))}>
                         <span className="template-choice-swatch" style={{ background: `linear-gradient(135deg, ${template.colors[0]}, ${template.colors[1]})` }} />
                         <strong>{template.name}</strong>
-                        <small>{template.category} · {template.description}</small>
+                        <small>{template.province ? `${template.islandGroup} · ${template.inspiration} · ` : `${template.category} · `}{template.description}</small>
                       </button>
                       <button type="button" className="template-demo-button" onClick={() => setDemoTemplate(template)}>Lihat Demo</button>
                     </article>
@@ -691,12 +967,12 @@ export default function Dashboard({ onSignIn }) {
               <label>Link Google Maps<input type="url" value={form.maps_url} onChange={(event) => updateField('maps_url', event.target.value)} placeholder="https://maps.google.com/..." /></label>
               <div className="media-upload-field"><label>Foto sampul<input type="file" accept="image/*" onChange={handleCoverUpload} /></label><label>Atau paste URL foto sampul<input type="url" value={form.cover_image.startsWith('data:') ? '' : form.cover_image} onChange={(event) => updateField('cover_image', event.target.value)} placeholder="https://..." /></label><small className="form-hint">Maksimal 5 MB untuk upload foto.</small></div>
               <label>Salam pembuka<textarea value={form.opening_text} onChange={(event) => updateField('opening_text', event.target.value)} rows={2} placeholder="Dengan penuh sukacita kami mengundang..." /></label>
-              <label>Cerita acara<textarea value={form.story} onChange={(event) => updateField('story', event.target.value)} rows={4} /></label>
+              <label>{weddingEventTypes.includes(form.event_type) ? 'Cerita pasangan' : 'Cerita acara'}<textarea value={form.story} onChange={(event) => updateField('story', event.target.value)} rows={4} placeholder={weddingEventTypes.includes(form.event_type) ? 'Tuliskan cerita pasangan...' : `Tuliskan cerita tentang ${form.event_type.toLowerCase()}...`} /></label>
               <div className="music-input-field"><label>Link musik<input type="text" value={form.music_url.startsWith('data:') ? '' : form.music_url} onChange={(event) => updateField('music_url', event.target.value)} placeholder="https://..." /></label><label>Atau upload musik<input type="file" accept="audio/*" onChange={handleMusicUpload} /></label><small className="form-hint">Maksimal 8 MB untuk upload langsung. URL musik boleh ditempel sendiri.</small></div>
-              <label>Link video prewedding<input type="url" value={form.video_url} onChange={(event) => updateField('video_url', event.target.value)} placeholder="YouTube, Vimeo, atau URL video langsung" /></label>
+              <label>Video cerita acara / prewedding<input type="url" value={form.video_url} onChange={(event) => updateField('video_url', event.target.value)} placeholder="YouTube, Vimeo, atau URL MP4/WebM" /><small className="form-hint">Video YouTube/Vimeo tampil sebagai film di undangan. URL MP4/WebM langsung menjadi latar video bergerak saat sampul dibuka.</small></label>
               <label>Link RSVP<input type="url" value={form.rsvp_url} onChange={(event) => updateField('rsvp_url', event.target.value)} placeholder="https://forms.google.com/..." /></label>
               <div className="media-upload-field"><label>Link galeri, satu URL per baris<textarea value={form.gallery} onChange={(event) => updateField('gallery', event.target.value)} rows={3} placeholder="https://foto-1.jpg\nhttps://foto-2.jpg" /></label><label>Atau upload foto galeri<input type="file" accept="image/*" multiple onChange={handleGalleryUpload} /></label><small className="form-hint">Pilih beberapa foto sekaligus. Maksimal 5 MB per foto.</small></div>
-              <button className="primary-btn" type="submit" disabled={isSaving}>{isSaving ? 'Menyimpan…' : editingId ? 'Simpan semua perubahan' : 'Simpan draft'}</button>
+              <button className="primary-btn" type="submit" disabled={isSaving || (user.role === 'affiliate' && !availablePlans.some((plan) => plan.id === form.plan_id))}>{isSaving ? 'Menyimpan…' : editingId ? 'Simpan semua perubahan' : 'Simpan draft'}</button>
             </form>
           </section>}
 
@@ -741,16 +1017,60 @@ export default function Dashboard({ onSignIn }) {
                       <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p></div>
                       <div className="account-card-actions">
                         <button className="secondary-btn" onClick={() => setPreviewInvitation(invitation)}>Preview</button>
-                        <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
-                        <button className="secondary-btn" onClick={() => editInvitation(invitation)}>Edit</button>
-                        {active && invitation.status !== 'published' ? <button className="primary-btn" onClick={() => publishInvitation(invitation)}>Publish</button> : null}
-                        {active && invitation.status === 'published' && (isBasicPlan || isPremiumPlan || isBusinessPlan) ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
-                        {!active ? <>
+                        {user.role !== 'affiliate' ? <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button> : null}
+                        {user.role === 'user' ? <button className="secondary-btn" onClick={() => editInvitation(invitation)}>Edit</button> : null}
+                        {user.role === 'user' && active && invitation.status !== 'published' ? <button className="primary-btn" onClick={() => publishInvitation(invitation)}>Publish</button> : null}
+                        {user.role === 'user' && active && invitation.status === 'published' && (isBasicPlan || isPremiumPlan || isBusinessPlan) ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
+                        {user.role === 'user' && !active ? <>
                           <label className="payment-method-select">Metode<select value={paymentMethodId} onChange={(event) => setPaymentMethodId(event.target.value)}>{billing.payment_methods.map((method) => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label>
                           {selectedPaymentMethod?.provider === 'mayar' ? <label className="payment-method-select">Nomor ponsel untuk invoice Mayar<input type="tel" inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" value={paymentMobile} onChange={(event) => setPaymentMobile(event.target.value)} /></label> : null}
                           <button className="primary-btn" disabled={!paymentMethodId || (selectedPaymentMethod?.provider === 'mayar' && !paymentMobile.trim())} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(plan?.price || 0).toLocaleString('id-ID')}</button>
                         </> : null}
                         {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/i/${invitation.slug}`} target="_blank" rel="noreferrer">Buka link ↗</a> : null}
+                        {user.role === 'user' && invitation.status === 'published' ? (
+                          <div className="personalized-invitation-share">
+                            <label>
+                              Nama calon tamu
+                              <input
+                                value={recipientNames[invitation.id] || ''}
+                                onChange={(event) => setRecipientNames((current) => ({ ...current, [invitation.id]: event.target.value }))}
+                                placeholder="Contoh: Bapak Andi sekeluarga"
+                              />
+                            </label>
+                            <a
+                              className="primary-btn"
+                              href={`https://wa.me/?text=${encodeURIComponent(`Dengan hormat, kami mengundang ${recipientNames[invitation.id]?.trim() || 'Bapak/Ibu/Saudara/i'} untuk hadir dalam acara kami. Undangan resmi: ${recipientLink(invitation, recipientNames[invitation.id] || '')}`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Kirim undangan resmi via WhatsApp
+                            </a>
+                          </div>
+                        ) : null}
+                        {user.role !== 'affiliate' ? (
+                          <div className="invitation-owner-qr">
+                          <button
+                            className="secondary-btn"
+                            type="button"
+                            aria-expanded={qrInvitationId === invitation.id}
+                            onClick={() => setQrInvitationId((current) => current === invitation.id ? '' : invitation.id)}
+                          >
+                            {qrInvitationId === invitation.id ? 'Tutup QR buku tamu' : 'QR buku tamu pemilik'}
+                          </button>
+                          {qrInvitationId === invitation.id ? (
+                            <div className="invitation-owner-qr-panel">
+                              <QRCodeSVG
+                                value={createOwnerGuestbookUrl(invitation.slug)}
+                                size={180}
+                                level="H"
+                                title={`QR pemilik buku tamu ${invitation.title}`}
+                              />
+                              <strong>{invitation.title}</strong>
+                              <span>Scan untuk masuk ke dashboard pemilik dan membuka buku tamu.</span>
+                            </div>
+                          ) : null}
+                          </div>
+                        ) : null}
                       </div>
                       {whatsAppInvitationId === invitation.id ? <div className="invitation-whatsapp-form">
                         <h4>{isBasicPlan ? 'Kirim WhatsApp ke satu penerima' : 'Kirim undangan ke daftar penerima'}</h4>
@@ -781,7 +1101,7 @@ export default function Dashboard({ onSignIn }) {
             )}
           </section>
 
-          {guestbookInvitation ? <section className="account-panel guestbook-management-panel"><div className="account-panel-heading"><div><span className="eyebrow">Tamu undangan</span><h2>RSVP, ucapan, dan buku tamu</h2><p>{guestbookInvitation.title}</p></div><button className="text-button" onClick={() => setGuestbookInvitation(null)}>Tutup</button></div><div className="guestbook-summary"><strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span><strong>{ownerGuestbook.filter((entry) => entry.source === 'barcode_check_in').length}</strong><span>check-in barcode</span><strong>{ownerGuestbook.length}</strong><span>total kiriman</span></div><div className="guestbook-checkin"><h3>Scan tiket barcode tamu</h3><p>Pemindaian hanya mencatat kehadiran untuk undangan ini. Tiket yang sama tidak dapat check-in dua kali.</p><GuestbookScanner onScan={handleTicketScan} /></div><div className="owner-guestbook-list">{ownerGuestbook.length ? ownerGuestbook.map((entry) => <article key={entry.id} className={entry.status === 'hidden' ? 'is-hidden' : ''}><div><strong>{entry.name}</strong><span>{entry.source === 'barcode_check_in' ? `Check-in barcode · ${new Date(entry.checked_in_at || entry.created_at).toLocaleString('id-ID')}` : `${entry.attendance} · ${entry.guests} tamu`}</span><p>{entry.message}</p></div><div>{entry.source === 'barcode_check_in' ? null : <><button onClick={() => moderateGuestbook(entry, entry.status === 'visible' ? 'hidden' : 'visible')}>{entry.status === 'visible' ? 'Sembunyikan' : 'Tampilkan'}</button><button className="danger-text" onClick={() => removeGuestbook(entry)}>Hapus</button></>}</div></article>) : <p className="form-hint">Belum ada RSVP, check-in, atau ucapan untuk undangan ini.</p>}</div></section> : null}
+          {guestbookInvitation ? <section className="account-panel guestbook-management-panel"><div className="account-panel-heading"><div><span className="eyebrow">Tamu undangan</span><h2>RSVP, ucapan, dan buku tamu</h2><p>{guestbookInvitation.title}</p></div><button className="text-button" onClick={() => setGuestbookInvitation(null)}>Tutup</button></div><div className="guestbook-summary"><strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span><strong>{ownerGuestbook.filter((entry) => entry.source === 'barcode_check_in').length}</strong><span>check-in barcode</span><strong>{ownerGuestbook.length}</strong><span>total kiriman</span></div><div className="guestbook-checkin"><h3>Scan tiket barcode tamu</h3><p>Pemindaian hanya mencatat kehadiran untuk undangan ini. Tiket yang sama tidak dapat check-in dua kali.</p><GuestbookScanner onScan={handleTicketScan} /></div><div className="owner-guestbook-list">{ownerGuestbook.length ? ownerGuestbook.map((entry) => <article key={entry.id} className={entry.status === 'hidden' ? 'is-hidden' : ''}><div><strong>{entry.name}</strong><span>{entry.source === 'barcode_check_in' ? `Check-in barcode · ${new Date(entry.checked_in_at || entry.created_at).toLocaleString('id-ID')}` : `${entry.attendance} · ${entry.guests} tamu`}</span><p>{entry.message}</p></div>{user.role === 'user' && entry.source !== 'barcode_check_in' ? <div><button onClick={() => moderateGuestbook(entry, entry.status === 'visible' ? 'hidden' : 'visible')}>{entry.status === 'visible' ? 'Sembunyikan' : 'Tampilkan'}</button><button className="danger-text" onClick={() => removeGuestbook(entry)}>Hapus</button></div> : null}</article>) : <p className="form-hint">Belum ada RSVP, check-in, atau ucapan untuk undangan ini.</p>}</div></section> : null}
 
           {previewInvitation ? (
             <section className="account-panel invitation-preview-panel">
@@ -790,7 +1110,7 @@ export default function Dashboard({ onSignIn }) {
             </section>
           ) : null}
         </section>
-        <aside className="account-side-column"><section className="account-panel"><span className="eyebrow">{user.is_test_account ? 'Akses akun tester' : 'Pilihan paket'}</span><h2>{user.is_test_account ? 'Semua fitur, tanpa batas waktu.' : 'Waktu tayang dan link mengikuti paket.'}</h2>{user.is_test_account ? <div className="account-plan-row"><strong>Business · QA</strong><span>Selamanya</span><small>Undangan tanpa batas · semua fitur aktif · tanpa pembayaran</small><b>AKTIF</b></div> : billing.plans.map((plan) => <div className="account-plan-row" key={plan.id}><strong>{plan.name}</strong><span>{plan.duration_days} hari</span><small>{plan.slug_mode === 'custom' ? 'Link pilihan' : 'Link otomatis'} · maks. {plan.max_invitations || 1} undangan</small><b>Rp {Number(plan.price).toLocaleString('id-ID')}</b></div>)}</section>{user.is_test_account ? null : <p className="account-secure-note">Pembayaran gateway divalidasi server. Undangan tidak bisa dibagikan sebelum pembayaran terkonfirmasi.</p>}</aside>
+        {user.role === 'user' ? <aside className="account-side-column"><section className="account-panel"><span className="eyebrow">{user.is_test_account ? 'Akses akun tester' : user.is_demo ? 'Akun demo' : 'Pilihan paket'}</span><h2>{user.is_test_account ? 'Semua fitur, tanpa batas waktu.' : user.is_demo ? `Paket ${user.demo_plan_id} · akses sementara.` : 'Waktu tayang dan link mengikuti paket.'}</h2>{user.is_test_account ? <div className="account-plan-row"><strong>Business · QA</strong><span>Selamanya</span><small>Undangan tanpa batas · semua fitur aktif · tanpa pembayaran</small><b>AKTIF</b></div> : (user.is_demo ? billing.plans.filter((plan) => plan.id === user.demo_plan_id) : billing.plans).map((plan) => <div className="account-plan-row" key={plan.id}><strong>{plan.name}</strong><span>{plan.duration_days} hari</span><small>{plan.slug_mode === 'custom' ? 'Link pilihan' : 'Link otomatis'} · maks. {plan.max_invitations || 1} undangan</small><b>{user.is_demo ? 'DEMO' : `Rp ${Number(plan.price).toLocaleString('id-ID')}`}</b></div>)}</section>{user.is_test_account || user.is_demo ? null : <p className="account-secure-note">Pembayaran gateway divalidasi server. Undangan tidak bisa dibagikan sebelum pembayaran terkonfirmasi.</p>}</aside> : null}
       </div>
     </main>
   );

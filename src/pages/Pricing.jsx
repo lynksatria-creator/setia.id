@@ -27,7 +27,7 @@ export default function Pricing({ plans, onChoose }) {
               <h3>{plan.name}</h3>
               <strong>{typeof plan.price === 'number' ? `Rp ${plan.price.toLocaleString('id-ID')}` : plan.price}</strong>
               {plan.duration_days ? <p className="pricing-plan-term">{plan.duration_days} hari aktif · maks. {plan.max_invitations} undangan · link {plan.slug_mode === 'custom' ? 'pilihan' : 'otomatis'}</p> : null}
-              <ul>{plan.features.map((item) => <li key={item}>{item}</li>)}</ul>
+              <ul>{(Array.isArray(plan.features) ? plan.features : []).map((item) => <li key={item}>{item}</li>)}</ul>
               <button onClick={onChoose}>Pilih Paket</button>
             </article>
           ))}

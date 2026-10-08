@@ -1,4 +1,6 @@
-export default function Footer({ siteName }) {
+export default function Footer({ siteName, phone, email, whatsappNumber, whatsappMessage }) {
+  const whatsappDigits = String(whatsappNumber || '').replace(/\D/g, '');
+
   return (
     <footer id="contact" className="site-footer invitation-footer">
       <div className="container footer-grid">
@@ -8,13 +10,13 @@ export default function Footer({ siteName }) {
         </div>
         <div>
           <h4>Kontak</h4>
-          <p>hello@undangan.id</p>
-          <p>+62 812-3456-7890</p>
+          <p>{email}</p>
+          <p><a href={`tel:${String(phone || '').replace(/[^\d+]/g, '')}`}>{phone}</a></p>
         </div>
         <div>
           <h4>Temukan kami</h4>
           <p>Instagram</p>
-          <p>WhatsApp</p>
+          {whatsappDigits ? <p><a href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent(whatsappMessage || '')}`} target="_blank" rel="noopener noreferrer">Chat WhatsApp</a></p> : null}
         </div>
         <div>
           <h4>Mulai di sini</h4>

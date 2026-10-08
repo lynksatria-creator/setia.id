@@ -50,11 +50,25 @@ export const billingApi = {
   getConfig: () => apiRequest('/billing/config'),
 };
 
+export const advertisementsApi = {
+  listPublic: () => apiRequest('/public/advertisements'),
+};
+
 export const invitationsApi = {
   list: (token) => apiRequest('/invitations', { token }),
   create: (token, data) => apiRequest('/invitations', { token, method: 'POST', body: JSON.stringify(data) }),
   update: (token, id, data) => apiRequest(`/invitations/${id}`, { token, method: 'PATCH', body: JSON.stringify(data) }),
   publish: (token, id) => apiRequest(`/invitations/${id}/publish`, { token, method: 'POST' }),
+};
+
+export const dashboardManagementApi = {
+  admins: () => apiRequest('/dashboard-admins'),
+  createAdmin: (token, data) => apiRequest('/dashboard-admins', { token, method: 'POST', body: JSON.stringify(data) }),
+  setAdminActive: (token, id, active) => apiRequest(`/dashboard-admins/${id}`, { token, method: 'PATCH', body: JSON.stringify({ active }) }),
+  affiliateProgram: (token) => apiRequest('/affiliate-program', { token }),
+  selectAffiliateCombination: (token, combinationId) => apiRequest('/affiliate-program', { token, method: 'PUT', body: JSON.stringify({ combination_id: combinationId }) }),
+  createAffiliate: (token, data) => apiRequest('/affiliates', { token, method: 'POST', body: JSON.stringify(data) }),
+  updateAffiliate: (token, id, data) => apiRequest(`/affiliates/${id}`, { token, method: 'PATCH', body: JSON.stringify(data) }),
 };
 
 export const guestbookApi = {
@@ -94,6 +108,8 @@ export const adminApi = {
   login: (data) => apiRequest('/admin/login', { method: 'POST', body: JSON.stringify(data) }),
   billingConfig: (token) => apiRequest('/admin/billing/config', { token }),
   updateBillingConfig: (token, data) => apiRequest('/admin/billing/config', { token, method: 'PUT', body: JSON.stringify(data) }),
+  demoAccounts: (token) => apiRequest('/admin/demo-accounts', { token }),
+  createDemoAccount: (token, data) => apiRequest('/admin/demo-accounts', { token, method: 'POST', body: JSON.stringify(data) }),
   invitations: (token) => apiRequest('/admin/invitations', { token }),
   updateInvitation: (token, id, data) => apiRequest(`/admin/invitations/${id}`, { token, method: 'PATCH', body: JSON.stringify(data) }),
   updateActivation: (token, id, data) => apiRequest(`/admin/invitations/${id}/activation`, { token, method: 'PATCH', body: JSON.stringify(data) }),

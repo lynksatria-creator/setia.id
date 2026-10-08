@@ -17,16 +17,19 @@ npm start
 
 Buka http://localhost:3000 untuk melihat aplikasi.
 
-## Akun tester
+## Panel super admin
 
-Panel CMS frontend memakai akun lokal berikut. Akun ini tersimpan di `localStorage`, sehingga cocok untuk QA browser lokal:
+Masuk sekali melalui `/setia-creative-admin` menggunakan akun admin backend (`ADMIN_EMAIL` dan `ADMIN_PASSWORD_HASH` pada `backend/.env`). URL khusus admin tidak ditampilkan di navigasi website publik. Panel konten website tersedia di `/portal-admin`, `/gibrig-admin`, `/nunuy-admin`, dan `/undangan-website-admin`; panel paket dan pembayaran Undangan.id tersedia di `/undangan-admin`. Setelah login super admin, semua link panel dapat dibuka tanpa login ulang; sesi bersama disimpan selama tab browser aktif.
 
-| Panel | URL | Username | Password |
-| --- | --- | --- | --- |
-| Portal | `/admin` | `admin` | `admin123` |
-| Gibrig Entertainment | `/gibrig-admin` | `gibrigadmin` | `gibrig123` |
-| Nunuy Nadhifa Wedding | `/nunuy-admin` | `nunuyadmin` | `nunuy123` |
-| Undangan.id | `/undangan-admin` | akun admin backend | konfigurasi `backend/.env` |
+Setiap panel website menyediakan editor untuk semua nilai konten, logo, gambar hero, warna, font, ukuran, nomor HP, dan WhatsApp, serta 100 template desain original per website. Template publik Undangan.id dapat difilter melalui tombol kategori; kategori tanpa template aktif tidak ditampilkan. Setiap website memiliki nomor kontak sendiri; tombol WhatsApp publik memakai nomor dan pesan pembuka yang diatur di panel website terkait. Perubahan konten dan gambar disimpan di `localStorage` browser yang dipakai; gunakan browser/perangkat yang sama untuk melihat perubahan tersebut. Website Gibrig, Nunuy, dan Undangan.id memiliki menu Beranda yang menuju Portal Iklan.
+
+Dashboard pembuat undangan menyediakan desain inspirasi untuk seluruh 38 provinsi, opsi video latar MP4/WebM atau video YouTube/Vimeo, animasi yang menghormati preferensi reduced-motion, dan template editorial Gen Z. Editor menyesuaikan kolom nama untuk pasangan atau nama orang/agenda yang dirayakan. Tautan WhatsApp undangan resmi dapat dipersonalisasi dengan nama calon tamu; nama tersebut tampil di sampul melalui parameter `to` pada tautan.
+
+Setiap undangan yang sudah dipublikasikan menyediakan QR khusus pemilik. Memindai QR akan membuka dashboard pada buku tamu undangan tersebut; jika perlu, pemilik login lebih dahulu dan kemudian diarahkan kembali ke buku tamu.
+
+Pemilik paket Business dapat mendaftarkan maksimal tiga admin buku tamu. Super Admin mengatur pilihan kombinasi kuota affiliate; pemilik Business mengonfirmasi satu kombinasi sebelum mendaftarkan affiliate. Kombinasi yang dipilih dikunci permanen. Iklan affiliate yang diaktifkan pemilik tampil pada halaman depan Undangan.id selama akses Business masih aktif, sedangkan penjualan tetap tercatat pada pemilik Business.
+
+Super Admin Undangan.id juga dapat membuat akun demo dengan memilih paket dan masa akses dalam hari/jam. Akun demo dapat membuat maksimal dua undangan, tidak dapat membayar, dan login akun serta akun turunannya ditolak setelah masa demo berakhir.
 
 Untuk membuat akun tester dengan akses fitur Business tanpa batas dan masa aktif permanen pada database MongoDB lokal, jalankan dari root project:
 
@@ -41,6 +44,7 @@ Akun yang dibuat adalah `tester@undangan.id` dengan password `Tester12345!`. See
 ```sh
 npm test -- --run
 npm run build
+python -m pytest backend/test_server.py -q
 ```
 
 ## Backend API
@@ -59,6 +63,7 @@ uvicorn server:app --reload --port 8000
 Sebelum menjalankan server, isi `JWT_SECRET` di `backend/.env` dengan nilai acak minimal 32 karakter dan atur `ADMIN_EMAIL` serta `ADMIN_PASSWORD_HASH`. Buat JWT secret dengan `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`; buat hash password admin dengan `python3 -c "import getpass, bcrypt; print(bcrypt.hashpw(getpass.getpass().encode(), bcrypt.gensalt()).decode())"`. Pastikan MongoDB aktif.
 
 ### Mayar payment gateway
+API tersedia di `http://localhost:8000/api`; dokumentasi interaktif tersedia di `http://localhost:8000/docs`. Login super admin ada di `http://localhost:3000/setia-creative-admin`; pemilik mengelola draft, pembayaran, masa aktif, dan publish di `http://localhost:3000/undangan-dashboard`.
 
 1. Buat API Key **Read & Write** dari [Mayar API Keys](https://web.mayar.id/api-keys). API Key Read Only tidak dapat membuat invoice. Untuk pengujian, gunakan akun [Mayar Sandbox](https://web.mayar.io/api-keys).
 2. Dari root project, jalankan `backend\.venv\Scripts\python.exe backend\configure_mayar.py` di Windows (atau `python3 backend/configure_mayar.py` di macOS/Linux). Masukkan API Key pada prompt tersembunyi, lalu pilih Production atau Sandbox. Key hanya disimpan di `backend/.env` yang diabaikan Git.

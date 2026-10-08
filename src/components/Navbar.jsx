@@ -1,9 +1,10 @@
-export default function Navbar({ siteName, onAdmin, onLogin, onRegister }) {
+export default function Navbar({ siteName, logo = 'U', logoImage, onLogin, onRegister }) {
   return (
     <header className="topbar invitation-topbar">
       <div className="container nav-wrap invitation-nav-wrap">
-        <a className="brand" href="/undangan"><span className="logo-mark">U</span>{siteName}</a>
+        <a className="brand" href="/undangan">{logoImage ? <img className="site-logo-image" src={logoImage} alt={`${siteName} logo`} /> : <span className="logo-mark">{logo}</span>}{siteName}</a>
         <nav className="nav-links" aria-label="Navigasi Undangan.id">
+          <a href="/">Beranda</a>
           <a href="#templates">Template</a>
           <a href="#categories">Kategori</a>
           <a href="#blog">Artikel</a>
@@ -12,7 +13,6 @@ export default function Navbar({ siteName, onAdmin, onLogin, onRegister }) {
         <div className="invitation-nav-actions">
           <button className="invitation-login-link" onClick={onLogin}>Masuk</button>
           <button className="primary-btn" onClick={onRegister}>Buat Undangan</button>
-          <button className="invitation-admin-link" onClick={onAdmin}>Admin</button>
         </div>
       </div>
     </header>

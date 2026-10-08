@@ -9,8 +9,14 @@ import Pricing from './pages/Pricing';
 import Templates, { createPreviewInvitation, slugify } from './pages/Templates';
 import Dashboard from './pages/Dashboard';
 import AdminBilling from './pages/AdminBilling';
+import SuperAdminHome from './pages/SuperAdminHome';
 import PublicInvitation from './pages/PublicInvitation';
 import GuestTicket from './pages/GuestTicket';
+import SuperAdminNav from './components/SuperAdminNav';
+import StructuredEditor from './components/StructuredEditor';
+import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
+import { advertisementsApi } from './lib/api';
+import { createDefaultTheme, getThemeCatalog, themeStyle } from './lib/themeCatalog';
 
 const storage = {
   portal: 'portal-cms',
@@ -49,6 +55,39 @@ const saveData = (key, value) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
+const mergeDataDefaults = (defaults, saved) => {
+  if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)) return saved ?? defaults;
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return defaults;
+  return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [
+    key,
+    Object.hasOwn(saved, key) ? mergeDataDefaults(value, saved[key]) : structuredClone(value),
+  ]));
+};
+
+const optimizeImageFile = async (file) => {
+  if (!file.type.startsWith('image/')) throw new Error('Pilih file gambar.');
+  if (file.size > 12 * 1024 * 1024) throw new Error('Ukuran gambar maksimum 12 MB.');
+  if (typeof createImageBitmap !== 'function') throw new Error('Browser ini tidak mendukung pemrosesan gambar.');
+
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Gambar tidak dapat diproses di browser ini.');
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.82));
+  if (!blob) throw new Error('Gambar gagal dikompresi.');
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Gambar gagal dibaca.'));
+    reader.readAsDataURL(blob);
+  });
+};
+
 const defaultPortalData = {
   siteName: 'Portal.id',
   logo: 'P',
@@ -59,6 +98,9 @@ const defaultPortalData = {
     subtitle: 'Wedding yang penuh makna, musik yang menghidupkan suasana, dan undangan digital yang merangkai cerita.',
     image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1500&q=90',
     cta: 'Jelajahi pilihan kami',
+    imageAlt: 'Dekorasi pernikahan outdoor yang hangat dan elegan',
+    tertiary: 'Hiburan bersama Gibrig Entertainment',
+    secondary: 'Buat Undangan dengan Undangan.id',
   },
   services: [
     {
@@ -125,6 +167,7 @@ const defaultPortalData = {
   socials: ['Instagram', 'TikTok', 'YouTube'],
   footer: '© 2026 Portal.id • Tiga brand, satu cerita.',
   theme: {
+    ...createDefaultTheme('admin'),
     primary: '#203f35',
     secondary: '#f6f0e7',
     accent: '#bd755d',
@@ -138,18 +181,23 @@ const defaultPortalData = {
     animationDelay: 120,
     animationDuration: 650,
     elementAnimations: { hero: true, brandCards: true, ads: true },
+    font: 'DM Sans',
   },
 };
 
 const defaultGibrigData = {
   siteName: 'Gibrig Entertainment',
+  logo: 'G',
+  logoImage: '',
   tagline: 'Official Gibrig Entertainment',
   hero: {
+    eyebrow: 'Gibrig Entertainment',
     title: 'Hiburan Berkualitas, Momen Tak Terlupakan',
     subtitle: 'Gibrig Musik Entertainment menghadirkan musik live spektakuler untuk pernikahan, khitanan, ulang tahun, dan hajatan Anda — formasi lengkap, tim profesional, harga ramah lokasi.',
     cta: 'Lihat Paket',
     image: 'https://customer-assets.emergentagent.com/job_a90515ef-0030-4204-8c84-537c287d5958/artifacts/qw36c2aw_WhatsApp%20Image%202026-06-11%20at%2020.08.13.jpeg',
   },
+  theme: createDefaultTheme('gibrig'),
   about: 'Gibrig Entertainment menghadirkan musik live spektakuler untuk pernikahan, khitanan, ulang tahun, dan hajatan Anda.',
   artists: [
     {
@@ -216,11 +264,16 @@ const defaultGibrigData = {
 
 const defaultNunuyData = {
   siteName: 'Nunuy Nadhifa Wedding',
+  logo: 'N',
+  logoImage: '',
   hero: {
     title: 'Wedding Experience That Feels Like A Fairytale',
     subtitle: 'Luxury wedding planner, dekorasi, dan organizer yang memadukan elegansi dengan detail romantis.',
     cta: 'Book Consultation',
+    image: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1500&q=85',
+    eyebrow: 'Wedding Planner',
   },
+  theme: createDefaultTheme('nunuy'),
   about: 'Kita membantu pasangan merancang momen pernikahan, dari konsep, dekorasi, hingga pengelolaan sesi acara.',
   packages: [
     { name: 'Classic Romance', price: 'Rp 18 Juta', description: 'Dekorasi, planner, dan koord event lengkap.', facilities: ['Dekorasi', 'MC', 'Koordinator'], duration: '1 hari', guests: '200 orang', status: 'Aktif' },
@@ -235,12 +288,17 @@ const defaultNunuyData = {
 
 const defaultInvitationData = {
   siteName: 'Undangan.id',
+  logo: 'U',
+  logoImage: '',
   hero: {
     title: 'Buat undangan digital premium yang elegan, modern, dan berkesan.',
     subtitle: 'Buat undangan yang tampil profesional, mudah dibagikan, dan siap menghadirkan momen spesial Anda dengan sentuhan elegan.',
     cta: 'Buat Undangan',
     secondary: 'Lihat Template',
+    image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1500&q=85',
+    eyebrow: 'Platform undangan digital premium',
   },
+  theme: createDefaultTheme('invitation'),
   templates: [
     { name: 'Luxury Gold', category: 'Pernikahan', description: 'Tema mewah dengan palet gold, bouquet, dan detail elegan yang berkesan.', active: true, palette: 'gold' },
     { name: 'Romantic Pink', category: 'Engagement', description: 'Desain lembut, romantis, dan memikat untuk momen istimewa Anda.', active: true, palette: 'pink' },
@@ -272,6 +330,8 @@ const defaultInvitationData = {
     { name: 'Ayu', event: 'Khitanan', rating: 5, quote: 'Prosesnya gampang dan hasilnya premium. Sangat cocok untuk acara keluarga.' },
     { name: 'Rizky', event: 'Wisuda', rating: 5, quote: 'Saya suka karena semua fitur seperti RSVP, musik, sampai live location sudah terintegrasi.' },
   ],
+  contact: { phone: '+62 812-3456-7890', email: 'hello@undangan.id' },
+  whatsapp: { number: '+6281234567890', message: 'Halo, saya ingin bertanya tentang Undangan.id.' },
   articles: [
     { title: 'Tips memilih template undangan digital yang sesuai tema acara', category: 'Design' },
     { title: 'Cara menambahkan musik dan gallery di undangan online', category: 'Feature' },
@@ -382,6 +442,24 @@ const openWhatsApp = (number, message) => {
   }
 };
 
+const WhatsAppContact = ({ siteName, number, message }) => {
+  const digits = String(number || '').replace(/\D/g, '');
+  if (!digits) return null;
+
+  return (
+    <a
+      className="whatsapp-contact-link"
+      href={`https://wa.me/${digits}?text=${encodeURIComponent(message || '')}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Hubungi ${siteName} via WhatsApp: ${number}`}
+    >
+      <strong>WhatsApp</strong>
+      <span>{number}</span>
+    </a>
+  );
+};
+
 const getAuthStorageKey = (site) => `${site}-auth`;
 
 const readCredentials = async (site) => {
@@ -434,45 +512,64 @@ const AdminLogin = ({ site, label, onLogin, credentials }) => {
   );
 };
 
-const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], description }) => {
+const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], description, superAdminAuthenticated = false, onSuperAdminLogout }) => {
   const [credentials, setCredentials] = useState({ username: defaultAdmins[site].username, passwordHash: '' });
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(superAdminAuthenticated);
   const [formData, setFormData] = useState(() => site === 'admin'
     ? normalizePortalData(loadData(dataKey, defaultData))
-    : loadData(dataKey, defaultData));
+    : mergeDataDefaults(defaultData, loadData(dataKey, defaultData)));
   const [themeName, setThemeName] = useState('Luxury Gold');
   const [configMessage, setConfigMessage] = useState('');
+  const [customThemes, setCustomThemes] = useState(() => {
+    const savedThemes = loadData(`${site}-themes`, []);
+    return Array.isArray(savedThemes) ? savedThemes : [];
+  });
+  const [customThemeName, setCustomThemeName] = useState('');
+  const [themeSearch, setThemeSearch] = useState('');
+  const [editorMessage, setEditorMessage] = useState('');
+  const [editorError, setEditorError] = useState('');
+  const themes = useMemo(() => [...getThemeCatalog(site), ...customThemes], [site, customThemes]);
+  const filteredThemes = useMemo(() => themes.filter((theme) => theme.name.toLowerCase().includes(themeSearch.toLowerCase())), [themes, themeSearch]);
 
   useEffect(() => {
     const loadCreds = async () => {
       const current = await readCredentials(site);
       setCredentials(current);
-      setLoggedIn(Boolean(loadData(`${site}-session`, null)));
+      setLoggedIn(superAdminAuthenticated || Boolean(loadData(`${site}-session`, null)));
     };
     loadCreds();
-  }, [site]);
+  }, [site, superAdminAuthenticated]);
 
   const updateField = (path, value) => {
     setFormData((prev) => {
       const next = structuredClone(prev);
-      const parts = path.split('.');
       let cursor = next;
-      for (let i = 0; i < parts.length - 1; i += 1) {
-        cursor = cursor[parts[i]];
+      for (let i = 0; i < path.length - 1; i += 1) {
+        cursor = cursor[path[i]];
       }
-      cursor[parts[parts.length - 1]] = value;
+      cursor[path[path.length - 1]] = value;
       return next;
     });
   };
 
   const saveChanges = () => {
-    saveData(dataKey, formData);
-    alert('Perubahan berhasil disimpan.');
+    try {
+      saveData(dataKey, formData);
+      setEditorError('');
+      setEditorMessage('Semua perubahan website berhasil dipublikasikan di browser ini.');
+    } catch (error) {
+      setEditorError(`Perubahan gagal disimpan: ${error.message}`);
+    }
   };
 
   const saveDraft = () => {
-    saveData(dataKey, formData);
-    alert('Draft berhasil disimpan di perangkat ini.');
+    try {
+      saveData(dataKey, formData);
+      setEditorError('');
+      setEditorMessage('Draft berhasil disimpan di browser ini.');
+    } catch (error) {
+      setEditorError(`Draft gagal disimpan: ${error.message}`);
+    }
   };
 
   const exportPortalConfig = () => {
@@ -511,26 +608,49 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
       nunuy: '/nunuy-nadhifa-wedding',
       invitation: '/undangan',
     };
-    navigate(previewPaths[site] || '/');
+    try {
+      saveData(dataKey, formData);
+      navigate(previewPaths[site] || '/');
+    } catch (error) {
+      setEditorError(`Preview gagal disimpan: ${error.message}`);
+    }
   };
 
-  const addTheme = () => {
-    const nextTheme = {
-      name: themeName || `Theme ${Date.now()}`,
-      primary: '#111827',
-      secondary: '#f3f4f6',
-      accent: '#8b5cf6',
-      background: '#ffffff',
-      font: 'Poppins',
-    };
+  const saveCustomTheme = () => {
+    if (!customThemeName.trim()) {
+      setEditorError('Isi nama tema terlebih dahulu.');
+      return;
+    }
+    const nextTheme = { ...formData.theme, id: `${site}-custom-${Date.now()}`, name: customThemeName.trim() };
+    const nextThemes = [...customThemes, nextTheme];
+    try {
+      saveData(`${site}-themes`, nextThemes);
+      setCustomThemes(nextThemes);
+      setCustomThemeName('');
+      setEditorError('');
+      setEditorMessage('Tema kustom tersimpan untuk website ini.');
+    } catch (error) {
+      setEditorError(`Tema gagal disimpan: ${error.message}`);
+    }
+  };
 
-    const existing = loadData(`${site}-themes`, themeLibrary);
-    saveData(`${site}-themes`, [...existing, nextTheme]);
-    setThemeName('');
-    alert('Tema baru ditambahkan.');
+  const handleImageUpload = async (path, file) => {
+    if (!file) return;
+    setEditorError('');
+    try {
+      const image = await optimizeImageFile(file);
+      updateField(path, image);
+      setEditorMessage('Gambar telah diproses. Tekan Publish agar perubahan tersimpan.');
+    } catch (error) {
+      setEditorError(error.message);
+    }
   };
 
   const logout = () => {
+    if (onSuperAdminLogout) {
+      onSuperAdminLogout();
+      return;
+    }
     localStorage.removeItem(`${site}-session`);
     setLoggedIn(false);
   };
@@ -550,10 +670,11 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
           <a href="#">Media</a>
           <a href="#">SEO</a>
         </nav>
-        <button className="logout-button" onClick={logout}>Logout</button>
+        <button className="logout-button" onClick={logout}>{superAdminAuthenticated ? 'Keluar super admin' : 'Logout'}</button>
       </aside>
 
       <main className="admin-main">
+        {superAdminAuthenticated ? <SuperAdminNav /> : null}
         <header className="admin-topbar">
           <div>
             <p className="eyebrow">Admin Panel</p>
@@ -566,6 +687,9 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
           </div>
         </header>
 
+        {editorMessage ? <p className="admin-editor-message" role="status">{editorMessage}</p> : null}
+        {editorError ? <p className="form-error admin-editor-error" role="alert">{editorError}</p> : null}
+
         <section className="stats-grid">
           <div className="stat-card"><span>Visitor</span><strong>12.4k</strong></div>
           <div className="stat-card"><span>Clicks</span><strong>8.7k</strong></div>
@@ -574,12 +698,36 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
         </section>
 
         <section className="admin-panel-block">
-          <h3>Website Settings</h3>
+          <h3>Logo, gambar & tampilan</h3>
           <p className="muted">{description}</p>
           <div className="form-grid">
             <label>
               Nama Website
-              <input value={formData.siteName || ''} onChange={(event) => updateField('siteName', event.target.value)} />
+              <input value={formData.siteName || ''} onChange={(event) => updateField(['siteName'], event.target.value)} />
+            </label>
+            <label>Logo teks<input value={formData.logo || ''} onChange={(event) => updateField(['logo'], event.target.value)} /></label>
+            <label>
+              Alamat gambar logo
+              <input value={formData.logoImage || ''} onChange={(event) => updateField(['logoImage'], event.target.value)} placeholder="https://..." />
+            </label>
+            <label>Upload gambar logo<input type="file" accept="image/*" onChange={(event) => handleImageUpload(['logoImage'], event.target.files?.[0])} /></label>
+            <label>
+              Gambar utama / hero
+              <input value={formData.hero?.image || ''} onChange={(event) => updateField(['hero', 'image'], event.target.value)} placeholder="https://..." />
+            </label>
+            <label>Upload gambar hero<input type="file" accept="image/*" onChange={(event) => handleImageUpload(['hero', 'image'], event.target.files?.[0])} /></label>
+            {formData.logoImage ? <div className="admin-media-preview"><span>Pratinjau logo</span><img src={formData.logoImage} alt="Pratinjau logo website" /></div> : null}
+            {formData.hero?.image ? <div className="admin-media-preview admin-hero-preview"><span>Pratinjau hero</span><img src={formData.hero.image} alt="Pratinjau gambar utama website" /></div> : null}
+          </div>
+        </section>
+
+        <section className="admin-panel-block">
+          <h3>Nomor HP & WhatsApp</h3>
+          <p className="muted">Atur nomor telepon dan nomor WhatsApp khusus untuk website ini. Nomor WhatsApp ditampilkan sebagai tombol kontak di website publik.</p>
+          <div className="form-grid">
+            <label>
+              Nomor HP publik
+              <input type="tel" value={formData.contact?.phone || ''} onChange={(event) => updateField(['contact', 'phone'], event.target.value)} placeholder="+62 812-3456-7890" />
             </label>
             {site === 'admin' ? (
               <>
@@ -588,16 +736,12 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
               </>
             ) : null}
             <label>
-              WhatsApp Number
-              <input value={formData.whatsapp?.number || ''} onChange={(event) => updateField('whatsapp.number', event.target.value)} />
+              Nomor WhatsApp
+              <input type="tel" value={formData.whatsapp?.number || ''} onChange={(event) => updateField(['whatsapp', 'number'], event.target.value)} placeholder="+62 812-3456-7890" />
             </label>
             <label>
-              Email
-              <input value={formData.contact?.email || ''} onChange={(event) => updateField('contact.email', event.target.value)} />
-            </label>
-            <label>
-              Phone
-              <input value={formData.contact?.phone || ''} onChange={(event) => updateField('contact.phone', event.target.value)} />
+              Pesan pembuka WhatsApp
+              <input value={formData.whatsapp?.message || ''} onChange={(event) => updateField(['whatsapp', 'message'], event.target.value)} placeholder="Halo, saya ingin bertanya..." />
             </label>
           </div>
         </section>
@@ -713,32 +857,34 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             </div>
           </section>
         ) : null}
-
         <section className="admin-panel-block">
-          <h3>Theme Builder</h3>
-          <div className="theme-builder-row">
-            <input value={themeName} onChange={(event) => setThemeName(event.target.value)} placeholder="Nama tema" />
-            <button onClick={addTheme}>Create Theme</button>
-          </div>
-          <div className="theme-preview-grid">
-            {loadData(`${site}-themes`, themeLibrary).map((theme) => (
-              <div key={theme.name} className="theme-swatch" style={{ background: theme.background, borderColor: theme.primary }}>
-                <span style={{ background: theme.primary }} />
-                <strong>{theme.name}</strong>
-                <small>{theme.font}</small>
-              </div>
-            ))}
+          <h3>Pengaturan semua konten</h3>
+          <p className="muted">Edit teks, data kontak, daftar layanan, paket, FAQ, tema, ukuran, dan seluruh data website.</p>
+          <StructuredEditor data={formData} onChange={updateField} />
+          <div className="admin-custom-theme">
+            <label>Nama tema kustom<input value={customThemeName} onChange={(event) => setCustomThemeName(event.target.value)} placeholder="Tema baru saya" /></label>
+            <button type="button" className="secondary-btn" onClick={saveCustomTheme}>Simpan warna sebagai tema</button>
           </div>
         </section>
 
         <section className="admin-panel-block">
-          <h3>Media Manager</h3>
-          <div className="media-grid">
-            <div className="media-card">Upload Logo</div>
-            <div className="media-card">Upload Favicon</div>
-            <div className="media-card">Upload Gallery</div>
-            <div className="media-card">Upload Video</div>
+          <h3>100 template desain untuk {label.replace(' Admin', '')}</h3>
+          <p className="muted">Template original dengan kombinasi layout, tipografi, warna, dan proporsi yang dapat diedit lagi setelah diterapkan.</p>
+          <label className="theme-search-label">Cari template<input value={themeSearch} onChange={(event) => setThemeSearch(event.target.value)} placeholder="Cari gaya atau warna" /></label>
+          <div className="theme-preview-grid admin-template-grid">
+            {filteredThemes.map((theme) => (
+              <article key={theme.id || theme.name} className="theme-swatch admin-template-card" style={{ background: theme.background, borderColor: theme.primary }}>
+                <div className="admin-template-swatches">
+                  {[theme.primary, theme.secondary, theme.accent, theme.background].map((color) => <span key={color} style={{ background: color }} />)}
+                </div>
+                <strong>{theme.name}</strong>
+                <small>{theme.layout} · {theme.font}</small>
+                <button type="button" onClick={() => updateField(['theme'], { ...theme })}>Terapkan template</button>
+              </article>
+            ))}
+            {filteredThemes.length === 0 ? <p role="status">Template tidak ditemukan.</p> : null}
           </div>
+          <p className="muted">{getThemeCatalog(site).length} template bawaan · {customThemes.length} tema kustom</p>
         </section>
       </main>
     </div>
@@ -746,19 +892,18 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
 };
 
 const LegacyPortalHome = () => {
-  const portalData = useMemo(() => loadData(storage.portal, defaultPortalData), []);
+  const portalData = useMemo(() => mergeDataDefaults(defaultPortalData, loadData(storage.portal, defaultPortalData)), []);
 
   return (
-    <div className="site-shell theme-portal">
+    <div className={`site-shell theme-portal theme-layout-${portalData.theme?.layout || 'editorial'}`} style={themeStyle(portalData.theme)}>
       <header className="topbar portal-topbar">
         <div className="container nav-wrap portal-nav-wrap">
-          <a className="brand portal-brand" href="#top"><span className="logo-mark">{portalData.logoImage ? <img src={portalData.logoImage} alt="" /> : portalData.logo}</span><span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span></a>
+          <a className="brand portal-brand" href="#top">{portalData.logoImage ? <img className="site-logo-image" src={portalData.logoImage} alt={`${portalData.siteName} logo`} /> : <span className="logo-mark">{portalData.logo}</span>}<span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span></a>
           <nav className="nav-links portal-nav-links" aria-label="Navigasi utama">
             {navItems.map((item) => (
               <a key={item.label} href={item.href}>{item.label}</a>
             ))}
           </nav>
-          <button className="portal-admin-button" onClick={() => navigate('/admin')}>Admin</button>
         </div>
       </header>
 
@@ -777,7 +922,7 @@ const LegacyPortalHome = () => {
               <div className="portal-proofline"><span>Dirancang dengan personal</span><span>Siap dibagikan ke seluruh keluarga</span></div>
             </div>
             <div className="portal-hero-visual">
-              <img src="https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1500&q=90" alt="Dekorasi pernikahan outdoor yang hangat dan elegan" />
+              <img src={portalData.hero.image} alt={portalData.hero.imageAlt || 'Gambar utama website'} />
               <div className="portal-hero-image-shade" />
               <div className="portal-photo-caption"><span>THE ART OF CELEBRATING</span><strong>Every detail, thoughtfully yours.</strong></div>
               <div className="portal-floating-note portal-note-top"><span>WEDDING PLANNER</span><strong>Nunuy Nadhifa</strong></div>
@@ -908,12 +1053,12 @@ const LegacyPortalHome = () => {
       <footer id="contact" className="site-footer">
         <div className="container footer-grid">
           <div>
-            <div className="brand"><span className="logo-mark">{portalData.logo}</span>{portalData.siteName}</div>
+            <div className="brand">{portalData.logoImage ? <img className="site-logo-image" src={portalData.logoImage} alt={`${portalData.siteName} logo`} /> : <span className="logo-mark">{portalData.logo}</span>}{portalData.siteName}</div>
             <p>{portalData.footer}</p>
           </div>
           <div>
             <h4>Kontak</h4>
-            <p>{portalData.contact.phone}</p>
+            <p><a href={`tel:${String(portalData.contact.phone || '').replace(/[^\d+]/g, '')}`}>{portalData.contact.phone}</a></p>
             <p>{portalData.contact.email}</p>
           </div>
           <div>
@@ -924,10 +1069,11 @@ const LegacyPortalHome = () => {
           </div>
           <div>
             <h4>WhatsApp</h4>
-            <a href={`https://wa.me/${portalData.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(portalData.whatsapp.message)}`} target="_blank" rel="noreferrer">Chat sekarang</a>
+            <a href={`https://wa.me/${portalData.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(portalData.whatsapp.message)}`} target="_blank" rel="noopener noreferrer">Chat sekarang</a>
           </div>
         </div>
       </footer>
+      <WhatsAppContact siteName={portalData.siteName} number={portalData.whatsapp.number} message={portalData.whatsapp.message} />
     </div>
   );
 };
@@ -1010,7 +1156,6 @@ const PortalHome = () => {
             <a href="#advertise">Beriklan</a>
             <a href="#contact">Kontak</a>
           </nav>
-          <button className="portal-admin-button" onClick={() => navigate('/admin')}>Admin</button>
         </div>
       </header>
 
@@ -1085,26 +1230,28 @@ const PortalHome = () => {
       </footer>
 
       {renderAd('floatingBottom', 'portal-ad-floating')}
+      <WhatsAppContact siteName={portalData.siteName} number={portalData.whatsapp.number} message={portalData.whatsapp.message} />
     </div>
   );
 };
 
 const GibrigHome = () => {
-  const data = useMemo(() => loadData(storage.gibrig, defaultGibrigData), []);
+  const data = useMemo(() => mergeDataDefaults(defaultGibrigData, loadData(storage.gibrig, defaultGibrigData)), []);
 
   return (
-    <div className="site-shell gibrig-shell">
+    <div className={`site-shell gibrig-shell theme-layout-${data.theme?.layout || 'editorial'}`} style={themeStyle(data.theme)}>
       <header className="topbar gibrig-topbar">
         <div className="container nav-wrap">
-          <div className="brand"><span className="logo-mark">G</span>{data.siteName}</div>
+          <div className="brand">{data.logoImage ? <img className="site-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="logo-mark">{data.logo || 'G'}</span>}{data.siteName}</div>
           <nav className="nav-links">
-            <a href="#about">Tentang</a>
-            <a href="#artists">Artis</a>
+            <a href="/">Beranda</a>
+            <a href="#about">About</a>
+            <a href="#artists">Artist</a>
+            <a href="#entertainment">Entertainment</a>
             <a href="#gallery">Galeri</a>
             <a href="#packages">Paket</a>
             <a href="#testimonials">Testimoni</a>
           </nav>
-          <button className="primary-btn" onClick={() => navigate('/gibrig-admin')}>Admin</button>
         </div>
       </header>
 
@@ -1112,12 +1259,14 @@ const GibrigHome = () => {
         <section className="hero-section hero-compact">
           <div className="container hero-grid">
             <div>
-              <p className="eyebrow">{data.tagline}</p>
+              <p className="eyebrow">{data.hero.eyebrow || data.tagline}</p>
               <h1>{data.hero.title}</h1>
+              <h2 className="gibrig-hero-subheading">Artist Performance &amp; Entertainment Studio</h2>
               <p>{data.hero.subtitle}</p>
               <button className="primary-btn" onClick={() => document.getElementById('packages')?.scrollIntoView({ behavior: 'smooth' })}>{data.hero.cta}</button>
             </div>
             <div className="hero-visual gibrig-visual" style={{ backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.6)), url(${data.hero.image})`, backgroundPosition: 'center', backgroundSize: 'cover' }}>
+              <img className="site-hero-image" src={data.hero.image} alt={`${data.siteName} performance`} />
               <div className="hero-panel"><span>{data.artists[0].category}</span><strong>{data.artists[0].name}</strong></div>
             </div>
           </div>
@@ -1218,35 +1367,37 @@ const GibrigHome = () => {
               <h2>Let’s create your next event moment</h2>
             </div>
             <div>
-              <p>{data.contact.phone}</p>
+              <p><a href={`tel:${String(data.contact.phone || '').replace(/[^\d+]/g, '')}`}>{data.contact.phone}</a></p>
+              <p>{data.contact.email}</p>
               <p>{data.contact.address}</p>
-              <p>Instagram {data.social.instagram} · TikTok {data.social.tiktok} · YouTube {data.social.youtube}</p>
-              <a href={`https://wa.me/${data.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(data.whatsapp.message)}`} target="_blank" rel="noreferrer">Chat WhatsApp</a>
+              <p>Instagram {data.socials?.[0] || ''} · TikTok {data.socials?.[1] || ''} · YouTube {data.socials?.[2] || ''}</p>
+              <a href={`https://wa.me/${data.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(data.whatsapp.message)}`} target="_blank" rel="noopener noreferrer">Chat WhatsApp</a>
             </div>
           </div>
         </section>
       </main>
       <footer className="section-wrap"><div className="container"><p>{data.footer}</p></div></footer>
+      <WhatsAppContact siteName={data.siteName} number={data.whatsapp.number} message={data.whatsapp.message} />
     </div>
   );
 };
 
 const NunuyHome = () => {
-  const data = useMemo(() => loadData(storage.nunuy, defaultNunuyData), []);
+  const data = useMemo(() => mergeDataDefaults(defaultNunuyData, loadData(storage.nunuy, defaultNunuyData)), []);
 
   return (
-    <div className="site-shell nunuy-shell">
+    <div className={`site-shell nunuy-shell theme-layout-${data.theme?.layout || 'editorial'}`} style={themeStyle(data.theme)}>
       <header className="topbar nunuy-topbar">
         <div className="container nav-wrap">
-          <div className="brand"><span className="logo-mark">N</span>{data.siteName}</div>
+          <div className="brand">{data.logoImage ? <img className="site-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="logo-mark">{data.logo || 'N'}</span>}{data.siteName}</div>
           <nav className="nav-links">
+            <a href="/">Beranda</a>
             <a href="#about">About</a>
             <a href="#packages">Packages</a>
             <a href="#gallery">Gallery</a>
             <a href="#faq">FAQ</a>
             <a href="#contact">Contact</a>
           </nav>
-          <button className="primary-btn" onClick={() => navigate('/nunuy-admin')}>Admin</button>
         </div>
       </header>
 
@@ -1254,12 +1405,14 @@ const NunuyHome = () => {
         <section className="hero-section wedding-hero">
           <div className="container hero-grid">
             <div>
-              <p className="eyebrow">Wedding Planner</p>
+              <p className="eyebrow">{data.hero.eyebrow}</p>
               <h1>{data.hero.title}</h1>
               <p>{data.hero.subtitle}</p>
               <button className="primary-btn" onClick={() => openWhatsApp(data.whatsapp.number, data.whatsapp.message)}>{data.hero.cta}</button>
             </div>
-            <div className="hero-visual wedding-visual" />
+            <div className="hero-visual wedding-visual">
+              <img className="site-hero-image" src={data.hero.image} alt={`${data.siteName} wedding`} />
+            </div>
           </div>
         </section>
 
@@ -1302,26 +1455,38 @@ const NunuyHome = () => {
               <h2>Let’s plan your romantic day</h2>
             </div>
             <div>
-              <p>{data.contact.phone}</p>
+              <p><a href={`tel:${String(data.contact.phone || '').replace(/[^\d+]/g, '')}`}>{data.contact.phone}</a></p>
               <p>{data.contact.email}</p>
-              <a href={`https://wa.me/${data.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(data.whatsapp.message)}`} target="_blank" rel="noreferrer">Chat WhatsApp</a>
+              <a href={`https://wa.me/${data.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(data.whatsapp.message)}`} target="_blank" rel="noopener noreferrer">Chat WhatsApp</a>
             </div>
           </div>
         </section>
       </main>
+      <WhatsAppContact siteName={data.siteName} number={data.whatsapp.number} message={data.whatsapp.message} />
     </div>
   );
 };
 
 const InvitationHome = () => {
-  const data = useMemo(() => loadData(storage.invitation, defaultInvitationData), []);
+  const data = useMemo(() => mergeDataDefaults(defaultInvitationData, loadData(storage.invitation, defaultInvitationData)), []);
+  const [advertisements, setAdvertisements] = useState([]);
+  const [advertisementsError, setAdvertisementsError] = useState('');
   const openAuth = (mode) => navigate(`/undangan-auth?mode=${mode}`);
 
+  useEffect(() => {
+    let active = true;
+    advertisementsApi.listPublic()
+      .then((items) => { if (active) setAdvertisements(items); })
+      .catch((error) => { if (active) setAdvertisementsError(error.message); });
+    return () => { active = false; };
+  }, []);
+
   return (
-    <div className="site-shell invitation-shell">
+    <div className={`site-shell invitation-shell theme-layout-${data.theme?.layout || 'editorial'}`} style={themeStyle(data.theme)}>
       <Navbar
         siteName={data.siteName}
-        onAdmin={() => navigate('/undangan-admin')}
+        logo={data.logo}
+        logoImage={data.logoImage}
         onLogin={() => openAuth('login')}
         onRegister={() => openAuth('register')}
       />
@@ -1330,7 +1495,7 @@ const InvitationHome = () => {
         <section className="hero-section invitation-hero">
           <div className="container hero-grid">
             <div>
-              <p className="eyebrow">Platform undangan digital premium</p>
+              <p className="eyebrow">{data.hero.eyebrow}</p>
               <h1>{data.hero.title}</h1>
               <p>{data.hero.subtitle}</p>
               <div className="cta-row">
@@ -1344,6 +1509,7 @@ const InvitationHome = () => {
               </div>
             </div>
             <div className="hero-visual invitation-visual">
+              <img className="site-hero-image" src={data.hero.image} alt={`${data.siteName} undangan digital`} />
               <div className="floating-card card-a">Wedding</div>
               <div className="floating-card card-b">Event</div>
               <div className="hero-panel">
@@ -1354,19 +1520,30 @@ const InvitationHome = () => {
           </div>
         </section>
 
-        <section id="categories" className="section-wrap muted-bg">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Kategori</p>
-              <h2>Pilih moment yang ingin Anda rayakan</h2>
+        {(advertisements.length || advertisementsError) ? (
+          <section className="section-wrap affiliate-advertisements" aria-labelledby="affiliate-advertisements-title">
+            <div className="container">
+              <div className="section-head">
+                <p className="eyebrow">Rekomendasi partner</p>
+                <h2 id="affiliate-advertisements-title">Pilihan dari mitra Undangan.id</h2>
+              </div>
+              {advertisementsError ? <p className="form-error" role="alert">Iklan mitra belum dapat dimuat: {advertisementsError}</p> : null}
+              <div className="affiliate-advertisement-grid">
+                {advertisements.map((advertisement) => (
+                  <article className="affiliate-advertisement-card" key={advertisement.id}>
+                    {advertisement.image ? <img src={advertisement.image} alt="" loading="lazy" /> : null}
+                    <div>
+                      <span className="eyebrow">Iklan · {advertisement.advertiser}</span>
+                      <h3>{advertisement.title}</h3>
+                      <p>{advertisement.description}</p>
+                      <a className="primary-btn" href={advertisement.url} target="_blank" rel="noopener noreferrer">Lihat penawaran</a>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
-            <div className="category-grid">
-              {data.categories.map((category) => (
-                <span key={category} className="category-pill">{category}</span>
-              ))}
-            </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
         <section className="section-wrap">
           <div className="container invite-why-grid">
@@ -1401,7 +1578,7 @@ const InvitationHome = () => {
           </div>
         </section>
 
-        <Templates templates={data.templates} demos={data.demoItems} />
+        <Templates templates={data.templates} demos={data.demoItems} categories={data.categories} />
 
         <Pricing plans={data.pricingPlans} onChoose={() => openAuth('register')} />
 
@@ -1457,21 +1634,59 @@ const InvitationHome = () => {
         </section>
       </main>
 
-      <Footer siteName={data.siteName} />
+      <Footer
+        siteName={data.siteName}
+        phone={data.contact.phone}
+        email={data.contact.email}
+        whatsappNumber={data.whatsapp.number}
+        whatsappMessage={data.whatsapp.message}
+      />
+      <WhatsAppContact siteName={data.siteName} number={data.whatsapp.number} message={data.whatsapp.message} />
     </div>
   );
 };
 
 function App() {
-  const path = useWindowPath();
+  const path = useWindowPath().replace(/\/+$/, '') || '/';
+  const superAdminAuthenticated = Boolean(sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY));
+  const logoutSuperAdmin = () => {
+    sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
+    navigate('/setia-creative-admin');
+  };
 
   if (path === '/undangan-auth') {
-    return <Auth onBack={() => navigate('/undangan')} onSuccess={() => navigate('/undangan-dashboard')} />;
+    const requestedPath = new URLSearchParams(window.location.search).get('next');
+    const dashboardPath = requestedPath?.startsWith('/undangan-dashboard') && !requestedPath.startsWith('//')
+      ? requestedPath
+      : '/undangan-dashboard';
+    return <Auth onBack={() => navigate('/undangan')} onSuccess={() => navigate(dashboardPath)} />;
   }
 
-  if (path === '/undangan-dashboard') return <Dashboard onSignIn={() => navigate('/undangan-auth?mode=login')} />;
-  if (path === '/undangan-admin') return <AdminBilling />;
+  if (path === '/undangan-dashboard') {
+    const requestedPath = `${window.location.pathname}${window.location.search}`;
+    return <Dashboard onSignIn={() => navigate(`/undangan-auth?mode=login&next=${encodeURIComponent(requestedPath)}`)} />;
+  }
   if (path.startsWith('/undangan-ticket/')) return <GuestTicket ticketToken={path.slice('/undangan-ticket/'.length)} />;
+  if (path === '/setia-creative-admin') return <SuperAdminHome />;
+  if (path === '/undangan-website-admin') {
+    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
+    return (
+      <AdminPanel
+        site="invitation"
+        label="Undangan.id Website Admin"
+        dataKey={storage.invitation}
+        defaultData={defaultInvitationData}
+        description="Kelola konten website publik Undangan.id, nomor kontak, logo, hero, tema, template, dan media."
+        superAdminAuthenticated
+        onSuperAdminLogout={logoutSuperAdmin}
+      />
+    );
+  }
+  if (path === '/setia-creative-admin/billing' || path === '/undangan-admin') {
+    return superAdminAuthenticated
+      ? <AdminBilling onLogout={() => navigate('/setia-creative-admin')} />
+      : <SuperAdminHome onLogin={() => navigate(path)} />;
+  }
   if (path.startsWith('/i/')) return <PublicInvitation slug={path.slice(3)} />;
 
   if (path.startsWith('/undangan-blog/')) {
@@ -1486,7 +1701,8 @@ function App() {
     if (template) return <PublicInvitation invitation={createPreviewInvitation(template)} slug={`demo-${templateSlug}`} />;
   }
 
-  if (path === '/admin') {
+  if (path === '/portal-admin' || path === '/admin') {
+    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
     return (
       <AdminPanel
         site="admin"
@@ -1494,11 +1710,14 @@ function App() {
         dataKey={storage.portal}
         defaultData={defaultPortalData}
         description="Kelola website utama, layanan, galeri, paket, kontak, WhatsApp, sosial media, dan admin dashboard."
+        superAdminAuthenticated
+        onSuperAdminLogout={logoutSuperAdmin}
       />
     );
   }
 
   if (path === '/gibrig-admin') {
+    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
     return (
       <AdminPanel
         site="gibrig"
@@ -1506,11 +1725,14 @@ function App() {
         dataKey={storage.gibrig}
         defaultData={defaultGibrigData}
         description="Ubah isi utama Gibrig Entertainment, artist, event, testimonial, contact, SEO, dan media."
+        superAdminAuthenticated
+        onSuperAdminLogout={logoutSuperAdmin}
       />
     );
   }
 
   if (path === '/nunuy-admin') {
+    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
     return (
       <AdminPanel
         site="nunuy"
@@ -1518,6 +1740,8 @@ function App() {
         dataKey={storage.nunuy}
         defaultData={defaultNunuyData}
         description="Kelola wedding package, gallery, pricing, testimonials, FAQ, contact, logo, dan hero."
+        superAdminAuthenticated
+        onSuperAdminLogout={logoutSuperAdmin}
       />
     );
   }

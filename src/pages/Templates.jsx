@@ -30,9 +30,18 @@ export const createPreviewInvitation = (template) => ({
   },
 });
 
-export default function Templates({ templates, demos }) {
+export default function Templates({ templates, demos, categories = [] }) {
   const [qrTemplate, setQrTemplate] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(() => templates.find((template) => template.active !== false)?.category || 'Semua');
   const [previewTemplate, setPreviewTemplate] = useState(() => readHashTemplate(templates));
+  const availableCategories = [...new Set([
+    ...categories,
+    ...templates.map((template) => template.category).filter(Boolean),
+  ])].filter((category) => templates.some((template) => template.active !== false && template.category === category));
+  const categoryOptions = ['Semua', ...availableCategories];
+  const visibleTemplates = templates.filter((template) => (
+    template.active !== false && (selectedCategory === 'Semua' || template.category === selectedCategory)
+  ));
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -47,14 +56,43 @@ export default function Templates({ templates, demos }) {
 
   return (
     <>
+      <section id="categories" className="section-wrap muted-bg">
+        <div className="container">
+          <div className="section-head">
+            <p className="eyebrow">Kategori</p>
+            <h2>Pilih kategori undangan</h2>
+          </div>
+          <div className="category-grid" aria-label="Filter kategori template undangan">
+            {categoryOptions.map((category) => {
+              const count = category === 'Semua'
+                ? templates.filter((template) => template.active !== false).length
+                : templates.filter((template) => template.active !== false && template.category === category).length;
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  className={`category-pill${selectedCategory === category ? ' selected' : ''}`}
+                  aria-pressed={selectedCategory === category}
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  {category} <span>({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
       <section id="templates" className="section-wrap">
         <div className="container">
           <div className="section-head">
             <p className="eyebrow">Template</p>
-            <h2>Desain undangan yang siap Anda gunakan</h2>
+            <h2>{selectedCategory === 'Semua' ? 'Desain undangan yang siap Anda gunakan' : `Template ${selectedCategory}`}</h2>
+            <p>Menampilkan {visibleTemplates.length} dari {templates.filter((template) => template.active !== false).length} template.</p>
           </div>
-          <div className="template-grid">
-            {templates.map((template) => {
+          {visibleTemplates.length ? (
+            <div className="template-grid">
+              {visibleTemplates.map((template) => {
               const slug = slugify(template.name);
               const shareUrl = `${window.location.origin}/undangan-preview/${slug}`;
               const previewUrl = shareUrl;
@@ -79,8 +117,9 @@ export default function Templates({ templates, demos }) {
                   ) : null}
                 </article>
               );
-            })}
-          </div>
+              })}
+            </div>
+          ) : <p className="template-empty-state">Belum ada template aktif untuk kategori {selectedCategory}. Pilih kategori lain untuk melihat template.</p>}
           {previewTemplate ? <section id="template-preview" className="template-public-preview"><div className="template-public-preview-heading"><div><p className="eyebrow">Preview untuk calon undangan</p><h2>{previewTemplate.name}</h2></div><button onClick={() => setPreviewTemplate(null)}>Tutup Preview</button></div><div className="template-public-preview-viewport"><PublicInvitation invitation={createPreviewInvitation(previewTemplate)} slug={`demo-${slugify(previewTemplate.name)}`} /></div></section> : null}
         </div>
       </section>
