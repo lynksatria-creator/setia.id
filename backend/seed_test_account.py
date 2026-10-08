@@ -1,9 +1,9 @@
-"""Create a disposable user account for local or staging QA."""
+"""Create a disposable user account for local QA only."""
 
 import asyncio
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -17,8 +17,8 @@ TEST_ACCOUNT = {
     "email": "tester@undangan.id",
     "password": "Tester12345!",
 }
+TEST_ACCOUNT_ACCESS_DAYS = 365
 
-TEST_ACCOUNT_ACTIVE_UNTIL = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc).isoformat()
 load_dotenv(Path(__file__).with_name(".env"))
 
 
@@ -33,7 +33,16 @@ async def main():
     try:
         await client.admin.command("ping")
         users = client[db_name].users
-        existing = await users.find_one({"email": TEST_ACCOUNT["email"]}, {"_id": 1})
+        existing = await users.find_one({"email": TEST_ACCOUNT["email"]}, {"_id": 1, "test_access_until": 1, "test_access_granted_at": 1})
+        now = datetime.now(timezone.utc)
+        active_until = existing.get("test_access_until") if existing else None
+        try:
+            parsed_until = datetime.fromisoformat(active_until) if active_until else None
+        except ValueError:
+            parsed_until = None
+        if parsed_until is None or parsed_until.year >= 9999:
+            active_until = (now + timedelta(days=TEST_ACCOUNT_ACCESS_DAYS)).isoformat()
+
         password_hash = bcrypt.hashpw(TEST_ACCOUNT["password"].encode(), bcrypt.gensalt()).decode()
         await users.update_one(
             {"email": TEST_ACCOUNT["email"]},
@@ -42,13 +51,14 @@ async def main():
                     "full_name": TEST_ACCOUNT["full_name"],
                     "password_hash": password_hash,
                     "is_test_account": True,
-                    "test_access_granted_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "test_access_granted_at": (existing or {}).get("test_access_granted_at") or now.isoformat(),
+                    "test_access_until": active_until,
+                    "updated_at": now.isoformat(),
                 },
                 "$setOnInsert": {
                     "id": str(uuid.uuid4()),
                     "email": TEST_ACCOUNT["email"],
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": now.isoformat(),
                 },
             },
             upsert=True,
@@ -60,17 +70,15 @@ async def main():
             {"owner_id": tester["id"]},
             {
                 "$set": {
-                    "plan_id": "business",
                     "status": "active",
-                    "active_until": TEST_ACCOUNT_ACTIVE_UNTIL,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "active_until": active_until,
+                    "updated_at": now.isoformat(),
                 }
             },
         )
         action = "updated" if existing else "created"
         print(f"Test account {action}: {TEST_ACCOUNT['email']}")
-        print(f"Password: {TEST_ACCOUNT['password']}")
-        print("Access: Business features, unlimited invitations, and permanent activation (local QA only).")
+        print(f"Access: Basic, Premium, and Business packages through {active_until} (local QA only).")
         print(f"Existing invitations activated: {invitations.modified_count}")
     finally:
         client.close()

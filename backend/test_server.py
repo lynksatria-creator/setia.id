@@ -450,35 +450,73 @@ def test_publish_rejects_unpaid_draft(monkeypatch):
     assert "pembayaran" in response.json()["detail"].lower()
 
 
-def test_local_test_account_gets_business_access_without_expiry(monkeypatch):
-    plan_collection = FakeCollection(copy.deepcopy(server.DEFAULT_BILLING_CONFIG))
+@pytest.mark.parametrize("plan_id", ["basic", "premium", "business"])
+def test_test_account_can_use_any_package_without_payment(monkeypatch, plan_id):
+    test_access_until = (datetime.now(timezone.utc) + timedelta(days=300)).isoformat()
     invitation_collection = FakeCollection()
     monkeypatch.setattr(server, "db", SimpleNamespace(
-        platform_settings=plan_collection,
+        platform_settings=FakeCollection(copy.deepcopy(server.DEFAULT_BILLING_CONFIG)),
         invitations=invitation_collection,
     ))
     monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: {
         "id": "tester-1",
         "is_test_account": True,
+        "test_access_until": test_access_until,
     })
 
-    client = TestClient(server.app)
-    created = client.post("/api/invitations", json={
-        "plan_id": "basic",
+    plan = next(item for item in server.DEFAULT_BILLING_CONFIG["plans"] if item["id"] == plan_id)
+    payload = {
+        "plan_id": plan_id,
         "title": "Undangan QA",
         "content": {},
-        "slug": "undangan-qa",
-    })
+    }
+    if plan["slug_mode"] == "custom":
+        payload["slug"] = f"undangan-qa-{plan_id}"
+    created = TestClient(server.app).post("/api/invitations", json=payload)
 
     assert created.status_code == 200
     invitation = created.json()
-    assert invitation["plan_id"] == "business"
+    assert invitation["plan_id"] == plan_id
     assert invitation["status"] == "active"
-    assert invitation["active_until"] == server.TEST_ACCOUNT_ACTIVE_UNTIL
+    assert invitation["active_until"] == test_access_until
 
-    published = client.post(f"/api/invitations/{invitation['id']}/publish")
+    published = TestClient(server.app).post(f"/api/invitations/{invitation['id']}/publish")
     assert published.status_code == 200
     assert published.json()["status"] == "published"
+
+
+def test_test_account_access_requires_a_valid_expiry():
+    assert server.test_account_access_expired({"is_test_account": True}) is True
+    assert server.test_account_access_expired({
+        "is_test_account": True,
+        "test_access_until": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(),
+    }) is True
+    assert server.test_account_access_expired({
+        "is_test_account": True,
+        "test_access_until": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+    }) is False
+
+
+def test_expired_test_account_cannot_log_in(monkeypatch):
+    password = "temporary-test-password"
+    expired_user = {
+        "id": "tester-1",
+        "email": "tester@example.com",
+        "full_name": "Tester",
+        "password_hash": server.bcrypt.hashpw(password.encode(), server.bcrypt.gensalt()).decode(),
+        "is_test_account": True,
+        "test_access_until": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(users=FakeCollection(expired_user)))
+    monkeypatch.setattr(server, "get_jwt_secret", lambda: "test-secret-with-at-least-32-characters")
+
+    response = TestClient(server.app).post("/api/auth/login", json={
+        "email": expired_user["email"],
+        "password": password,
+    })
+
+    assert response.status_code == 403
+    assert "berakhir" in response.json()["detail"].lower()
 
 
 def test_regular_user_still_gets_a_draft_without_tester_access(monkeypatch):

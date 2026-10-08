@@ -233,6 +233,59 @@ test('protects the user dashboard when no account is signed in', async () => {
   expect(await screen.findByRole('heading', { name: /masuk untuk mengelola undangan/i })).toBeDefined();
 });
 
+test('test account can select each package and sees its access expiry', async () => {
+  sessionStorage.setItem('undangan.id.session', JSON.stringify({
+    access_token: 'test-token',
+    user: {
+      id: 'tester-1',
+      full_name: 'Tester',
+      email: 'tester@example.com',
+      role: 'user',
+      is_test_account: true,
+      test_access_until: '2027-05-10T00:00:00+00:00',
+    },
+  }));
+  const plans = ['basic', 'premium', 'business'].map((id) => ({
+    id,
+    name: id,
+    price: 599000,
+    duration_days: 365,
+    slug_mode: id === 'basic' ? 'generated' : 'custom',
+  }));
+  vi.stubGlobal('fetch', vi.fn(async (url) => {
+    const path = new URL(url, window.location.origin).pathname;
+    const payload = path.endsWith('/auth/me')
+      ? { user: { id: 'tester-1', full_name: 'Tester', email: 'tester@example.com', role: 'user', is_test_account: true, test_access_until: '2027-05-10T00:00:00+00:00' } }
+      : path.endsWith('/billing/config')
+        ? { plans, payment_methods: [] }
+        : path.endsWith('/dashboard-admins')
+          ? { eligible: false, max_admins: 3, admins: [] }
+          : path.endsWith('/affiliate-program')
+            ? { eligible: false, program: null, combinations: [], affiliates: [] }
+            : [];
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: () => 'application/json' },
+      json: async () => payload,
+    };
+  }));
+  window.history.pushState({}, '', '/undangan-dashboard');
+  const { container } = renderApp();
+
+  fireEvent.change(await screen.findByLabelText('Kelompok acara'), { target: { value: 'Pernikahan' } });
+  fireEvent.change(screen.getByLabelText('Jenis acara'), { target: { value: 'Pernikahan' } });
+  fireEvent.click(container.querySelector('.setup-template-card'));
+  fireEvent.click(screen.getByRole('button', { name: 'Lanjutkan ke isi data' }));
+  const packageSelect = await screen.findByLabelText('Paket');
+  expect(packageSelect.disabled).toBe(false);
+  expect([...packageSelect.options].map((option) => option.value)).toEqual(['basic', 'premium', 'business']);
+  expect(screen.getByText(/akses semua paket tanpa pembayaran hingga/)).toBeDefined();
+  fireEvent.change(packageSelect, { target: { value: 'premium' } });
+  expect(packageSelect.value).toBe('premium');
+});
+
 const mountPublishedInvitationDashboard = (planId) => {
   const invitation = {
     id: 'invitation-1',

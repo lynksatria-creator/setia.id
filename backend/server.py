@@ -278,9 +278,6 @@ DEFAULT_BILLING_CONFIG = {
     ],
 }
 
-TEST_ACCOUNT_ACTIVE_UNTIL = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc).isoformat()
-
-
 def get_jwt_secret():
     secret = os.environ.get("JWT_SECRET", "")
     if len(secret) < 32:
@@ -519,6 +516,7 @@ def public_user(user):
     }
     if user.get("is_test_account") is True:
         result["is_test_account"] = True
+        result["test_access_until"] = user.get("test_access_until")
     if user.get("is_demo"):
         result["is_demo"] = True
         result["demo_until"] = user.get("demo_until")
@@ -527,6 +525,21 @@ def public_user(user):
         result["basic_quota"] = user.get("basic_quota", 0)
         result["premium_quota"] = user.get("premium_quota", 0)
     return result
+
+
+def test_account_access_expired(user: dict):
+    if user.get("is_test_account") is not True:
+        return False
+    expires_at = user.get("test_access_until")
+    if not expires_at:
+        return True
+    try:
+        parsed_expiry = datetime.fromisoformat(expires_at)
+    except ValueError:
+        return True
+    if parsed_expiry.tzinfo is None:
+        parsed_expiry = parsed_expiry.replace(tzinfo=timezone.utc)
+    return parsed_expiry <= datetime.now(timezone.utc)
 
 
 async def demo_account_expired(user: dict):
@@ -558,6 +571,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(b
         raise HTTPException(status_code=401, detail="Akun tidak ditemukan.")
     if user.get("role") in {"dashboard_admin", "affiliate"} and not user.get("active", True):
         raise HTTPException(status_code=403, detail="Akses akun sudah dinonaktifkan pemilik.")
+    if test_account_access_expired(user):
+        raise HTTPException(status_code=403, detail="Masa akses akun tester sudah berakhir.")
     if await demo_account_expired(user):
         raise HTTPException(status_code=403, detail="Masa akun demo sudah berakhir.")
     return user
@@ -741,6 +756,9 @@ async def login_user(payload: UserLogin):
     user = await db.users.find_one({"email": email})
     if user is None or not bcrypt.checkpw(payload.password.encode("utf-8"), user["password_hash"].encode("utf-8")):
         raise HTTPException(status_code=401, detail="Email atau kata sandi salah.")
+
+    if test_account_access_expired(user):
+        raise HTTPException(status_code=403, detail="Masa akses akun tester sudah berakhir.")
     if user.get("role") in {"dashboard_admin", "affiliate"} and not user.get("active", True):
         raise HTTPException(status_code=403, detail="Akses akun sudah dinonaktifkan pemilik.")
     if await demo_account_expired(user):
@@ -1061,11 +1079,6 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
             raise HTTPException(status_code=409, detail="Akun demo hanya dapat membuat maksimal 2 undangan.")
 
     has_test_access = current_user.get("is_test_account") is True
-    if has_test_access:
-        plan = next(
-            (item for item in config["plans"] if item["id"] == "business" and item.get("enabled", True)),
-            next((item for item in config["plans"] if item.get("slug_mode") == "custom" and item.get("enabled", True)), plan),
-        )
 
     if plan["slug_mode"] == "custom" and not payload.slug:
         raise HTTPException(status_code=422, detail="Paket ini memerlukan link undangan pilihan Anda.")
@@ -1089,7 +1102,7 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
         "content": payload.content,
         "status": "active" if has_test_access or demo_owner else "draft",
         "payment_id": None,
-        "active_until": demo_owner.get("demo_until") if demo_owner else TEST_ACCOUNT_ACTIVE_UNTIL if has_test_access else None,
+        "active_until": demo_owner.get("demo_until") if demo_owner else current_user.get("test_access_until") if has_test_access else None,
         "is_demo": bool(demo_owner),
         "created_at": now,
         "updated_at": now,

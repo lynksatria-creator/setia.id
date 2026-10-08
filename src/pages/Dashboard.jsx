@@ -226,8 +226,7 @@ export default function Dashboard({ onSignIn }) {
     return () => { active = false; };
   }, [token, user?.role]);
 
-  const selectedPlan = billing.plans.find((plan) => plan.id === (user?.is_test_account ? 'business' : form.plan_id))
-    || billing.plans.find((plan) => plan.id === form.plan_id);
+  const selectedPlan = billing.plans.find((plan) => plan.id === form.plan_id);
   const selectedPaymentMethod = billing.payment_methods.find((method) => method.id === paymentMethodId);
   const affiliatePlanCounts = {
     basic: invitations.filter((invitation) => invitation.plan_id === 'basic').length,
@@ -845,9 +844,9 @@ export default function Dashboard({ onSignIn }) {
       <div className={`account-layout container ${user.role !== 'user' ? 'account-layout-restricted' : ''}`}>
         <section className="account-main-column">
           <div className="account-heading">
-            <div><p className="eyebrow">Ruang undangan Anda</p><h1>Rancang cerita hari istimewa.</h1><p>{user.is_test_account ? 'Buat undangan tanpa batas dan bagikan setelah dipublikasikan.' : 'Buat draft, edit detail acara, lalu aktifkan setelah pembayaran dikonfirmasi.'}</p></div>
+            <div><p className="eyebrow">Ruang undangan Anda</p><h1>Rancang cerita hari istimewa.</h1><p>{user.is_test_account ? 'Pilih paket Basic, Premium, atau Business selama masa akses tester.' : 'Buat draft, edit detail acara, lalu aktifkan setelah pembayaran dikonfirmasi.'}</p></div>
           </div>
-          {user.is_test_account ? <p className="account-message" role="status">Akun tester · akses Business tanpa batas. Semua undangan aktif selamanya dan tidak memerlukan pembayaran.</p> : null}
+          {user.is_test_account ? <p className="account-message" role="status">Akun tester · akses semua paket tanpa pembayaran hingga {user.test_access_until ? new Date(user.test_access_until).toLocaleDateString('id-ID') : 'masa akses berakhir'}. Undangan aktif mengikuti batas masa akses akun.</p> : null}
           {user.is_demo ? <section className="account-panel demo-account-notice" role="status"><strong>Akun demo · Paket {user.demo_plan_id}</strong><p>Akses berakhir {new Date(user.demo_until).toLocaleString('id-ID')}. Akun demo hanya dapat mengirim maksimal 2 undangan{user.demo_plan_id === 'business' ? ' untuk seluruh jaringan akun' : ''} dan tidak dapat melakukan pembayaran.</p><span>{invitations.length}/2 undangan digunakan</span></section> : null}
 
           {user.role === 'user' ? (
@@ -934,7 +933,7 @@ export default function Dashboard({ onSignIn }) {
             <div className="account-panel-heading"><div><span className="eyebrow">{editingId ? 'Edit undangan' : 'Undangan baru'}</span><h2>{editingId ? 'Perbarui detail acara' : 'Mulai dengan detail acara'}</h2></div>{editingId ? <button className="text-button" onClick={resetForm}>Buat draft baru</button> : null}</div>
             <form className="invitation-editor-form" onSubmit={saveInvitation}>
               <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder="Pernikahan Aulia & Farhan" /></label>
-              <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_test_account || user.is_demo} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {user.role === 'affiliate' ? `kuota tersisa ${(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}` : `Rp ${Number(plan.price).toLocaleString('id-ID')}`} · {plan.duration_days} hari</option>)}</select></label>
+              <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_demo} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {user.is_test_account ? 'akses tester' : user.role === 'affiliate' ? `kuota tersisa ${(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}` : `Rp ${Number(plan.price).toLocaleString('id-ID')}`} · {plan.duration_days} hari</option>)}</select></label>
               {selectedPlan?.slug_mode === 'custom' ? <label>Link pilihan<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} required minLength={3} maxLength={64} placeholder="aulia-farhan" /><small>URL publik: {window.location.host}/i/{form.slug || 'link-pilihan'}</small></label> : <p className="form-hint">Paket Basic memakai link otomatis setelah draft dibuat.</p>}
               <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; setSetupGroup(group); updateField('event_type', eventType); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
               <label>Inspirasi daerah<select value={form.province} onChange={(event) => { const province = event.target.value; const regionalTemplate = regionalInvitationTemplates.find((template) => template.province === province); setForm((current) => ({ ...current, province, ...(!province && current.template_id.startsWith('regional-') ? { template_id: 'luxury-gold' } : {}), ...(regionalTemplate ? { template_id: regionalTemplate.id, custom_design: false } : {}) })); }}><option value="">Tidak memakai gaya daerah khusus</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province} · {template.inspiration}</option>)}</optgroup>)}</select></label>
