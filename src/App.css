@@ -730,7 +730,107 @@ blockquote span {
 }
 
 .invitation-visual {
-  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.38), transparent 28%), linear-gradient(135deg, #0f1b2d 0%, #1d3557 42%, #d9b16b 100%);
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: linear-gradient(145deg, #25342e, #9d8666 58%, #e8cba7);
+  box-shadow: 0 32px 70px rgba(38, 45, 40, 0.2);
+}
+
+.invitation-visual::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(22, 27, 24, 0.06) 28%, rgba(22, 27, 24, 0.58) 100%),
+    linear-gradient(90deg, rgba(22, 27, 24, 0.18), transparent 70%);
+  content: '';
+  pointer-events: none;
+}
+
+.invitation-visual .site-hero-image {
+  z-index: 0;
+}
+
+.invitation-visual .floating-card,
+.invitation-visual .hero-panel {
+  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 18px;
+  background: rgba(34, 39, 35, 0.32);
+  box-shadow: 0 14px 36px rgba(15, 20, 17, 0.16);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.invitation-visual .floating-card {
+  left: 28px;
+  width: auto;
+  min-width: 120px;
+  padding: 0.85rem 1.1rem;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.08rem;
+  letter-spacing: 0.015em;
+}
+
+.invitation-visual .card-a {
+  top: 28px;
+}
+
+.invitation-visual .card-b {
+  bottom: 132px;
+  left: 28px;
+}
+
+.invitation-visual .hero-panel {
+  right: 28px;
+  bottom: 28px;
+  max-width: min(280px, calc(100% - 56px));
+  gap: 5px;
+  padding: 1rem 1.2rem;
+}
+
+.invitation-visual .hero-panel span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.invitation-visual .hero-panel strong {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: clamp(1.05rem, 2.1vw, 1.35rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 600px) {
+  .invitation-visual {
+    min-height: 360px;
+    border-radius: 26px;
+  }
+
+  .invitation-visual .floating-card {
+    left: 18px;
+    min-width: 106px;
+    padding: 0.72rem 0.9rem;
+  }
+
+  .invitation-visual .card-a {
+    top: 18px;
+  }
+
+  .invitation-visual .card-b {
+    bottom: 118px;
+    left: 18px;
+  }
+
+  .invitation-visual .hero-panel {
+    right: 18px;
+    bottom: 18px;
+    max-width: calc(100% - 36px);
+    padding: 0.85rem 1rem;
+  }
 }
 
 .category-grid {
