@@ -36,6 +36,10 @@ const videoEmbedUrl = (url) => {
   if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
   return url;
 };
+const isDirectVideoUrl = (url) => (
+  /^data:video\/(?:mp4|webm|ogg);base64,/i.test(url)
+  || /\.(mp4|webm|ogg|mov|m4v)(?:[?#].*)?$/i.test(url)
+);
 
 const isDirectVideoUrl = (url) => /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(url || '');
 
@@ -197,6 +201,14 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
+  }, [invitation]);
+
+  useEffect(() => {
+    if (!invitation || window.location.hash !== '#rsvp') return undefined;
+    const timer = window.setTimeout(() => {
+      document.getElementById('rsvp')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [invitation]);
 
   useEffect(() => {
@@ -395,9 +407,9 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
         {gallery.length ? <section className="wedding-section wedding-gallery"><p className="wedding-eyebrow">MOMENTS</p><h2>Our beautiful moments</h2><div className="wedding-gallery-grid">{gallery.map((image, index) => <button key={`${image}-${index}`} onClick={() => setSelectedImage(image)}><img src={image} alt={`Momen acara ${index + 1}`} loading="lazy" /></button>)}</div></section> : null}
 
-        {content.video_url && !coverVideo ? <section className="wedding-section wedding-video"><p className="wedding-eyebrow">OUR BEAUTIFUL MOMENTS</p><h2>{isCoupleEvent ? 'Film kisah kami' : 'Video acara'}</h2>{/\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(content.video_url) ? <video src={content.video_url} controls playsInline preload="metadata" /> : <iframe src={videoEmbedUrl(content.video_url)} title="Video undangan" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />}</section> : null}
+        {content.video_url && !coverVideo ? <section className="wedding-section wedding-video"><p className="wedding-eyebrow">OUR BEAUTIFUL MOMENTS</p><h2>{isCoupleEvent ? 'Film kisah kami' : 'Video acara'}</h2>{isDirectVideoUrl(content.video_url) ? <video src={content.video_url} controls playsInline preload="metadata" /> : <iframe src={videoEmbedUrl(content.video_url)} title="Video undangan" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />}</section> : null}
 
-        <section className="wedding-section wedding-rsvp"><p className="wedding-eyebrow">UNDANGAN RESMI</p><h2>Konfirmasi kehadiran</h2><p>{isCoupleEvent ? 'Mohon konfirmasi kehadiran dan titipkan doa terbaik untuk perjalanan kami.' : `Mohon konfirmasi kehadiran Anda di acara ${eventLabel.toLowerCase()}.`}</p>{content.rsvp_url ? <a className="wedding-calendar-button" href={content.rsvp_url} target="_blank" rel="noreferrer">KONFIRMASI RSVP</a> : null}<form className="wedding-guest-form" onSubmit={submitGuestbook}><input value={guestForm.name} onChange={(event) => setGuestForm({ ...guestForm, name: event.target.value })} placeholder="Nama Anda" required minLength={2} /><select value={guestForm.attendance} onChange={(event) => setGuestForm({ ...guestForm, attendance: event.target.value })}><option value="attending">Saya akan hadir</option><option value="not_attending">Maaf, belum bisa hadir</option><option value="maybe">Masih tentatif</option></select><input type="number" min="1" max="10" value={guestForm.guests} onChange={(event) => setGuestForm({ ...guestForm, guests: Number(event.target.value) })} aria-label="Jumlah tamu" /><textarea value={guestForm.message} onChange={(event) => setGuestForm({ ...guestForm, message: event.target.value })} placeholder="Tulis ucapan dan doa..." required minLength={2} /><button className="wedding-calendar-button" disabled={isGuestSubmitting}>{isGuestSubmitting ? 'MENGIRIM...' : 'KIRIM RSVP & UCAPAN'}</button>{guestMessage ? <span className="wedding-guest-message" role="status">{guestMessage}</span> : null}</form></section>
+        <section id="rsvp" className="wedding-section wedding-rsvp"><p className="wedding-eyebrow">UNDANGAN RESMI</p><h2>Konfirmasi kehadiran</h2><p>{isCoupleEvent ? 'Mohon konfirmasi kehadiran dan titipkan doa terbaik untuk perjalanan kami.' : `Mohon konfirmasi kehadiran Anda di acara ${eventLabel.toLowerCase()}.`}</p>{content.rsvp_url ? <a className="wedding-calendar-button" href={content.rsvp_url} target="_blank" rel="noreferrer">KONFIRMASI RSVP</a> : null}<form className="wedding-guest-form" onSubmit={submitGuestbook}><input value={guestForm.name} onChange={(event) => setGuestForm({ ...guestForm, name: event.target.value })} placeholder="Nama Anda" required minLength={2} /><select value={guestForm.attendance} onChange={(event) => setGuestForm({ ...guestForm, attendance: event.target.value })}><option value="attending">Saya akan hadir</option><option value="not_attending">Maaf, belum bisa hadir</option><option value="maybe">Masih tentatif</option></select><input type="number" min="1" max="10" value={guestForm.guests} onChange={(event) => setGuestForm({ ...guestForm, guests: Number(event.target.value) })} aria-label="Jumlah tamu" /><textarea value={guestForm.message} onChange={(event) => setGuestForm({ ...guestForm, message: event.target.value })} placeholder="Tulis ucapan dan doa..." required minLength={2} /><button className="wedding-calendar-button" disabled={isGuestSubmitting}>{isGuestSubmitting ? 'MENGIRIM...' : 'KIRIM RSVP & UCAPAN'}</button>{guestMessage ? <span className="wedding-guest-message" role="status">{guestMessage}</span> : null}</form></section>
         <section className="wedding-section wedding-guestbook"><p className="wedding-eyebrow">BUKU TAMU</p><h2>Ucapan untuk kami</h2><div className="wedding-guestbook-list">{guestbook.length ? guestbook.map((entry) => <article key={entry.id}><strong>{entry.name}</strong><span>{entry.attendance === 'attending' ? 'Akan hadir' : entry.attendance === 'maybe' ? 'Masih tentatif' : 'Belum bisa hadir'}{entry.guests > 1 ? ` · ${entry.guests} tamu` : ''}</span><p>{entry.message}</p></article>) : <p>Jadilah yang pertama meninggalkan ucapan.</p>}</div></section>
         <section className="wedding-section wedding-closing"><p>{isTemplateDemo ? copy.closing : isCoupleEvent ? 'Terima kasih atas doa dan kasih yang mengiringi langkah kami.' : 'Terima kasih atas perhatian dan kesediaan Anda untuk hadir.'}</p>{isCoupleEvent ? coupleNames ? <h2>{coupleNames}</h2> : null : honoreeName ? <h2>{honoreeName}</h2> : null}<span>{copy.kicker}</span></section>
       </div>

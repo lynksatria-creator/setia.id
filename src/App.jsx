@@ -835,7 +835,11 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
               </div>
               <div className="portal-preset-catalog">
                 {portalPresets.map((preset, index) => (
-                  <button type="button" key={preset.id} className={formData.theme.preset === preset.id ? 'portal-preset-chip is-selected' : 'portal-preset-chip'} onClick={() => updateField('theme.preset', preset.id)}>
+                  <button type="button" key={preset.id} className={formData.theme.preset === preset.id ? 'portal-preset-chip is-selected' : 'portal-preset-chip'} onClick={() => {
+                    const visualPreset = getThemeCatalog(site)[index * 5];
+                    updateField(['theme'], { ...formData.theme, ...visualPreset, preset: preset.id });
+                    setEditorMessage('Tema diterapkan. Klik Publish untuk mengubah tampilan website.');
+                  }}>
                     <span>{String(index + 1).padStart(2, '0')}</span>{preset.name}
                   </button>
                 ))}
@@ -895,7 +899,7 @@ const LegacyPortalHome = () => {
   const portalData = useMemo(() => mergeDataDefaults(defaultPortalData, loadData(storage.portal, defaultPortalData)), []);
 
   return (
-    <div className={`site-shell theme-portal theme-layout-${portalData.theme?.layout || 'editorial'}`} style={themeStyle(portalData.theme)}>
+    <div className={`site-shell theme-portal theme-layout-${portalData.theme?.layout || 'editorial'} theme-preset-${portalData.theme?.preset || 'default'}`} style={themeStyle(portalData.theme)}>
       <header className="topbar portal-topbar">
         <div className="container nav-wrap portal-nav-wrap">
           <a className="brand portal-brand" href="#top">{portalData.logoImage ? <img className="site-logo-image" src={portalData.logoImage} alt={`${portalData.siteName} logo`} /> : <span className="logo-mark">{portalData.logo}</span>}<span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span></a>
@@ -1239,7 +1243,7 @@ const GibrigHome = () => {
   const data = useMemo(() => mergeDataDefaults(defaultGibrigData, loadData(storage.gibrig, defaultGibrigData)), []);
 
   return (
-    <div className={`site-shell gibrig-shell theme-layout-${data.theme?.layout || 'editorial'}`} style={themeStyle(data.theme)}>
+    <div className={`site-shell gibrig-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
       <header className="topbar gibrig-topbar">
         <div className="container nav-wrap">
           <div className="brand">{data.logoImage ? <img className="site-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="logo-mark">{data.logo || 'G'}</span>}{data.siteName}</div>
@@ -1386,7 +1390,7 @@ const NunuyHome = () => {
   const data = useMemo(() => mergeDataDefaults(defaultNunuyData, loadData(storage.nunuy, defaultNunuyData)), []);
 
   return (
-    <div className={`site-shell nunuy-shell theme-layout-${data.theme?.layout || 'editorial'}`} style={themeStyle(data.theme)}>
+    <div className={`site-shell nunuy-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
       <header className="topbar nunuy-topbar">
         <div className="container nav-wrap">
           <div className="brand">{data.logoImage ? <img className="site-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="logo-mark">{data.logo || 'N'}</span>}{data.siteName}</div>
@@ -1482,7 +1486,7 @@ const InvitationHome = () => {
   }, []);
 
   return (
-    <div className={`site-shell invitation-shell theme-layout-${data.theme?.layout || 'editorial'}`} style={themeStyle(data.theme)}>
+    <div className={`site-shell invitation-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
       <Navbar
         siteName={data.siteName}
         logo={data.logo}

@@ -679,6 +679,28 @@ def test_test_account_can_use_any_package_without_payment(monkeypatch, plan_id):
     assert published.json()["status"] == "published"
 
 
+@pytest.mark.parametrize("plan_id", ["basic", "premium", "business"])
+def test_invitation_links_are_generated_when_owner_does_not_choose_a_slug(monkeypatch, plan_id):
+    invitation_collection = FakeCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        platform_settings=FakeCollection(copy.deepcopy(server.DEFAULT_BILLING_CONFIG)),
+        invitations=invitation_collection,
+    ))
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: {
+        "id": "owner-1",
+        "role": "user",
+    })
+
+    response = TestClient(server.app).post("/api/invitations", json={
+        "plan_id": plan_id,
+        "title": "Hari Bahagia",
+        "content": {},
+    })
+
+    assert response.status_code == 200
+    assert response.json()["slug"].startswith("hari-bahagia-")
+
+
 def test_test_account_access_requires_a_valid_expiry():
     assert server.test_account_access_expired({"is_test_account": True}) is True
     assert server.test_account_access_expired({

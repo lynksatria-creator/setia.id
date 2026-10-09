@@ -38,6 +38,7 @@ const emptyForm = {
   story: '',
   opening_text: '',
   music_url: '',
+  music_catalog_id: '',
   video_url: '',
   rsvp_url: '',
   gallery: '',
@@ -93,6 +94,12 @@ const eventGroups = [
 const weddingEventTypes = ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy'];
 const organizerEventTypes = ['Reuni', 'Gathering', 'Family Gathering', 'Halal Bihalal', 'Seminar', 'Workshop', 'Meeting', 'Grand Opening', 'Event', 'Acara Komunitas', 'Custom Event'];
 const eWalletProviders = ['GoPay', 'DANA', 'OVO', 'ShopeePay', 'LinkAja'];
+const musicCatalog = [
+  { id: 'piano-romantis', genre: 'Romantis', name: 'Piano Romantis', url: '/music/piano-romantis.wav' },
+  { id: 'akustik-hangat', genre: 'Akustik', name: 'Akustik Hangat', url: '/music/akustik-hangat.wav' },
+  { id: 'instrumental-tenang', genre: 'Instrumental', name: 'Instrumental Tenang', url: '/music/instrumental-tenang.wav' },
+  { id: 'nusantara-pentatonik', genre: 'Nusantara', name: 'Nusantara Pentatonik', url: '/music/nusantara-pentatonik.wav' },
+];
 
 const eventTemplateRecommendations = {
   Pernikahan: { categories: ['Pernikahan', 'Gen Z'] },
@@ -220,6 +227,55 @@ const loadOwnerGuestbookEntries = async (token, invitations) => {
     new Date(right.created_at || right.checked_in_at || 0) - new Date(left.created_at || left.checked_in_at || 0)
   ));
 };
+const copyTextToClipboard = async (value) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const input = document.createElement('textarea');
+  input.value = value;
+  input.setAttribute('readonly', '');
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.append(input);
+  input.select();
+  const copied = document.execCommand('copy');
+  input.remove();
+  if (!copied) throw new Error('Tautan tidak dapat disalin. Silakan salin secara manual.');
+};
+const downloadGuestbookSpreadsheet = async (entries, filename) => {
+  const { default: ExcelJS } = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('RSVP & Buku Tamu');
+  sheet.columns = [
+    { header: 'Nama tamu', key: 'name', width: 28 },
+    { header: 'Konfirmasi kehadiran', key: 'attendance', width: 24 },
+    { header: 'Jumlah tamu', key: 'guests', width: 14 },
+    { header: 'Ucapan', key: 'message', width: 60 },
+    { header: 'Nama undangan', key: 'invitation_title', width: 30 },
+    { header: 'Waktu RSVP', key: 'created_at', width: 25 },
+  ];
+  sheet.addRows(entries.map((entry) => ({
+    ...entry,
+    attendance: entry.attendance === 'attending'
+      ? 'Akan hadir'
+      : entry.attendance === 'not_attending'
+        ? 'Belum bisa hadir'
+        : entry.attendance === 'maybe' ? 'Masih tentatif' : entry.attendance || '',
+    created_at: entry.created_at ? new Date(entry.created_at).toLocaleString('id-ID') : '',
+  })));
+  sheet.getRow(1).font = { bold: true };
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+  const content = await workbook.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([content], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+};
 
 export default function Dashboard({ onSignIn }) {
   const { user, token, isChecking, logout } = useAuth();
@@ -307,6 +363,7 @@ export default function Dashboard({ onSignIn }) {
   }, [token, user?.role]);
 
   const selectedPlan = billing.plans.find((plan) => plan.id === form.plan_id);
+  const editingInvitation = editingId ? invitations.find((invitation) => invitation.id === editingId) : null;
   const selectedPaymentMethod = billing.payment_methods.find((method) => method.id === paymentMethodId);
   const checkInInvitations = invitations.filter((invitation) => (
     invitation.status === 'published' && new Date(invitation.active_until) > new Date()
@@ -522,6 +579,7 @@ export default function Dashboard({ onSignIn }) {
       opening_text: form.opening_text,
       story: form.story,
       music_url: form.music_url,
+      music_catalog_id: form.music_catalog_id,
       video_url: form.video_url,
       rsvp_url: form.rsvp_url,
       digital_envelope: form.digital_envelope,
@@ -599,6 +657,7 @@ export default function Dashboard({ onSignIn }) {
       story: content.story || '',
       opening_text: content.opening_text || '',
       music_url: content.music_url || '',
+      music_catalog_id: content.music_catalog_id || musicCatalog.find((track) => track.url === content.music_url)?.id || '',
       video_url: content.video_url || '',
       rsvp_url: content.rsvp_url || '',
       gallery: Array.isArray(content.gallery) ? content.gallery.join('\n') : '',
@@ -609,18 +668,42 @@ export default function Dashboard({ onSignIn }) {
   };
 
   const handleMusicUpload = (event) => {
-    const [file] = event.target.files;
+    const [file] = event.target.files || [];
     if (!file) return;
+    if (!file.type.startsWith('audio/')) {
+      setError('Pilih file musik dengan format audio yang didukung.');
+      return;
+    }
     if (file.size > 8 * 1024 * 1024) {
       setError('Ukuran musik maksimal 8 MB. Gunakan URL musik untuk file yang lebih besar.');
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
-      updateField('music_url', reader.result);
+      setForm((current) => ({ ...current, music_url: reader.result, music_catalog_id: '' }));
       setMessage('Musik berhasil dimuat. Simpan draft untuk menerapkannya.');
     };
     reader.onerror = () => setError('File musik tidak dapat dibaca.');
+    reader.readAsDataURL(file);
+  };
+
+  const handleVideoUpload = (event) => {
+    const [file] = event.target.files || [];
+    if (!file) return;
+    if (!['video/mp4', 'video/webm', 'video/ogg'].includes(file.type)) {
+      setError('Gunakan video MP4, WebM, atau Ogg.');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setError('Ukuran video maksimal 4 MB. Gunakan tautan video untuk file yang lebih besar.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateField('video_url', reader.result);
+      setMessage('Video berhasil dimuat. Simpan draft untuk menerapkannya.');
+    };
+    reader.onerror = () => setError('File video tidak dapat dibaca.');
     reader.readAsDataURL(file);
   };
 
@@ -770,8 +853,8 @@ export default function Dashboard({ onSignIn }) {
     const payload = { title: form.title, content };
     if (!editingId) {
       payload.plan_id = planId;
-      if (plan?.slug_mode === 'custom') payload.slug = form.slug;
-    } else if (plan?.slug_mode === 'custom') {
+      if (plan?.id !== 'basic' && form.slug.trim()) payload.slug = form.slug;
+    } else if (plan?.id !== 'basic' && form.slug.trim()) {
       payload.slug = form.slug;
     }
 
@@ -807,6 +890,42 @@ export default function Dashboard({ onSignIn }) {
       await refreshInvitations();
     } catch (requestError) {
       setError(requestError.message);
+    }
+  };
+
+  const copyInvitationLink = async (invitation, section = '') => {
+    const link = `${window.location.origin}/i/${encodeURIComponent(invitation.slug)}${section}`;
+    try {
+      await copyTextToClipboard(link);
+      setMessage(section ? 'Link RSVP berhasil disalin.' : 'Link undangan berhasil disalin.');
+      setError('');
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const shareInvitation = async (invitation) => {
+    const link = `${window.location.origin}/i/${encodeURIComponent(invitation.slug)}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: invitation.title, text: 'Undangan acara', url: link });
+        return;
+      }
+      await copyTextToClipboard(link);
+      setMessage('Link undangan disalin agar dapat dibagikan.');
+      setError('');
+    } catch (requestError) {
+      if (requestError.name !== 'AbortError') setError(requestError.message || 'Undangan tidak dapat dibagikan.');
+    }
+  };
+
+  const exportGuestbook = async (entries, filename) => {
+    setError('');
+    try {
+      await downloadGuestbookSpreadsheet(entries, filename);
+      setMessage('Data RSVP berhasil diunduh dalam format .xlsx.');
+    } catch (requestError) {
+      setError(requestError.message || 'Data RSVP tidak dapat diekspor.');
     }
   };
 
@@ -1124,9 +1243,12 @@ export default function Dashboard({ onSignIn }) {
               <section className="account-panel buyer-dashboard-guestbook buyer-dashboard-view" hidden={!showBuyerDashboard}>
                 <div className="account-panel-heading">
                   <div><span className="eyebrow">RSVP & ucapan</span><h2>Daftar tamu dan pesan terbaru</h2></div>
-                  <button type="button" className="text-button" onClick={refreshDashboardGuestbook} disabled={isLoadingDashboardGuestbook}>
-                    {isLoadingDashboardGuestbook ? 'Memuat…' : 'Muat ulang'}
-                  </button>
+                  <div className="account-card-actions">
+                    <button type="button" className="secondary-btn" onClick={() => exportGuestbook(dashboardGuestbook, 'rsvp-semua-undangan.xlsx')} disabled={!dashboardGuestbook.length}>Unduh RSVP .xlsx</button>
+                    <button type="button" className="text-button" onClick={refreshDashboardGuestbook} disabled={isLoadingDashboardGuestbook}>
+                      {isLoadingDashboardGuestbook ? 'Memuat…' : 'Muat ulang'}
+                    </button>
+                  </div>
                 </div>
                 <p className="form-hint">Konfirmasi kehadiran dan ucapan dari seluruh undangan Anda ditampilkan di sini.</p>
                 {isLoadingDashboardGuestbook && !dashboardGuestbook.length ? <p role="status">Memuat daftar tamu…</p> : null}
@@ -1229,7 +1351,12 @@ export default function Dashboard({ onSignIn }) {
             <form className="invitation-editor-form" onSubmit={saveInvitation}>
               <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder="Pernikahan Aulia & Farhan" /></label>
               <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_demo} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {user.is_test_account ? 'akses tester' : user.role === 'affiliate' ? `kuota tersisa ${(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}` : `Rp ${Number(plan.price).toLocaleString('id-ID')}`} · {plan.duration_days} hari</option>)}</select></label>
-              {selectedPlan?.slug_mode === 'custom' ? <label>Link pilihan<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} required minLength={3} maxLength={64} placeholder="aulia-farhan" /><small>URL publik: {window.location.host}/i/{form.slug || 'link-pilihan'}</small></label> : <p className="form-hint">Paket Basic memakai link otomatis setelah draft dibuat.</p>}
+              {selectedPlan?.id !== 'basic' ? <label>Link undangan (opsional, dapat diedit)<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} minLength={3} maxLength={64} placeholder={form.title ? form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : 'nama-acara'} /><small>Kosongkan untuk membuat link otomatis saat disimpan. Anda tetap dapat mengubah link ini nanti.</small></label> : <p className="form-hint">Paket Basic menggunakan link otomatis yang dibuat sistem.</p>}
+              <div className="generated-rsvp-link">
+                <label>Link RSVP otomatis<input readOnly value={editingInvitation ? `${window.location.origin}/i/${editingInvitation.slug}#rsvp` : 'Link RSVP dibuat setelah draft disimpan'} /></label>
+                {editingInvitation ? <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(editingInvitation, '#rsvp')}>Salin link RSVP</button> : null}
+                <small className="form-hint">Tamu mengisi konfirmasi kehadiran langsung di halaman undangan. Link RSVP mengikuti slug undangan Anda.</small>
+              </div>
               <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; const recommendedTemplate = getTemplatesForEvent(invitationTemplates, eventType)[0]; setSetupGroup(group); setForm((current) => ({ ...current, event_type: eventType, province: '', template_id: recommendedTemplate?.id || current.template_id, custom_design: false })); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
               <label>Inspirasi daerah<select value={form.province} onChange={(event) => { const province = event.target.value; const regionalTemplate = regionalInvitationTemplates.find((template) => template.province === province); const recommendedTemplate = getTemplatesForEvent(invitationTemplates, form.event_type)[0]; setForm((current) => ({ ...current, province, template_id: regionalTemplate?.id || recommendedTemplate?.id || current.template_id, custom_design: false })); }}><option value="">Tidak memakai gaya daerah khusus</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province} · {template.inspiration}</option>)}</optgroup>)}</select></label>
               <div className="template-picker-field">
@@ -1291,8 +1418,34 @@ export default function Dashboard({ onSignIn }) {
               <div className="media-upload-field"><label>Foto sampul<input type="file" accept="image/*" onChange={handleCoverUpload} /></label><label>Atau paste URL foto sampul<input type="url" value={form.cover_image.startsWith('data:') ? '' : form.cover_image} onChange={(event) => updateField('cover_image', event.target.value)} placeholder="https://..." /></label><small className="form-hint">Maksimal 5 MB untuk upload foto.</small></div>
               <label>Salam pembuka<textarea value={form.opening_text} onChange={(event) => updateField('opening_text', event.target.value)} rows={2} placeholder="Dengan penuh sukacita kami mengundang..." /></label>
               <label>{weddingEventTypes.includes(form.event_type) ? 'Cerita pasangan' : `Cerita ${form.event_type.toLowerCase()}`}<textarea value={form.story} onChange={(event) => updateField('story', event.target.value)} rows={4} placeholder={weddingEventTypes.includes(form.event_type) ? 'Tuliskan cerita pasangan...' : `Tuliskan cerita tentang ${form.event_type.toLowerCase()}...`} /></label>
-              <div className="music-input-field"><label>Link musik<input type="text" value={form.music_url.startsWith('data:') ? '' : form.music_url} onChange={(event) => updateField('music_url', event.target.value)} placeholder="https://..." /></label><label>Atau upload musik<input type="file" accept="audio/*" onChange={handleMusicUpload} /></label><small className="form-hint">Maksimal 8 MB untuk upload langsung. Musik akan mulai diputar saat undangan dibuka; browser mungkin meminta tamu menekan tombol Putar.</small></div>
-              <label>{weddingEventTypes.includes(form.event_type) ? 'Video prewedding / cerita pasangan' : `Video ${form.event_type.toLowerCase()}`}<input type="url" value={form.video_url} onChange={(event) => updateField('video_url', event.target.value)} placeholder="YouTube, Vimeo, atau URL MP4/WebM" /><small className="form-hint">Video YouTube/Vimeo tampil sebagai film di undangan. URL MP4/WebM langsung menjadi latar video bergerak saat sampul dibuka.</small></label>
+              <div className="music-input-field">
+                <label>Musik pilihan berdasarkan genre
+                  <select
+                    value={form.music_catalog_id || (form.music_url && !form.music_url.startsWith('/music/') ? 'custom' : '')}
+                    onChange={(event) => {
+                      const track = musicCatalog.find((item) => item.id === event.target.value);
+                      if (track) setForm((current) => ({ ...current, music_catalog_id: track.id, music_url: track.url }));
+                      else if (event.target.value === 'custom') setForm((current) => ({ ...current, music_catalog_id: '' }));
+                      else setForm((current) => ({ ...current, music_catalog_id: '', music_url: '' }));
+                    }}
+                  >
+                    <option value="">Pilih musik katalog</option>
+                    {musicCatalog.map((track) => <option key={track.id} value={track.id}>{track.genre} · {track.name}</option>)}
+                    <option value="custom">Gunakan link atau upload sendiri</option>
+                  </select>
+                </label>
+                <label>Link musik eksternal<input type="text" value={form.music_url.startsWith('data:') || form.music_url.startsWith('/music/') ? '' : form.music_url} onChange={(event) => setForm((current) => ({ ...current, music_url: event.target.value, music_catalog_id: '' }))} placeholder="https://..." /></label>
+                <label>Atau upload musik<input type="file" accept="audio/*" onChange={handleMusicUpload} /></label>
+                <small className="form-hint">Katalog berisi loop instrumental orisinal. Upload langsung maksimal 8 MB. Musik mulai diputar saat undangan dibuka; browser mungkin meminta tamu menekan tombol Putar.</small>
+              </div>
+              <div className="media-upload-field">
+                <label>{weddingEventTypes.includes(form.event_type) ? 'Video prewedding / cerita pasangan' : `Video ${form.event_type.toLowerCase()}`}
+                  <input type="url" value={form.video_url.startsWith('data:') ? '' : form.video_url} onChange={(event) => updateField('video_url', event.target.value)} placeholder="YouTube, Vimeo, atau URL MP4/WebM" />
+                </label>
+                <label>Atau upload video<input type="file" accept="video/mp4,video/webm,video/ogg" onChange={handleVideoUpload} /></label>
+                {form.video_url.startsWith('data:video/') ? <video className="media-upload-preview" src={form.video_url} controls preload="metadata" /> : null}
+                <small className="form-hint">Video YouTube/Vimeo atau tautan langsung didukung. Upload MP4, WebM, atau Ogg maksimal 4 MB.</small>
+              </div>
               <label>Link RSVP<input type="url" value={form.rsvp_url} onChange={(event) => updateField('rsvp_url', event.target.value)} placeholder="https://forms.google.com/..." /></label>
               <div className="media-upload-field"><label>Link galeri, satu URL per baris<textarea value={form.gallery} onChange={(event) => updateField('gallery', event.target.value)} rows={3} placeholder="https://foto-1.jpg\nhttps://foto-2.jpg" /></label><label>Atau upload foto galeri<input type="file" accept="image/*" multiple onChange={handleGalleryUpload} /></label><small className="form-hint">Pilih beberapa foto sekaligus. Maksimal 5 MB per foto.</small></div>
               <section className="digital-envelope-editor">
@@ -1373,7 +1526,7 @@ export default function Dashboard({ onSignIn }) {
                   );
                   return (
                     <article className="account-invitation-card" key={invitation.id}>
-                      <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p></div>
+                      <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p>{invitation.status === 'published' ? <p className="invitation-link-label">RSVP: {window.location.origin}/i/{invitation.slug}#rsvp</p> : null}</div>
                       <div className="account-card-actions">
                         <button className="secondary-btn" onClick={() => setPreviewInvitation(invitation)}>Preview</button>
                         <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
@@ -1386,6 +1539,10 @@ export default function Dashboard({ onSignIn }) {
                           <button className="primary-btn" disabled={!paymentMethodId || (selectedPaymentMethod?.provider === 'mayar' && !paymentMobile.trim())} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(plan?.price || 0).toLocaleString('id-ID')}</button>
                         </> : null}
                         {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/i/${invitation.slug}`} target="_blank" rel="noreferrer">Buka link ↗</a> : null}
+                        {user.role === 'user' && invitation.status === 'published' ? <>
+                          <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(invitation, '#rsvp')}>Salin link RSVP</button>
+                          <button className="secondary-btn" type="button" onClick={() => shareInvitation(invitation)}>Bagikan undangan</button>
+                        </> : null}
                         {user.role === 'user' && invitation.status === 'published' ? (
                           <div className="personalized-invitation-share">
                             <label>
@@ -1508,7 +1665,11 @@ export default function Dashboard({ onSignIn }) {
               ) : null}
               {guestbookInvitation ? (
                 <>
-                  <div className="guestbook-summary">
+                <div className="account-card-actions guestbook-export-actions">
+                  <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(guestbookInvitation, '#rsvp')}>Salin link RSVP</button>
+                  <button className="secondary-btn" type="button" onClick={() => exportGuestbook(ownerGuestbook, `rsvp-${guestbookInvitation.slug}.xlsx`)} disabled={!ownerGuestbook.length}>Unduh RSVP .xlsx</button>
+                </div>
+                <div className="guestbook-summary">
                     <strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span>
                     <strong>{ownerGuestbook.filter((entry) => entry.source === 'barcode_check_in').length}</strong><span>check-in barcode</span>
                     <strong>{ownerGuestbook.length}</strong><span>total kiriman</span>
@@ -1549,7 +1710,7 @@ export default function Dashboard({ onSignIn }) {
             </section>
           ) : null}
         </section>
-        {user.role === 'user' ? <aside className="account-side-column buyer-dashboard-view" hidden={!showBuyerDashboard}><section className="account-panel"><span className="eyebrow">{user.is_test_account ? 'Akses akun tester' : user.is_demo ? 'Akun demo' : 'Pilihan paket'}</span><h2>{user.is_test_account ? 'Semua fitur, tanpa batas waktu.' : user.is_demo ? `Paket ${user.demo_plan_id} · akses sementara.` : 'Waktu tayang dan link mengikuti paket.'}</h2>{user.is_test_account ? <div className="account-plan-row"><strong>Business · QA</strong><span>Selamanya</span><small>Undangan tanpa batas · semua fitur aktif · tanpa pembayaran</small><b>AKTIF</b></div> : (user.is_demo ? billing.plans.filter((plan) => plan.id === user.demo_plan_id) : billing.plans).map((plan) => <div className="account-plan-row" key={plan.id}><strong>{plan.name}</strong><span>{plan.duration_days} hari</span><small>{plan.slug_mode === 'custom' ? 'Link pilihan' : 'Link otomatis'} · maks. {plan.max_invitations || 1} undangan</small><b>{user.is_demo ? 'DEMO' : `Rp ${Number(plan.price).toLocaleString('id-ID')}`}</b></div>)}</section>{user.is_test_account || user.is_demo ? null : <p className="account-secure-note">Pembayaran gateway divalidasi server. Undangan tidak bisa dibagikan sebelum pembayaran terkonfirmasi.</p>}</aside> : null}
+        {user.role === 'user' ? <aside className="account-side-column buyer-dashboard-view" hidden={!showBuyerDashboard}><section className="account-panel"><span className="eyebrow">{user.is_test_account ? 'Akses akun tester' : user.is_demo ? 'Akun demo' : 'Pilihan paket'}</span><h2>{user.is_test_account ? 'Semua fitur, tanpa batas waktu.' : user.is_demo ? `Paket ${user.demo_plan_id} · akses sementara.` : 'Waktu tayang dan link mengikuti paket.'}</h2>{user.is_test_account ? <div className="account-plan-row"><strong>Business · QA</strong><span>Selamanya</span><small>Undangan tanpa batas · semua fitur aktif · tanpa pembayaran</small><b>AKTIF</b></div> : (user.is_demo ? billing.plans.filter((plan) => plan.id === user.demo_plan_id) : billing.plans).map((plan) => <div className="account-plan-row" key={plan.id}><strong>{plan.name}</strong><span>{plan.duration_days} hari</span><small>{plan.id === 'basic' ? 'Link otomatis' : 'Link otomatis · bisa diedit'} · maks. {plan.max_invitations || 1} undangan</small><b>{user.is_demo ? 'DEMO' : `Rp ${Number(plan.price).toLocaleString('id-ID')}`}</b></div>)}</section>{user.is_test_account || user.is_demo ? null : <p className="account-secure-note">Pembayaran gateway divalidasi server. Undangan tidak bisa dibagikan sebelum pembayaran terkonfirmasi.</p>}</aside> : null}
       </div>
     </main>
   );

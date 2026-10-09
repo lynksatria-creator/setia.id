@@ -2846,10 +2846,30 @@ input {
 
 .template-picker-field,
 .music-input-field,
-.media-upload-field {
+.media-upload-field,
+.generated-rsvp-link {
   display: grid;
   grid-column: 1 / -1;
   gap: 10px;
+}
+
+.generated-rsvp-link {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  background: #fbfcf8;
+}
+
+.generated-rsvp-link .form-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.media-upload-preview {
+  width: min(480px, 100%);
+  max-height: 240px;
+  background: #111;
 }
 
 .media-upload-field {
@@ -6392,7 +6412,9 @@ input {
   --theme-background: #fbf9f4;
   --theme-text: #20352e;
   --theme-font: 'DM Sans', sans-serif;
+  --theme-heading-font: 'DM Sans', sans-serif;
   --theme-font-scale: 1;
+  --theme-spacing: 24px;
   --theme-logo-size: 42px;
   --theme-hero-height: 440px;
   --theme-radius: 8px;
@@ -6401,10 +6423,48 @@ input {
   font-family: var(--theme-font), sans-serif;
 }
 
+.site-shell .topbar {
+  background: var(--theme-background);
+  border-color: color-mix(in srgb, var(--theme-primary), transparent 82%);
+}
+
+.site-shell .nav-links a,
+.site-shell .brand {
+  color: var(--theme-text);
+}
+
+.site-shell h1,
+.site-shell h2,
+.site-shell h3,
+.site-shell .section-head h2 {
+  color: var(--theme-primary);
+  font-family: var(--theme-heading-font), var(--theme-font), sans-serif;
+}
+
+.site-shell .section-wrap {
+  padding-block: calc(var(--theme-spacing) * 2.5);
+}
+
+.site-shell .section-wrap.muted-bg,
+.site-shell .price-card,
+.site-shell .artist-card,
+.site-shell .service-card,
+.site-shell .feature-card,
+.site-shell .quote-card,
+.site-shell .faq-item,
+.site-shell .contact-panel {
+  background-color: var(--theme-secondary);
+  border: 1px solid color-mix(in srgb, var(--theme-primary), transparent 84%);
+  border-radius: var(--theme-radius);
+}
+
 .site-shell .primary-btn,
 .site-shell .price-card button,
-.site-shell .artist-card button {
+.site-shell .artist-card button,
+.site-shell .service-card button {
   background: var(--theme-primary);
+  border-color: var(--theme-primary);
+  color: #fff;
 }
 
 .site-shell .secondary-btn {
@@ -6493,8 +6553,21 @@ input {
   justify-content: center;
 }
 
+.theme-layout-editorial .site-shell .hero-grid,
+.theme-layout-editorial .hero-grid {
+  align-items: center;
+}
+
 .theme-layout-split .hero-grid {
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+}
+
+.theme-layout-split .hero-grid > :first-child {
+  order: 0;
+}
+
+.theme-layout-split .hero-grid > :last-child {
+  order: 1;
 }
 
 .theme-layout-minimal .site-hero-image,
@@ -6511,6 +6584,12 @@ input {
 .theme-layout-classic .site-shell,
 .theme-layout-classic {
   letter-spacing: 0.015em;
+}
+
+.theme-layout-romantic .site-shell .hero-visual,
+.theme-layout-romantic .hero-visual,
+.theme-layout-romantic .portal-hero-visual {
+  box-shadow: 0 22px 55px color-mix(in srgb, var(--theme-accent), transparent 72%);
 }
 
 .theme-layout-organic .hero-visual,
@@ -6548,6 +6627,17 @@ input {
   filter: saturate(0.2);
 }
 
+.theme-layout-dramatic .site-shell .section-wrap:nth-of-type(even),
+.theme-layout-dramatic .section-wrap:nth-of-type(even) {
+  background-color: color-mix(in srgb, var(--theme-primary), var(--theme-background) 92%);
+}
+
+.theme-layout-timeless .site-shell .price-card,
+.theme-layout-timeless .price-card,
+.theme-layout-timeless .artist-card {
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--theme-text), transparent 92%);
+}
+
 .theme-layout-timeless .hero-section h1,
 .theme-layout-timeless .section-head h2 {
   letter-spacing: 0.015em;
@@ -6564,6 +6654,10 @@ input {
   }
 
   .data-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .generated-rsvp-link {
     grid-template-columns: 1fr;
   }
 }

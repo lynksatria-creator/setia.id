@@ -434,7 +434,7 @@ const mountPublishedInvitationDashboard = (planId, settings = {}) => {
     const payload = path.endsWith('/auth/me')
       ? { user: { id: 'user-1', full_name: 'Test User', email: 'test@example.com', role: 'user', is_test_account: false } }
       : path.endsWith('/billing/config')
-        ? { plans: [{ id: planId, name: planId, price: 599000, duration_days: 365 }], payment_methods: [] }
+        ? { plans: [{ id: planId, name: planId, price: 599000, duration_days: 365, slug_mode: planId === 'basic' ? 'generated' : 'custom' }], payment_methods: [] }
         : path.endsWith('/dashboard-admins')
           ? { eligible: true, max_admins: 3, admins: [] }
           : path.endsWith('/affiliate-program')
@@ -474,12 +474,56 @@ test('buyer dashboard shows guests, attendance responses, and greetings', async 
   expect(await screen.findByText('Dewi Lestari')).toBeDefined();
   expect(screen.getByText(/Hari Bahagia · Akan hadir · 2 tamu/)).toBeDefined();
   expect(screen.getByText('Semoga acaranya lancar dan penuh kebahagiaan.')).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Unduh RSVP .xlsx' })).toBeDefined();
   const managementRequests = globalThis.fetch.mock.calls.filter(([url]) => {
     const path = new URL(url, window.location.origin).pathname;
     return path.endsWith('/dashboard-admins') || path.endsWith('/affiliate-program');
   });
   expect(managementRequests).toHaveLength(2);
   expect(managementRequests.every(([, options]) => options.headers.get('Authorization') === 'Bearer test-token')).toBe(true);
+});
+
+test('owner can copy the generated RSVP link and edit a premium invitation slug', async () => {
+  const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  mountPublishedInvitationDashboard('premium');
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
+  expect(screen.getByText(`RSVP: ${window.location.origin}/i/hari-bahagia#rsvp`)).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Salin link RSVP' }));
+  expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/i/hari-bahagia#rsvp`);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit', exact: true }));
+  expect(screen.getByLabelText('Link undangan (opsional, dapat diedit)')).toBeDefined();
+  expect(screen.getByLabelText('Link RSVP otomatis').value).toBe(`${window.location.origin}/i/hari-bahagia#rsvp`);
+  if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+  else delete navigator.clipboard;
+  sessionStorage.clear();
+});
+
+test('owner can choose catalog music and upload a video file', async () => {
+  mountPublishedInvitationDashboard('premium');
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit', exact: true }));
+
+  fireEvent.change(screen.getByLabelText('Musik pilihan berdasarkan genre'), { target: { value: 'akustik-hangat' } });
+  const videoFile = new File(['sample video'], 'story.mp4', { type: 'video/mp4' });
+  fireEvent.change(screen.getByLabelText('Atau upload video'), { target: { files: [videoFile] } });
+  expect(await screen.findByText('Video berhasil dimuat. Simpan draft untuk menerapkannya.')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Simpan semua perubahan' }));
+
+  expect(await screen.findByText('Perubahan undangan tersimpan.')).toBeDefined();
+  const updateCall = globalThis.fetch.mock.calls.find(([url, options]) => (
+    new URL(url, window.location.origin).pathname.endsWith('/invitations/invitation-1')
+    && options.method === 'PATCH'
+  ));
+  const savedContent = JSON.parse(updateCall[1].body).content;
+  expect(savedContent.music_url).toBe('/music/akustik-hangat.wav');
+  expect(savedContent.music_catalog_id).toBe('akustik-hangat');
+  expect(savedContent.video_url).toMatch(/^data:video\/mp4;base64,/);
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 
 test('buyer can independently configure digital envelope methods for an invitation', async () => {
@@ -823,6 +867,27 @@ test('admin edits content and applies theme settings to the public site', () => 
   localStorage.removeItem('gibrig-themes');
   sessionStorage.clear();
 }, 30000);
+
+test('portal theme presets update the actual public website theme', () => {
+  localStorage.removeItem('portal-cms');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  window.history.pushState({}, '', '/portal-admin');
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /glassmorphism luxury/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+  const saved = JSON.parse(localStorage.getItem('portal-cms'));
+  expect(saved.theme.primary).toBe('#52634c');
+
+  window.history.pushState({}, '', '/');
+  const publicSite = render(<App />);
+  const portal = publicSite.container.querySelector('.theme-portal');
+  expect(portal.style.getPropertyValue('--theme-primary')).toBe('#52634c');
+  expect(portal.className).toContain('theme-layout-editorial');
+  publicSite.unmount();
+  localStorage.removeItem('portal-cms');
+  sessionStorage.clear();
+});
 
 test.each([
   ['admin', '/portal-admin', '/', 'portal-cms'],

@@ -257,8 +257,8 @@ bearer_scheme = HTTPBearer(auto_error=False)
 DEFAULT_BILLING_CONFIG = {
     "plans": [
         {"id": "basic", "name": "Basic", "price": 99000, "duration_days": 30, "max_invitations": 1, "slug_mode": "generated", "enabled": True, "features": ["1 undangan aktif", "Template dasar", "Link undangan otomatis"]},
-        {"id": "premium", "name": "Premium", "price": 249000, "duration_days": 365, "max_invitations": 3, "slug_mode": "custom", "enabled": True, "features": ["3 undangan aktif", "Custom link", "RSVP dan buku tamu"]},
-        {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": True, "features": ["100 undangan aktif", "Custom link", "Statistik lengkap"]},
+        {"id": "premium", "name": "Premium", "price": 249000, "duration_days": 365, "max_invitations": 3, "slug_mode": "custom", "enabled": True, "features": ["3 undangan aktif", "Link otomatis dan dapat diedit", "RSVP dan buku tamu"]},
+        {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": True, "features": ["100 undangan aktif", "Link otomatis dan dapat diedit", "Statistik lengkap"]},
     ],
     "payment_methods": [
         {"id": "mayar", "name": "Mayar checkout", "provider": "mayar", "enabled": True},
@@ -291,6 +291,11 @@ async def get_billing_config():
         for plan in saved.get("plans", []):
             default_plan = next((item for item in DEFAULT_BILLING_CONFIG["plans"] if item["id"] == plan["id"]), None)
             plan.setdefault("max_invitations", default_plan["max_invitations"] if default_plan else 1)
+            if plan["id"] in {"premium", "business"}:
+                plan["features"] = [
+                    "Link otomatis dan dapat diedit" if feature == "Custom link" else feature
+                    for feature in plan.get("features", [])
+                ]
         for method in saved.get("payment_methods", []):
             if method.get("provider") == "midtrans":
                 if method.get("id") == "bank-transfer" or any(
@@ -1151,9 +1156,7 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
 
     has_test_access = current_user.get("is_test_account") is True
 
-    if plan["slug_mode"] == "custom" and not payload.slug:
-        raise HTTPException(status_code=422, detail="Paket ini memerlukan link undangan pilihan Anda.")
-    if plan["slug_mode"] == "generated" and payload.slug:
+    if plan["id"] == "basic" and payload.slug:
         raise HTTPException(status_code=403, detail="Paket ini menggunakan link otomatis.")
 
     slug = slugify(payload.slug or f"{payload.title}-{uuid.uuid4().hex[:7]}")
@@ -1213,7 +1216,7 @@ async def update_my_invitation(invitation_id: str, payload: InvitationUpdate, cu
     plan = next(item for item in plan_config["plans"] if item["id"] == invitation["plan_id"])
 
     if "slug" in updates:
-        if plan["slug_mode"] != "custom":
+        if invitation["plan_id"] == "basic":
             raise HTTPException(status_code=403, detail="Perubahan link tidak tersedia pada paket ini.")
         updates["slug"] = slugify(updates["slug"] or "")
         if len(updates["slug"]) < 3:
