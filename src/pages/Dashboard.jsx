@@ -20,9 +20,18 @@ const emptyForm = {
   custom_background: '#f8f5ee',
   couple_names: '',
   honoree_name: '',
+  groom_parents: '',
+  bride_parents: '',
+  groom_instagram: '',
+  bride_instagram: '',
   cover_image: '',
   event_date: '',
   event_time: '',
+  reception_date: '',
+  reception_time: '',
+  reception_venue: '',
+  reception_address: '',
+  reception_maps_url: '',
   venue: '',
   address: '',
   maps_url: '',
@@ -76,12 +85,55 @@ const eventGroups = [
 ];
 
 const weddingEventTypes = ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy', 'Anniversary'];
+const organizerEventTypes = ['Reuni', 'Gathering', 'Family Gathering', 'Halal Bihalal', 'Seminar', 'Workshop', 'Meeting', 'Grand Opening', 'Event', 'Acara Komunitas', 'Custom Event'];
 
-const templateGroups = {
-  Pernikahan: ['Pernikahan', 'Gen Z'],
-  'Acara Islami & Keluarga': ['Islami', 'Keluarga', 'Gen Z'],
-  'Anak & Pendidikan': ['Keluarga', 'Perayaan', 'Pendidikan', 'Gen Z'],
-  'Acara Umum': ['Umum', 'Custom', 'Nusantara', 'Gen Z'],
+const eventTemplateRecommendations = {
+  Pernikahan: { categories: ['Pernikahan', 'Gen Z'] },
+  'Akad Nikah': { categories: ['Islami', 'Nusantara'] },
+  Resepsi: { categories: ['Pernikahan', 'Gen Z'] },
+  'Akad & Resepsi': { categories: ['Pernikahan', 'Islami', 'Nusantara'] },
+  Lamaran: { templateIds: ['engagement', 'rose-gold-romance', 'floral-elegant', 'classic-wedding'] },
+  Tunangan: { templateIds: ['engagement', 'rose-gold-romance', 'floral-elegant', 'classic-wedding'] },
+  'Walimatul Ursy': { categories: ['Islami', 'Nusantara'] },
+  Anniversary: { templateIds: ['anniversary', 'rose-gold-romance', 'luxury-maroon'] },
+  Aqiqah: { templateIds: ['aqiqah-elegant', 'islamic-gold', 'islamic-emerald', 'islamic-white'] },
+  Khitanan: { templateIds: ['khitanan-royal', 'islamic-gold', 'islamic-emerald'] },
+  'Walimatul Khitan': { templateIds: ['khitanan-royal', 'islamic-gold', 'islamic-emerald'] },
+  Tasyakuran: { templateIds: ['tasyakuran', 'islamic-gold', 'islamic-emerald', 'traditional-jawa'] },
+  Pengajian: { categories: ['Islami', 'Nusantara'] },
+  Haul: { categories: ['Islami', 'Nusantara'] },
+  Syukuran: { templateIds: ['tasyakuran', 'islamic-gold', 'islamic-emerald', 'traditional-jawa'] },
+  Milad: { templateIds: ['birthday-luxury', 'islamic-gold', 'islamic-emerald'] },
+  'Ulang Tahun Anak': { templateIds: ['birthday-kids', 'baby-shower'] },
+  'Ulang Tahun Dewasa': { templateIds: ['birthday-luxury', 'anniversary', 'gen-z-editorial'] },
+  'Baby Shower': { templateIds: ['baby-shower', 'aqiqah-elegant'] },
+  'Gender Reveal': { templateIds: ['baby-shower', 'aqiqah-elegant'] },
+  Wisuda: { templateIds: ['graduation-gold', 'corporate-event'] },
+  Kelulusan: { templateIds: ['graduation-gold', 'corporate-event'] },
+  Reuni: { templateIds: ['corporate-event', 'gen-z-editorial'] },
+  Gathering: { templateIds: ['corporate-event', 'gen-z-editorial'] },
+  'Family Gathering': { templateIds: ['corporate-event', 'gen-z-editorial'] },
+  'Halal Bihalal': { templateIds: ['islamic-gold', 'islamic-emerald', 'traditional-jawa'] },
+  Seminar: { templateIds: ['corporate-event', 'gen-z-editorial'] },
+  Workshop: { templateIds: ['corporate-event', 'gen-z-editorial'] },
+  Meeting: { templateIds: ['corporate-event'] },
+  'Grand Opening': { templateIds: ['corporate-event', 'gen-z-editorial'] },
+  Event: { categories: ['Umum', 'Custom', 'Gen Z'] },
+  'Acara Komunitas': { templateIds: ['corporate-event', 'gen-z-editorial'] },
+  'Custom Event': { categories: ['Umum', 'Custom', 'Gen Z'] },
+};
+
+const getTemplatesForEvent = (templates, eventType) => {
+  const recommendation = eventTemplateRecommendations[eventType];
+  if (!recommendation) return [];
+  const prioritized = (recommendation.templateIds || [])
+    .map((id) => templates.find((template) => template.id === id))
+    .filter(Boolean);
+  const prioritizedIds = new Set(prioritized.map((template) => template.id));
+  return [
+    ...prioritized,
+    ...templates.filter((template) => recommendation.categories?.includes(template.category) && !prioritizedIds.has(template.id)),
+  ];
 };
 
 const displayDate = (value) => value ? new Date(value).toLocaleDateString('id-ID', { dateStyle: 'medium' }) : 'Belum aktif';
@@ -375,31 +427,44 @@ export default function Dashboard({ onSignIn }) {
 
   const setupTemplates = setupProvince
     ? regionalInvitationTemplates.filter((template) => template.province === setupProvince)
-    : setupGroup
-      ? invitationTemplates.filter((template) => templateGroups[setupGroup]?.includes(template.category))
-      : [];
+    : getTemplatesForEvent(invitationTemplates, setupEventType);
   const editorTemplates = form.province
     ? regionalInvitationTemplates.filter((template) => template.province === form.province)
-    : invitationTemplates.filter((template) => templateGroups[setupGroup]?.includes(template.category));
+    : getTemplatesForEvent(invitationTemplates, form.event_type);
   const provinceGroups = [...new Set(regionalInvitationTemplates.map((template) => template.islandGroup))];
 
   const demoInvitation = demoTemplate ? {
     id: `demo-${demoTemplate.id}`,
-    title: 'Aulia & Farhan',
+    title: form.title || form.event_type,
     slug: 'template-demo',
     content: {
-      event_type: 'Pernikahan',
+      event_type: form.event_type,
       province: demoTemplate.province || '',
       demo_template: true,
       template_id: demoTemplate.id,
-      couple_names: 'Aulia & Farhan',
-      event_date: '2026-12-12',
-      event_time: '10:00',
-      venue: 'The Grand Ballroom',
-      address: 'Jakarta Selatan, Indonesia',
-      opening_text: 'Dengan penuh hati kami mengundang Anda untuk hadir dan memberikan doa restu pada hari istimewa kami.',
-      story: 'Setiap pertemuan membawa kami pada cerita yang akhirnya ingin kami rayakan bersama orang-orang terkasih.',
-      gallery: [
+      couple_names: weddingEventTypes.includes(form.event_type) ? form.couple_names || 'Aulia & Farhan' : '',
+      honoree_name: weddingEventTypes.includes(form.event_type) ? '' : form.honoree_name || form.title || form.event_type,
+      groom_parents: form.groom_parents,
+      bride_parents: form.bride_parents,
+      groom_instagram: form.groom_instagram,
+      bride_instagram: form.bride_instagram,
+      cover_image: form.cover_image,
+      event_date: form.event_date || '2026-12-12',
+      event_time: form.event_time || '10:00',
+      reception_date: form.reception_date,
+      reception_time: form.reception_time,
+      reception_venue: form.reception_venue,
+      reception_address: form.reception_address,
+      reception_maps_url: form.reception_maps_url,
+      venue: form.venue || 'The Grand Ballroom',
+      address: form.address || 'Jakarta Selatan, Indonesia',
+      maps_url: form.maps_url,
+      opening_text: form.opening_text,
+      story: form.story,
+      music_url: form.music_url,
+      video_url: form.video_url,
+      rsvp_url: form.rsvp_url,
+      gallery: form.gallery.trim() ? form.gallery.split('\n').map((url) => url.trim()).filter(Boolean) : [
         'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1000&q=85',
         'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1000&q=85',
         'https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=1000&q=85',
@@ -448,9 +513,18 @@ export default function Dashboard({ onSignIn }) {
       custom_background: content.custom_background || '#f8f5ee',
       couple_names: content.couple_names || '',
       honoree_name: content.honoree_name || '',
+      groom_parents: content.groom_parents || '',
+      bride_parents: content.bride_parents || '',
+      groom_instagram: content.groom_instagram || '',
+      bride_instagram: content.bride_instagram || '',
       cover_image: content.cover_image || '',
       event_date: content.event_date || '',
       event_time: content.event_time || '',
+      reception_date: content.reception_date || '',
+      reception_time: content.reception_time || '',
+      reception_venue: content.reception_venue || '',
+      reception_address: content.reception_address || '',
+      reception_maps_url: content.reception_maps_url || '',
       venue: content.venue || '',
       address: content.address || '',
       maps_url: content.maps_url || '',
@@ -547,10 +621,19 @@ export default function Dashboard({ onSignIn }) {
       custom_accent: form.custom_accent,
       custom_background: form.custom_background,
       honoree_name: form.honoree_name,
+      groom_parents: form.groom_parents,
+      bride_parents: form.bride_parents,
+      groom_instagram: form.groom_instagram,
+      bride_instagram: form.bride_instagram,
       cover_image: form.cover_image,
       couple_names: form.couple_names,
       event_date: form.event_date,
       event_time: form.event_time,
+      reception_date: form.reception_date,
+      reception_time: form.reception_time,
+      reception_venue: form.reception_venue,
+      reception_address: form.reception_address,
+      reception_maps_url: form.reception_maps_url,
       venue: form.venue,
       address: form.address,
       maps_url: form.maps_url,
@@ -922,12 +1005,12 @@ export default function Dashboard({ onSignIn }) {
             <div className="account-panel-heading"><div><span className="eyebrow">Langkah 1 dari 3</span><h2>Mulai rancangan undangan</h2></div></div>
             <p className="setup-intro">Pilih kelompok acara, jenis undangan, dan template agar form berikutnya menyesuaikan kebutuhan Anda.</p>
             <div className="setup-grid">
-              <label>Kelompok acara<select value={setupGroup} onChange={(event) => { setSetupGroup(event.target.value); setSetupEventType(''); setSetupTemplateId(''); }}><option value="">Pilih kelompok</option>{eventGroups.map((group) => <option key={group.label} value={group.label}>{group.label}</option>)}</select></label>
-              <label>Jenis acara<select value={setupEventType} disabled={!setupGroup} onChange={(event) => setSetupEventType(event.target.value)}><option value="">Pilih jenis acara</option>{eventGroups.find((group) => group.label === setupGroup)?.options.map((option) => <option key={option}>{option}</option>)}</select></label>
+              <label>Kelompok acara<select value={setupGroup} onChange={(event) => { setSetupGroup(event.target.value); setSetupProvince(''); setSetupEventType(''); setSetupTemplateId(''); }}><option value="">Pilih kelompok</option>{eventGroups.map((group) => <option key={group.label} value={group.label}>{group.label}</option>)}</select></label>
+              <label>Jenis acara<select value={setupEventType} disabled={!setupGroup} onChange={(event) => { const eventType = event.target.value; setSetupEventType(eventType); setSetupTemplateId(getTemplatesForEvent(invitationTemplates, eventType)[0]?.id || ''); }}><option value="">Pilih jenis acara</option>{eventGroups.find((group) => group.label === setupGroup)?.options.map((option) => <option key={option}>{option}</option>)}</select></label>
             </div>
-            <label className="province-select-field">Inspirasi daerah (opsional)<select value={setupProvince} disabled={!setupGroup} onChange={(event) => { const province = event.target.value; setSetupProvince(province); setSetupTemplateId(regionalInvitationTemplates.find((template) => template.province === province)?.id || ''); }}><option value="">Semua gaya daerah dan tema acara</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province}</option>)}</optgroup>)}</select><small className="form-hint">Tersedia inspirasi visual untuk seluruh 38 provinsi Indonesia.</small></label>
-            <div className="setup-template-section"><span className="form-label">{setupProvince ? `Template daerah · ${setupProvince}` : 'Jenis template'}</span><div className="setup-template-grid">{setupTemplates.map((template) => <button type="button" key={template.id} className={`setup-template-card ${setupTemplateId === template.id ? 'selected' : ''}`} onClick={() => setSetupTemplateId(template.id)}><span className="template-choice-swatch" style={{ background: `linear-gradient(135deg, ${template.colors[0]}, ${template.colors[1]})` }} /><strong>{template.name}</strong><small>{template.province ? `${template.islandGroup} · ${template.inspiration}` : template.category}</small></button>)}</div></div>
-            {setupGroup ? <p className="form-hint">Menampilkan {setupTemplates.length} template{setupProvince ? ` daerah ${setupProvince}` : ` yang sesuai untuk kelompok ${setupGroup}`}.</p> : null}
+            <label className="province-select-field">Inspirasi daerah (opsional)<select value={setupProvince} disabled={!setupEventType} onChange={(event) => { const province = event.target.value; setSetupProvince(province); setSetupTemplateId(province ? regionalInvitationTemplates.find((template) => template.province === province)?.id || '' : getTemplatesForEvent(invitationTemplates, setupEventType)[0]?.id || ''); }}><option value="">Tanpa inspirasi daerah</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province}</option>)}</optgroup>)}</select><small className="form-hint">Tersedia inspirasi visual untuk seluruh 38 provinsi Indonesia.</small></label>
+            <div className="setup-template-section"><span className="form-label">{setupProvince ? `Template daerah · ${setupProvince}` : setupEventType ? `Template untuk ${setupEventType}` : 'Template acara'}</span><div className="setup-template-grid">{setupTemplates.map((template) => <button type="button" key={template.id} className={`setup-template-card ${setupTemplateId === template.id ? 'selected' : ''}`} onClick={() => setSetupTemplateId(template.id)}><span className="template-choice-swatch" style={{ background: `linear-gradient(135deg, ${template.colors[0]}, ${template.colors[1]})` }} /><strong>{template.name}</strong><small>{template.province ? `${template.islandGroup} · ${template.inspiration}` : `${template.category} · Cocok untuk ${setupEventType}`}</small></button>)}</div></div>
+            {setupEventType ? <p className="form-hint">Menampilkan {setupTemplates.length} template yang disesuaikan untuk acara {setupEventType}{setupProvince ? ` dengan inspirasi ${setupProvince}` : ''}.</p> : null}
             <button className="primary-btn setup-continue-button" onClick={beginInvitation}>Lanjutkan ke isi data</button>
           </section> : <section className="account-panel invitation-editor-panel">
             <div className="account-panel-heading"><div><span className="eyebrow">{editingId ? 'Edit undangan' : 'Undangan baru'}</span><h2>{editingId ? 'Perbarui detail acara' : 'Mulai dengan detail acara'}</h2></div>{editingId ? <button className="text-button" onClick={resetForm}>Buat draft baru</button> : null}</div>
@@ -935,17 +1018,17 @@ export default function Dashboard({ onSignIn }) {
               <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder="Pernikahan Aulia & Farhan" /></label>
               <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_demo} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {user.is_test_account ? 'akses tester' : user.role === 'affiliate' ? `kuota tersisa ${(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}` : `Rp ${Number(plan.price).toLocaleString('id-ID')}`} · {plan.duration_days} hari</option>)}</select></label>
               {selectedPlan?.slug_mode === 'custom' ? <label>Link pilihan<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} required minLength={3} maxLength={64} placeholder="aulia-farhan" /><small>URL publik: {window.location.host}/i/{form.slug || 'link-pilihan'}</small></label> : <p className="form-hint">Paket Basic memakai link otomatis setelah draft dibuat.</p>}
-              <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; setSetupGroup(group); updateField('event_type', eventType); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
-              <label>Inspirasi daerah<select value={form.province} onChange={(event) => { const province = event.target.value; const regionalTemplate = regionalInvitationTemplates.find((template) => template.province === province); setForm((current) => ({ ...current, province, ...(!province && current.template_id.startsWith('regional-') ? { template_id: 'luxury-gold' } : {}), ...(regionalTemplate ? { template_id: regionalTemplate.id, custom_design: false } : {}) })); }}><option value="">Tidak memakai gaya daerah khusus</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province} · {template.inspiration}</option>)}</optgroup>)}</select></label>
+              <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; const recommendedTemplate = getTemplatesForEvent(invitationTemplates, eventType)[0]; setSetupGroup(group); setForm((current) => ({ ...current, event_type: eventType, template_id: current.province ? regionalInvitationTemplates.find((template) => template.province === current.province)?.id || recommendedTemplate?.id || current.template_id : recommendedTemplate?.id || current.template_id, custom_design: false })); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
+              <label>Inspirasi daerah<select value={form.province} onChange={(event) => { const province = event.target.value; const regionalTemplate = regionalInvitationTemplates.find((template) => template.province === province); const recommendedTemplate = getTemplatesForEvent(invitationTemplates, form.event_type)[0]; setForm((current) => ({ ...current, province, template_id: regionalTemplate?.id || recommendedTemplate?.id || current.template_id, custom_design: false })); }}><option value="">Tidak memakai gaya daerah khusus</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province} · {template.inspiration}</option>)}</optgroup>)}</select></label>
               <div className="template-picker-field">
-                <span className="form-label">Pilih template {form.province ? `· ${form.province}` : ''}</span>
+                <span className="form-label">Pilih template {form.province ? `· ${form.province}` : `· ${form.event_type}`}</span>
                 <div className="template-picker">
                   {editorTemplates.map((template) => (
                     <article key={template.id} className={`template-choice ${form.template_id === template.id && !form.custom_design ? 'selected' : ''}`}>
                       <button type="button" className="template-choice-select" onClick={() => setForm((current) => ({ ...current, province: template.province || '', template_id: template.id, custom_design: false }))}>
                         <span className="template-choice-swatch" style={{ background: `linear-gradient(135deg, ${template.colors[0]}, ${template.colors[1]})` }} />
                         <strong>{template.name}</strong>
-                        <small>{template.province ? `${template.islandGroup} · ${template.inspiration} · ` : `${template.category} · `}{template.description}</small>
+                        <small>{template.province ? `${template.islandGroup} · ${template.inspiration} · ` : `${template.category} · Untuk ${form.event_type} · `}{template.description}</small>
                       </button>
                       <button type="button" className="template-demo-button" onClick={() => setDemoTemplate(template)}>Lihat Demo</button>
                     </article>
@@ -956,19 +1039,44 @@ export default function Dashboard({ onSignIn }) {
                     <small>Pilih warna sesuai tema Anda</small>
                   </button>
                 </div>
-                {demoTemplate ? <div className="template-demo-panel"><div className="template-demo-heading"><div><p className="eyebrow">Demo calon undangan · {demoTemplate.category}</p><h3>{demoTemplate.name}</h3><p>{demoTemplate.description}</p></div><div><button type="button" className="secondary-btn" onClick={() => setDemoTemplate(null)}>Tutup Demo</button><button type="button" className="primary-btn" onClick={() => { setForm((current) => ({ ...current, template_id: demoTemplate.id, custom_design: false })); setDemoTemplate(null); }}>Gunakan Template</button></div></div><div className="template-demo-viewport"><PublicInvitation invitation={demoInvitation} slug="template-demo" /></div></div> : null}
+                {demoTemplate ? <div className="template-demo-panel"><div className="template-demo-heading"><div><p className="eyebrow">Demo {form.event_type} · {demoTemplate.category}</p><h3>{demoTemplate.name}</h3><p>{demoTemplate.description}</p></div><div><button type="button" className="secondary-btn" onClick={() => setDemoTemplate(null)}>Tutup Demo</button><button type="button" className="primary-btn" onClick={() => { setForm((current) => ({ ...current, province: demoTemplate.province || '', template_id: demoTemplate.id, custom_design: false })); setDemoTemplate(null); }}>Gunakan Template</button></div></div><div className="template-demo-viewport"><PublicInvitation invitation={demoInvitation} slug="template-demo" /></div></div> : null}
                 {form.custom_design ? <div className="custom-design-fields"><label>Warna utama<input type="color" value={form.custom_primary} onChange={(event) => updateField('custom_primary', event.target.value)} /></label><label>Warna aksen<input type="color" value={form.custom_accent} onChange={(event) => updateField('custom_accent', event.target.value)} /></label><label>Warna latar<input type="color" value={form.custom_background} onChange={(event) => updateField('custom_background', event.target.value)} /></label></div> : null}
               </div>
-              {weddingEventTypes.includes(form.event_type) ? <label>Nama pasangan<input value={form.couple_names} onChange={(event) => updateField('couple_names', event.target.value)} placeholder="Aulia & Farhan" /></label> : <label>Nama yang dirayakan<input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder="Nama anak, keluarga, atau penyelenggara" /></label>}
+              {weddingEventTypes.includes(form.event_type) ? (
+                <>
+                  <label>Nama pasangan<input value={form.couple_names} onChange={(event) => updateField('couple_names', event.target.value)} placeholder="Aulia & Farhan" /></label>
+                  <div className="account-form-row">
+                    <label>Orang tua mempelai pria<input value={form.groom_parents} onChange={(event) => updateField('groom_parents', event.target.value)} placeholder="Bapak ... & Ibu ..." /></label>
+                    <label>Orang tua mempelai wanita<input value={form.bride_parents} onChange={(event) => updateField('bride_parents', event.target.value)} placeholder="Bapak ... & Ibu ..." /></label>
+                  </div>
+                  <div className="account-form-row">
+                    <label>Instagram mempelai pria<input value={form.groom_instagram} onChange={(event) => updateField('groom_instagram', event.target.value)} placeholder="@username (opsional)" /></label>
+                    <label>Instagram mempelai wanita<input value={form.bride_instagram} onChange={(event) => updateField('bride_instagram', event.target.value)} placeholder="@username (opsional)" /></label>
+                  </div>
+                </>
+              ) : (
+                <label>{organizerEventTypes.includes(form.event_type) ? 'Nama penyelenggara / komunitas' : `Nama ${form.event_type.toLowerCase()} / yang dirayakan`}
+                  <input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder={organizerEventTypes.includes(form.event_type) ? 'Contoh: Komunitas ...' : `Contoh: nama ${form.event_type.toLowerCase()}`} />
+                </label>
+              )}
               <div className="account-form-row"><label>Tanggal acara<input type="date" value={form.event_date} onChange={(event) => updateField('event_date', event.target.value)} /></label><label>Waktu acara<input type="time" value={form.event_time} onChange={(event) => updateField('event_time', event.target.value)} /></label></div>
+              {form.event_type === 'Akad & Resepsi' ? (
+                <div className="account-panel event-secondary-details">
+                  <h3>Detail resepsi</h3>
+                  <div className="account-form-row"><label>Tanggal resepsi<input type="date" value={form.reception_date} onChange={(event) => updateField('reception_date', event.target.value)} /></label><label>Waktu resepsi<input type="time" value={form.reception_time} onChange={(event) => updateField('reception_time', event.target.value)} /></label></div>
+                  <label>Nama venue resepsi<input value={form.reception_venue} onChange={(event) => updateField('reception_venue', event.target.value)} placeholder="Nama tempat resepsi" /></label>
+                  <label>Alamat resepsi<textarea value={form.reception_address} onChange={(event) => updateField('reception_address', event.target.value)} rows={2} /></label>
+                  <label>Link Google Maps resepsi<input type="url" value={form.reception_maps_url} onChange={(event) => updateField('reception_maps_url', event.target.value)} placeholder="https://maps.google.com/..." /></label>
+                </div>
+              ) : null}
               <label>Nama venue<input value={form.venue} onChange={(event) => updateField('venue', event.target.value)} placeholder="The Glass House" /></label>
               <label>Alamat<textarea value={form.address} onChange={(event) => updateField('address', event.target.value)} rows={2} /></label>
               <label>Link Google Maps<input type="url" value={form.maps_url} onChange={(event) => updateField('maps_url', event.target.value)} placeholder="https://maps.google.com/..." /></label>
               <div className="media-upload-field"><label>Foto sampul<input type="file" accept="image/*" onChange={handleCoverUpload} /></label><label>Atau paste URL foto sampul<input type="url" value={form.cover_image.startsWith('data:') ? '' : form.cover_image} onChange={(event) => updateField('cover_image', event.target.value)} placeholder="https://..." /></label><small className="form-hint">Maksimal 5 MB untuk upload foto.</small></div>
               <label>Salam pembuka<textarea value={form.opening_text} onChange={(event) => updateField('opening_text', event.target.value)} rows={2} placeholder="Dengan penuh sukacita kami mengundang..." /></label>
-              <label>{weddingEventTypes.includes(form.event_type) ? 'Cerita pasangan' : 'Cerita acara'}<textarea value={form.story} onChange={(event) => updateField('story', event.target.value)} rows={4} placeholder={weddingEventTypes.includes(form.event_type) ? 'Tuliskan cerita pasangan...' : `Tuliskan cerita tentang ${form.event_type.toLowerCase()}...`} /></label>
-              <div className="music-input-field"><label>Link musik<input type="text" value={form.music_url.startsWith('data:') ? '' : form.music_url} onChange={(event) => updateField('music_url', event.target.value)} placeholder="https://..." /></label><label>Atau upload musik<input type="file" accept="audio/*" onChange={handleMusicUpload} /></label><small className="form-hint">Maksimal 8 MB untuk upload langsung. URL musik boleh ditempel sendiri.</small></div>
-              <label>Video cerita acara / prewedding<input type="url" value={form.video_url} onChange={(event) => updateField('video_url', event.target.value)} placeholder="YouTube, Vimeo, atau URL MP4/WebM" /><small className="form-hint">Video YouTube/Vimeo tampil sebagai film di undangan. URL MP4/WebM langsung menjadi latar video bergerak saat sampul dibuka.</small></label>
+              <label>{weddingEventTypes.includes(form.event_type) ? 'Cerita pasangan' : `Cerita ${form.event_type.toLowerCase()}`}<textarea value={form.story} onChange={(event) => updateField('story', event.target.value)} rows={4} placeholder={weddingEventTypes.includes(form.event_type) ? 'Tuliskan cerita pasangan...' : `Tuliskan cerita tentang ${form.event_type.toLowerCase()}...`} /></label>
+              <div className="music-input-field"><label>Link musik<input type="text" value={form.music_url.startsWith('data:') ? '' : form.music_url} onChange={(event) => updateField('music_url', event.target.value)} placeholder="https://..." /></label><label>Atau upload musik<input type="file" accept="audio/*" onChange={handleMusicUpload} /></label><small className="form-hint">Maksimal 8 MB untuk upload langsung. Musik akan mulai diputar saat undangan dibuka; browser mungkin meminta tamu menekan tombol Putar.</small></div>
+              <label>{weddingEventTypes.includes(form.event_type) ? 'Video prewedding / cerita pasangan' : `Video ${form.event_type.toLowerCase()}`}<input type="url" value={form.video_url} onChange={(event) => updateField('video_url', event.target.value)} placeholder="YouTube, Vimeo, atau URL MP4/WebM" /><small className="form-hint">Video YouTube/Vimeo tampil sebagai film di undangan. URL MP4/WebM langsung menjadi latar video bergerak saat sampul dibuka.</small></label>
               <label>Link RSVP<input type="url" value={form.rsvp_url} onChange={(event) => updateField('rsvp_url', event.target.value)} placeholder="https://forms.google.com/..." /></label>
               <div className="media-upload-field"><label>Link galeri, satu URL per baris<textarea value={form.gallery} onChange={(event) => updateField('gallery', event.target.value)} rows={3} placeholder="https://foto-1.jpg\nhttps://foto-2.jpg" /></label><label>Atau upload foto galeri<input type="file" accept="image/*" multiple onChange={handleGalleryUpload} /></label><small className="form-hint">Pilih beberapa foto sekaligus. Maksimal 5 MB per foto.</small></div>
               <button className="primary-btn" type="submit" disabled={isSaving || (user.role === 'affiliate' && !availablePlans.some((plan) => plan.id === form.plan_id))}>{isSaving ? 'Menyimpan…' : editingId ? 'Simpan semua perubahan' : 'Simpan draft'}</button>

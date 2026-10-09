@@ -136,6 +136,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [selectedImage, setSelectedImage] = useState(null);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [musicPlaybackMessage, setMusicPlaybackMessage] = useState('');
   const [guestbook, setGuestbook] = useState([]);
   const [guestForm, setGuestForm] = useState({ name: '', message: '', attendance: 'attending', guests: 1 });
   const [guestMessage, setGuestMessage] = useState('');
@@ -155,6 +156,24 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       .catch((requestError) => { if (active) setError(requestError.message); });
     return () => { active = false; };
   }, [initialInvitation, slug]);
+
+  useEffect(() => {
+    const musicUrl = invitation?.content?.music_url;
+    if (!musicUrl || !musicRef.current) return undefined;
+    let active = true;
+    musicRef.current.play()
+      .then(() => {
+        if (!active) return;
+        setIsMusicPlaying(true);
+        setMusicPlaybackMessage('');
+      })
+      .catch(() => {
+        if (!active) return;
+        setIsMusicPlaying(false);
+        setMusicPlaybackMessage('Browser menahan putar otomatis. Tekan “Putar musik” setelah membuka undangan.');
+      });
+    return () => { active = false; };
+  }, [invitation?.content?.music_url]);
 
   useEffect(() => {
     if (!ticketToken) {
@@ -230,16 +249,16 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     storyText: `Sebuah perayaan yang kami rancang dengan sentuhan visual terinspirasi dari ${regionTemplate.inspiration}, ${regionTemplate.province}.`,
     closing: 'Sampai bertemu di hari istimewa kami.',
   } : templateCopy['luxury-gold']);
-  const storyItems = isTemplateDemo
-    ? [{ title: copy.storyTitle, date: 'Our chapter', text: copy.storyText }]
-    : typeof content.story === 'string' && content.story.trim()
+  const storyItems = typeof content.story === 'string' && content.story.trim()
       ? [{ title: eventLabel, date: content.event_date || '', text: content.story }]
-      : story;
+      : isTemplateDemo
+        ? [{ title: copy.storyTitle, date: 'Our chapter', text: copy.storyText }]
+        : story;
   const storySectionTitle = isCoupleEvent ? copy.storyTitle : `Cerita ${eventLabel.toLowerCase()}`;
   const defaultGreeting = isCoupleEvent
     ? copy.greeting
     : `Dengan hormat, kami mengundang Bapak/Ibu/Saudara/i untuk hadir dalam acara ${eventLabel.toLowerCase()}${honoreeName ? ` untuk ${honoreeName}` : ''}. Kehadiran dan doa Anda merupakan kebahagiaan bagi kami.`;
-  const greeting = isTemplateDemo ? copy.greeting : content.opening_text || defaultGreeting;
+  const greeting = content.opening_text || (isTemplateDemo && isCoupleEvent ? copy.greeting : defaultGreeting);
   const theme = templateThemes[templateClass] || (regionTemplate ? {
     primary: regionTemplate.colors[0],
     accent: regionTemplate.colors[1],
@@ -262,8 +281,18 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const openInvitation = () => {
     setIsOpened(true);
     const musicPromise = musicRef.current?.play();
-    musicPromise?.then(() => setIsMusicPlaying(true)).catch(() => setIsMusicPlaying(false));
-    window.setTimeout(() => contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    musicPromise?.then(() => {
+      setIsMusicPlaying(true);
+      setMusicPlaybackMessage('');
+    }).catch(() => {
+      setIsMusicPlaying(false);
+      setMusicPlaybackMessage('Tekan “Putar musik” untuk memulai musik undangan.');
+    });
+    window.setTimeout(() => {
+      if (typeof contentRef.current?.scrollIntoView === 'function') {
+        contentRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 80);
   };
 
   const toggleMusic = () => {
@@ -272,7 +301,13 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       musicRef.current.pause();
       setIsMusicPlaying(false);
     } else {
-      musicRef.current.play().then(() => setIsMusicPlaying(true)).catch(() => {});
+      musicRef.current.play().then(() => {
+        setIsMusicPlaying(true);
+        setMusicPlaybackMessage('');
+      }).catch(() => {
+        setIsMusicPlaying(false);
+        setMusicPlaybackMessage('Musik belum dapat diputar. Periksa tautan atau format file musik.');
+      });
     }
   };
 
@@ -315,8 +350,8 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
         <div className="wedding-ornament wedding-ornament-bottom">{theme.ornament}</div>
       </section>
 
-      <audio ref={musicRef} className="wedding-audio" loop preload="metadata" src={content.music_url || undefined} controls={isOpened} onPlay={() => setIsMusicPlaying(true)} onPause={() => setIsMusicPlaying(false)}>Browser Anda belum mendukung audio.</audio>
-      {content.music_url && isOpened ? <button className="wedding-music-toggle" onClick={toggleMusic}>{isMusicPlaying ? 'Jeda musik' : 'Putar musik'}</button> : null}
+      <audio ref={musicRef} className="wedding-audio" loop preload="metadata" autoPlay={Boolean(content.music_url)} src={content.music_url || undefined} controls={isOpened} onPlay={() => { setIsMusicPlaying(true); setMusicPlaybackMessage(''); }} onPause={() => setIsMusicPlaying(false)}>Browser Anda belum mendukung audio.</audio>
+      {content.music_url && isOpened ? <><button className="wedding-music-toggle" onClick={toggleMusic}>{isMusicPlaying ? 'Jeda musik' : 'Putar musik'}</button>{musicPlaybackMessage ? <p className="wedding-music-message" role="status">{musicPlaybackMessage}</p> : null}</> : null}
 
       <div ref={contentRef} className="wedding-content" aria-hidden={!isOpened}>
         <section className="wedding-section wedding-greeting"><p className="wedding-eyebrow">{content.event_type || copy.kicker}</p><p>{greeting}</p><span className="gold-divider">{theme.ornament}</span></section>

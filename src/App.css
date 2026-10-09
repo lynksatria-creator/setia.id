@@ -576,14 +576,12 @@ blockquote span {
 }
 
 .whatsapp-contact-link {
-  position: fixed;
-  z-index: 1100;
-  right: 24px;
-  bottom: 24px;
   display: flex;
   align-items: center;
   gap: 12px;
-  max-width: calc(100vw - 32px);
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin: 0 auto 24px;
   padding: 13px 18px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
@@ -643,54 +641,156 @@ blockquote span {
 .affiliate-advertisement-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-  gap: 20px;
+  gap: 24px;
 }
 
 .affiliate-advertisement-card {
-  display: grid;
-  grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1.2fr);
-  gap: 18px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: var(--card);
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(28, 36, 52, 0.1);
+  border-radius: 24px;
+  background: linear-gradient(160deg, #fff 0%, #fffaf7 100%);
+  box-shadow: 0 14px 34px rgba(40, 32, 48, 0.08);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
-.affiliate-advertisement-card > img {
+.affiliate-advertisement-card:hover,
+.affiliate-advertisement-card:focus-visible {
+  transform: translateY(-5px);
+  border-color: rgba(124, 58, 237, 0.32);
+  box-shadow: 0 22px 44px rgba(40, 32, 48, 0.15);
+}
+
+.affiliate-advertisement-card:focus-visible {
+  outline: 3px solid rgba(124, 58, 237, 0.45);
+  outline-offset: 4px;
+}
+
+.affiliate-advertisement-image {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  min-height: 170px;
+  background: linear-gradient(135deg, #f4d8cc, #e8d9f8 55%, #d8edf1);
+}
+
+.affiliate-advertisement-image::after {
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(transparent, rgba(25, 18, 33, 0.2));
+  content: "";
+  pointer-events: none;
+}
+
+.affiliate-advertisement-image > img {
   width: 100%;
   height: 100%;
-  min-height: 170px;
-  max-height: 230px;
-  border-radius: 15px;
   object-fit: cover;
+  transition: transform 350ms ease;
 }
 
-.affiliate-advertisement-card > div {
+.affiliate-advertisement-card:hover .affiliate-advertisement-image > img {
+  transform: scale(1.04);
+}
+
+.affiliate-advertisement-image > span {
+  position: absolute;
+  z-index: 1;
+  top: 14px;
+  left: 14px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #523a62;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.affiliate-advertisement-content {
   display: flex;
   align-items: flex-start;
+  flex: 1;
   flex-direction: column;
-  gap: 9px;
+  gap: 11px;
+  padding: 21px;
 }
 
-.affiliate-advertisement-card h3,
-.affiliate-advertisement-card p {
+.affiliate-advertisement-advertiser {
+  color: #76538d;
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.affiliate-advertisement-content h3,
+.affiliate-advertisement-content p {
   margin: 0;
 }
 
-.affiliate-advertisement-card .primary-btn {
+.affiliate-advertisement-content h3 {
+  color: #242032;
+  font-size: 1.2rem;
+  line-height: 1.3;
+}
+
+.affiliate-advertisement-content p {
+  color: #626071;
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.affiliate-advertisement-content .affiliate-advertisement-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
   margin-top: auto;
+  padding: 0.85rem 1.1rem;
+  text-align: center;
   text-decoration: none;
 }
 
-@media (max-width: 560px) {
-  .affiliate-advertisement-card {
-    grid-template-columns: 1fr;
+.affiliate-advertisement-cta > span {
+  font-size: 1.15em;
+  transition: transform 180ms ease;
+}
+
+.affiliate-advertisement-card:hover .affiliate-advertisement-cta > span {
+  transform: translate(2px, -2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .affiliate-advertisement-card,
+  .affiliate-advertisement-image > img,
+  .affiliate-advertisement-cta > span {
+    transition: none;
   }
 
-  .affiliate-advertisement-card > img {
-    height: 190px;
+  .affiliate-advertisement-card:hover,
+  .affiliate-advertisement-card:focus-visible {
+    transform: none;
+  }
+
+  .affiliate-advertisement-card:hover .affiliate-advertisement-image > img,
+  .affiliate-advertisement-card:hover .affiliate-advertisement-cta > span {
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .affiliate-advertisement-grid {
+    gap: 16px;
+  }
+
+  .affiliate-advertisement-content {
+    padding: 18px;
   }
 }
 
@@ -1325,8 +1425,6 @@ input {
 
 @media (max-width: 600px) {
   .whatsapp-contact-link {
-    right: 12px;
-    bottom: 12px;
     gap: 8px;
     padding: 11px 13px;
     font-size: 0.8rem;
@@ -4713,6 +4811,23 @@ input {
   box-shadow: 0 8px 20px rgba(38, 26, 17, 0.18);
 }
 
+.wedding-music-message {
+  position: fixed;
+  z-index: 9;
+  right: 14px;
+  bottom: 94px;
+  width: min(310px, calc(100% - 28px));
+  margin: 0;
+  padding: 10px 13px;
+  border: 1px solid rgba(184, 138, 68, 0.45);
+  border-radius: 12px;
+  background: rgba(58, 43, 32, 0.94);
+  color: #fff5df;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  box-shadow: 0 8px 20px rgba(38, 26, 17, 0.18);
+}
+
 .wedding-guest-form {
   display: grid;
   max-width: 540px;
@@ -4878,6 +4993,7 @@ input {
 
 @media (max-width: 600px) {
   .wedding-music-toggle { right: 8px; bottom: 46px; }
+  .wedding-music-message { right: 8px; bottom: 86px; width: min(310px, calc(100% - 16px)); }
   .owner-guestbook-list article { flex-direction: column; }
 }
 
@@ -5489,12 +5605,10 @@ input {
   }
 
   .portal-ad-floating {
-    position: fixed;
-    z-index: 50;
-    right: 18px;
-    bottom: 18px;
+    position: relative;
     width: min(420px, calc(100% - 36px));
     min-height: 88px;
+    margin: 24px auto;
     gap: 0;
     border-color: rgba(255, 255, 255, 0.4);
     background: color-mix(in srgb, var(--portal-background) 93%, white);
@@ -5934,9 +6048,8 @@ input {
     }
 
     .portal-ad-floating {
-      right: 10px;
-      bottom: 10px;
       width: calc(100% - 20px);
+      margin: 16px auto;
     }
 
     .portal-footer-inner,

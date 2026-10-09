@@ -73,7 +73,7 @@ test('shows active affiliate advertisements on the Undangan.id homepage', async 
   const app = renderApp();
 
   try {
-    const link = await screen.findByRole('link', { name: 'Lihat penawaran' });
+    const link = await screen.findByRole('link', { name: /kunjungi website/i });
     expect(screen.getByRole('heading', { name: 'Pilihan dari mitra Undangan.id' })).toBeDefined();
     expect(link.getAttribute('href')).toBe('https://example.com/promo');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
@@ -190,6 +190,26 @@ test('shows the formal invitation cover, named guest, regional design, and cover
   expect(container.querySelector('.wedding-honoree')).not.toBeNull();
 });
 
+test('attempts invitation music automatically and explains when browser playback is blocked', async () => {
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('Autoplay blocked'));
+  const invitation = {
+    id: 'music-demo',
+    title: 'Khitanan Rafi',
+    slug: 'khitanan-rafi',
+    content: { event_type: 'Khitanan', honoree_name: 'Rafi', music_url: 'https://example.com/music.mp3' },
+  };
+  try {
+    render(<PublicInvitation invitation={invitation} />);
+
+    expect(play).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'BUKA UNDANGAN' }));
+    expect((await screen.findByRole('status')).textContent).toMatch(/tekan “Putar musik”/i);
+    expect(play).toHaveBeenCalled();
+  } finally {
+    play.mockRestore();
+  }
+});
+
 test('filters Undangan.id templates by category and can show all categories', () => {
   window.history.pushState({}, '', '/undangan');
   const { container } = renderApp();
@@ -276,6 +296,16 @@ test('test account can select each package and sees its access expiry', async ()
 
   fireEvent.change(await screen.findByLabelText('Kelompok acara'), { target: { value: 'Pernikahan' } });
   fireEvent.change(screen.getByLabelText('Jenis acara'), { target: { value: 'Pernikahan' } });
+  expect(screen.getByText('Template untuk Pernikahan')).toBeDefined();
+  expect([...container.querySelectorAll('.setup-template-card strong')].some((item) => item.textContent === 'Royal Gold')).toBe(true);
+
+  fireEvent.change(screen.getByLabelText('Kelompok acara'), { target: { value: 'Acara Islami & Keluarga' } });
+  fireEvent.change(screen.getByLabelText('Jenis acara'), { target: { value: 'Khitanan' } });
+  expect([...container.querySelectorAll('.setup-template-card strong')].map((item) => item.textContent)).toContain('Khitanan Royal');
+  expect([...container.querySelectorAll('.setup-template-card strong')].map((item) => item.textContent)).not.toContain('Royal Gold');
+
+  fireEvent.change(screen.getByLabelText('Kelompok acara'), { target: { value: 'Pernikahan' } });
+  fireEvent.change(screen.getByLabelText('Jenis acara'), { target: { value: 'Akad & Resepsi' } });
   fireEvent.click(container.querySelector('.setup-template-card'));
   fireEvent.click(screen.getByRole('button', { name: 'Lanjutkan ke isi data' }));
   const packageSelect = await screen.findByLabelText('Paket');
@@ -284,6 +314,15 @@ test('test account can select each package and sees its access expiry', async ()
   expect(screen.getByText(/akses semua paket tanpa pembayaran hingga/)).toBeDefined();
   fireEvent.change(packageSelect, { target: { value: 'premium' } });
   expect(packageSelect.value).toBe('premium');
+
+  fireEvent.change(screen.getByLabelText('Undangan ini untuk acara apa?'), { target: { value: 'Akad & Resepsi' } });
+  expect(screen.getByLabelText('Tanggal resepsi')).toBeDefined();
+  fireEvent.change(screen.getByLabelText('Undangan ini untuk acara apa?'), { target: { value: 'Khitanan' } });
+  expect(screen.getByLabelText('Nama khitanan / yang dirayakan')).toBeDefined();
+  expect(screen.queryByLabelText('Nama pasangan')).toBeNull();
+  expect(container.querySelector('.template-choice.selected strong').textContent).toBe('Khitanan Royal');
+  fireEvent.click(container.querySelector('.template-picker .template-demo-button'));
+  expect(container.querySelector('.template-demo-viewport .wedding-cover h1').textContent).toBe('Khitanan');
 });
 
 const mountPublishedInvitationDashboard = (planId) => {

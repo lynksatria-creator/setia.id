@@ -1530,15 +1530,28 @@ const InvitationHome = () => {
               {advertisementsError ? <p className="form-error" role="alert">Iklan mitra belum dapat dimuat: {advertisementsError}</p> : null}
               <div className="affiliate-advertisement-grid">
                 {advertisements.map((advertisement) => (
-                  <article className="affiliate-advertisement-card" key={advertisement.id}>
-                    {advertisement.image ? <img src={advertisement.image} alt="" loading="lazy" /> : null}
-                    <div>
-                      <span className="eyebrow">Iklan · {advertisement.advertiser}</span>
+                  <a
+                    className="affiliate-advertisement-card"
+                    href={advertisement.url}
+                    key={advertisement.id}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {advertisement.image ? (
+                      <div className="affiliate-advertisement-image">
+                        <img src={advertisement.image} alt="" loading="lazy" />
+                        <span>Rekomendasi mitra</span>
+                      </div>
+                    ) : null}
+                    <div className="affiliate-advertisement-content">
+                      <span className="affiliate-advertisement-advertiser">Iklan · {advertisement.advertiser}</span>
                       <h3>{advertisement.title}</h3>
                       <p>{advertisement.description}</p>
-                      <a className="primary-btn" href={advertisement.url} target="_blank" rel="noopener noreferrer">Lihat penawaran</a>
+                      <span className="primary-btn affiliate-advertisement-cta">
+                        Kunjungi website <span aria-hidden="true">↗</span>
+                      </span>
                     </div>
-                  </article>
+                  </a>
                 ))}
               </div>
             </div>
