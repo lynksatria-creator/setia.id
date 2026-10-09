@@ -3892,6 +3892,16 @@ input {
   box-shadow: none;
 }
 
+.admin-affiliate-record {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(280px, 1.2fr) auto auto;
+  align-items: start;
+}
+
+.affiliate-ad-editor {
+  min-width: 0;
+}
+
 .admin-invitation-layout {
   display: grid;
   grid-template-columns: minmax(230px, 0.7fr) minmax(0, 1.3fr);
@@ -5266,6 +5276,10 @@ input {
   .admin-record {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .admin-affiliate-record {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .public-invitation-gallery img {

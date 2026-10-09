@@ -128,8 +128,46 @@ class FakeCursor:
     def __init__(self, documents):
         self.documents = copy.deepcopy(documents)
 
+    def sort(self, key, direction):
+        self.documents.sort(key=lambda document: document.get(key, ""), reverse=direction < 0)
+        return self
+
     async def to_list(self, length):
         return self.documents[:length]
+
+
+class FakeAffiliateAdminUsers:
+    def __init__(self, documents):
+        self.documents = copy.deepcopy(documents)
+
+    def find(self, query, _projection=None):
+        return FakeCursor([
+            document for document in self.documents
+            if all(document.get(key) == value for key, value in query.items())
+        ])
+
+    async def find_one(self, query, _projection=None):
+        return next((
+            copy.deepcopy(document) for document in self.documents
+            if all(document.get(key) == value for key, value in query.items())
+        ), None)
+
+    async def update_one(self, query, update):
+        for document in self.documents:
+            if all(document.get(key) == value for key, value in query.items()):
+                document.update(copy.deepcopy(update["$set"]))
+                return
+
+
+class FakeAffiliateAdminInvitations:
+    def __init__(self, documents):
+        self.documents = copy.deepcopy(documents)
+
+    async def count_documents(self, query):
+        return sum(
+            all(document.get(key) == value for key, value in query.items())
+            for document in self.documents
+        )
 
 
 class FakeInvitationAccessCollection:
@@ -727,13 +765,63 @@ def test_public_affiliate_ad_requires_active_business_owner(monkeypatch):
 
 def test_affiliate_ad_url_rejects_non_http_urls():
     with pytest.raises(ValidationError):
-        server.AffiliateCreate(
+        server.AffiliateAdUpdate(
             full_name="Affiliate Test",
             email="affiliate@example.com",
             password="password123",
             basic_quota=1,
             ad_url="javascript:alert(1)",
         )
+    assert "ad_url" not in server.AffiliateCreate.model_fields
+    assert "ad_active" not in server.AffiliateUpdate.model_fields
+
+
+def test_super_admin_can_review_and_deactivate_affiliate_without_deleting_history(monkeypatch):
+    affiliate = {
+        "id": "affiliate-1",
+        "full_name": "Affiliate Test",
+        "email": "affiliate@example.com",
+        "role": "affiliate",
+        "owner_id": "owner-1",
+        "active": True,
+        "basic_quota": 2,
+        "premium_quota": 1,
+        "ad_title": "Promo",
+        "ad_url": "https://example.com",
+        "ad_active": True,
+        "created_at": "2025-01-01T00:00:00+00:00",
+    }
+    owner = {"id": "owner-1", "full_name": "Pemilik Undangan", "email": "owner@example.com"}
+    invitations = [{"affiliate_id": "affiliate-1", "plan_id": "basic"}]
+    users = FakeAffiliateAdminUsers([affiliate, owner])
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        users=users,
+        invitations=FakeAffiliateAdminInvitations(invitations),
+    ))
+    monkeypatch.setitem(server.app.dependency_overrides, server.require_admin, lambda: {"email": "admin@example.com"})
+    client = TestClient(server.app)
+
+    listed = client.get("/api/admin/affiliate-accounts")
+    deactivated = client.patch("/api/admin/affiliate-accounts/affiliate-1", json={"active": False})
+
+    assert listed.status_code == 200
+    assert listed.json()[0]["owner_email"] == "owner@example.com"
+    assert listed.json()[0]["invitation_count"] == 1
+    assert deactivated.status_code == 200
+    assert users.documents[0]["active"] is False
+    assert users.documents[0]["ad_active"] is False
+    assert users.documents[0]["owner_id"] == "owner-1"
+    assert invitations == [{"affiliate_id": "affiliate-1", "plan_id": "basic"}]
+
+
+def test_affiliate_ad_and_moderation_routes_require_super_admin():
+    client = TestClient(server.app)
+
+    listed = client.get("/api/admin/affiliate-accounts")
+    updated = client.patch("/api/admin/affiliate-accounts/affiliate-1", json={"ad_active": True})
+
+    assert listed.status_code == 401
+    assert updated.status_code == 401
 
 
 def test_dashboard_admin_cannot_read_invitation_drafts(monkeypatch):

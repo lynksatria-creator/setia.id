@@ -267,7 +267,6 @@ export default function Dashboard({ onSignIn }) {
   const [dashboardAdminForm, setDashboardAdminForm] = useState({ full_name: '', email: '', password: '' });
   const [affiliateForm, setAffiliateForm] = useState({
     full_name: '', email: '', password: '', basic_quota: 0, premium_quota: 0,
-    ad_title: '', ad_description: '', ad_url: '', ad_image: '',
   });
 
   useEffect(() => {
@@ -433,7 +432,6 @@ export default function Dashboard({ onSignIn }) {
       });
       setAffiliateForm({
         full_name: '', email: '', password: '', basic_quota: 0, premium_quota: 0,
-        ad_title: '', ad_description: '', ad_url: '', ad_image: '',
       });
       await refreshBusinessManagement();
       setMessage('Affiliate berhasil didaftarkan. Semua penjualan dan pembayaran tetap tercatat pada pemilik paket Business.');
@@ -1191,10 +1189,6 @@ export default function Dashboard({ onSignIn }) {
                     <label>Kata sandi awal<input type="password" minLength={8} required value={affiliateForm.password} onChange={(event) => setAffiliateForm({ ...affiliateForm, password: event.target.value })} /></label>
                     <label>Kuota Basic<input type="number" min="0" value={affiliateForm.basic_quota} onChange={(event) => setAffiliateForm({ ...affiliateForm, basic_quota: Number(event.target.value) })} /></label>
                     <label>Kuota Premium<input type="number" min="0" value={affiliateForm.premium_quota} onChange={(event) => setAffiliateForm({ ...affiliateForm, premium_quota: Number(event.target.value) })} /></label>
-                    <label>Judul iklan publik<input value={affiliateForm.ad_title} onChange={(event) => setAffiliateForm({ ...affiliateForm, ad_title: event.target.value })} placeholder="Promo undangan premium" /></label>
-                    <label>Deskripsi iklan<textarea value={affiliateForm.ad_description} onChange={(event) => setAffiliateForm({ ...affiliateForm, ad_description: event.target.value })} rows={2} /></label>
-                    <label>Link tujuan iklan<input type="url" value={affiliateForm.ad_url} onChange={(event) => setAffiliateForm({ ...affiliateForm, ad_url: event.target.value })} placeholder="https://..." /></label>
-                    <label>URL gambar iklan<input type="url" value={affiliateForm.ad_image} onChange={(event) => setAffiliateForm({ ...affiliateForm, ad_image: event.target.value })} placeholder="https://..." /></label>
                     <button className="primary-btn">Daftarkan affiliate</button>
                   </form>
                   <div className="affiliate-list">
@@ -1204,9 +1198,8 @@ export default function Dashboard({ onSignIn }) {
                         <label>Basic<input type="number" min={affiliate.basic_used} max="1000" value={affiliateQuotaEdits[affiliate.id]?.basic ?? affiliate.basic_quota} onChange={(event) => setAffiliateQuotaEdits((current) => ({ ...current, [affiliate.id]: { ...current[affiliate.id], basic: Number(event.target.value) } }))} /></label>
                         <label>Premium<input type="number" min={affiliate.premium_used} max="1000" value={affiliateQuotaEdits[affiliate.id]?.premium ?? affiliate.premium_quota} onChange={(event) => setAffiliateQuotaEdits((current) => ({ ...current, [affiliate.id]: { ...current[affiliate.id], premium: Number(event.target.value) } }))} /></label>
                         <button className="secondary-btn" onClick={() => saveAffiliateQuota(affiliate)}>Simpan kuota</button>
-                        <label className="toggle-label"><input type="checkbox" checked={affiliate.ad_active} onChange={(event) => updateAffiliateAccess(affiliate, { ad_active: event.target.checked })} />Iklan tampil</label>
                         <span className={`status-label ${affiliate.active ? 'status-active' : 'status-expired'}`}>{affiliate.active ? 'Aktif' : 'Nonaktif'}</span>
-                        <button className="secondary-btn" onClick={() => updateAffiliateAccess(affiliate, { active: !affiliate.active, ad_active: false })}>{affiliate.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
+                        <button className="secondary-btn" onClick={() => updateAffiliateAccess(affiliate, { active: !affiliate.active })}>{affiliate.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
                       </article>
                     ))}
                     {!affiliateProgram.affiliates.length ? <p className="form-hint">Belum ada affiliate yang didaftarkan.</p> : null}

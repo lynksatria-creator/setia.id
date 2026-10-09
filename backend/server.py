@@ -125,24 +125,12 @@ class DashboardAdminCreate(BaseModel):
 class AffiliateCreate(DashboardAdminCreate):
     basic_quota: int = Field(default=0, ge=0, le=1000)
     premium_quota: int = Field(default=0, ge=0, le=1000)
-    ad_title: str = Field(default="", max_length=100)
-    ad_description: str = Field(default="", max_length=300)
-    ad_url: str = Field(default="", max_length=500)
-    ad_image: str = Field(default="", max_length=1000)
 
     @model_validator(mode="after")
     def require_affiliate_quota(self):
         if self.basic_quota + self.premium_quota < 1:
             raise ValueError("Affiliate harus mendapat minimal satu kuota Basic atau Premium.")
         return self
-
-    @field_validator("ad_url", "ad_image")
-    @classmethod
-    def validate_ad_urls(cls, value):
-        if value and (urlparse(value).scheme not in {"http", "https"} or not urlparse(value).netloc):
-            raise ValueError("URL iklan harus memakai HTTP atau HTTPS.")
-        return value
-
 
 class AffiliateProgramUpdate(BaseModel):
     combination_id: str = Field(pattern=r"^[a-z0-9-]{2,40}$")
@@ -165,6 +153,9 @@ class AffiliateUpdate(BaseModel):
     active: bool | None = None
     basic_quota: int | None = Field(default=None, ge=0, le=1000)
     premium_quota: int | None = Field(default=None, ge=0, le=1000)
+
+
+class AffiliateAdUpdate(BaseModel):
     ad_title: str | None = Field(default=None, max_length=100)
     ad_description: str | None = Field(default=None, max_length=300)
     ad_url: str | None = Field(default=None, max_length=500)
@@ -177,6 +168,10 @@ class AffiliateUpdate(BaseModel):
         if value and (urlparse(value).scheme not in {"http", "https"} or not urlparse(value).netloc):
             raise ValueError("URL iklan harus memakai HTTP atau HTTPS.")
         return value
+
+
+class AdminAffiliateUpdate(AffiliateAdUpdate):
+    active: bool | None = None
 
 
 class OwnerAdCreate(BaseModel):
@@ -677,6 +672,66 @@ async def list_demo_accounts(_admin=Depends(require_admin)):
     } for account in accounts]
 
 
+@api_router.get("/admin/affiliate-accounts")
+async def list_admin_affiliate_accounts(_admin=Depends(require_admin)):
+    affiliates = await db.users.find(
+        {"role": "affiliate"},
+        {"_id": 0, "password_hash": 0},
+    ).sort("created_at", -1).to_list(length=1000)
+    results = []
+    for affiliate in affiliates:
+        owner = await db.users.find_one(
+            {"id": affiliate.get("owner_id")},
+            {"_id": 0, "password_hash": 0},
+        ) if affiliate.get("owner_id") else None
+        results.append({
+            **dashboard_account_view(affiliate),
+            "owner_name": owner.get("full_name", "Pemilik tidak tersedia") if owner else "Pemilik tidak tersedia",
+            "owner_email": owner.get("email", "") if owner else "",
+            "basic_quota": affiliate.get("basic_quota", 0),
+            "premium_quota": affiliate.get("premium_quota", 0),
+            "basic_used": await db.invitations.count_documents({"affiliate_id": affiliate["id"], "plan_id": "basic"}),
+            "premium_used": await db.invitations.count_documents({"affiliate_id": affiliate["id"], "plan_id": "premium"}),
+            "invitation_count": await db.invitations.count_documents({"affiliate_id": affiliate["id"]}),
+            "ad_title": affiliate.get("ad_title", ""),
+            "ad_description": affiliate.get("ad_description", ""),
+            "ad_url": affiliate.get("ad_url", ""),
+            "ad_image": affiliate.get("ad_image", ""),
+            "ad_active": affiliate.get("ad_active", False),
+            "created_at": affiliate.get("created_at"),
+        })
+    return results
+
+
+@api_router.patch("/admin/affiliate-accounts/{affiliate_id}")
+async def update_admin_affiliate_account(
+    affiliate_id: str,
+    payload: AdminAffiliateUpdate,
+    _admin=Depends(require_admin),
+):
+    affiliate = await db.users.find_one(
+        {"id": affiliate_id, "role": "affiliate"},
+        {"_id": 0, "password_hash": 0},
+    )
+    if affiliate is None:
+        raise HTTPException(status_code=404, detail="Affiliate tidak ditemukan.")
+    updates = payload.model_dump(exclude_unset=True)
+    next_active = updates.get("active", affiliate.get("active", True))
+    next_ad_active = False if next_active is False else updates.get("ad_active", affiliate.get("ad_active", False))
+    next_ad_title = updates.get("ad_title", affiliate.get("ad_title", ""))
+    next_ad_url = updates.get("ad_url", affiliate.get("ad_url", ""))
+    if next_ad_active and (not next_active or not (next_ad_title or "").strip() or not (next_ad_url or "").strip()):
+        raise HTTPException(status_code=409, detail="Affiliate harus aktif dan iklan harus memiliki judul serta link sebelum ditayangkan.")
+    if updates.get("active") is False:
+        updates["ad_active"] = False
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one(
+        {"id": affiliate_id, "role": "affiliate"},
+        {"$set": updates},
+    )
+    return {"id": affiliate_id, **updates}
+
+
 @api_router.post("/admin/demo-accounts")
 async def create_demo_account(payload: DemoAccountCreate, _admin=Depends(require_admin)):
     config = await get_billing_config()
@@ -888,11 +943,6 @@ async def get_affiliate_program(current_user=Depends(get_current_user)):
             "premium_quota": affiliate.get("premium_quota", 0),
             "basic_used": await db.invitations.count_documents({"affiliate_id": affiliate["id"], "plan_id": "basic"}),
             "premium_used": await db.invitations.count_documents({"affiliate_id": affiliate["id"], "plan_id": "premium"}),
-            "ad_title": affiliate.get("ad_title", ""),
-            "ad_description": affiliate.get("ad_description", ""),
-            "ad_url": affiliate.get("ad_url", ""),
-            "ad_image": affiliate.get("ad_image", ""),
-            "ad_active": affiliate.get("ad_active", False),
             "invitation_count": affiliate_invitations,
         })
     return {"eligible": True, "program": program, "combinations": combinations, "affiliates": affiliates}
@@ -978,10 +1028,10 @@ async def create_affiliate(payload: AffiliateCreate, current_user=Depends(get_cu
         "active": True,
         "basic_quota": payload.basic_quota,
         "premium_quota": payload.premium_quota,
-        "ad_title": payload.ad_title.strip(),
-        "ad_description": payload.ad_description.strip(),
-        "ad_url": payload.ad_url.strip(),
-        "ad_image": payload.ad_image.strip(),
+        "ad_title": "",
+        "ad_description": "",
+        "ad_url": "",
+        "ad_image": "",
         "ad_active": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -993,7 +1043,6 @@ async def create_affiliate(payload: AffiliateCreate, current_user=Depends(get_cu
     return dashboard_account_view(affiliate) | {
         "basic_quota": affiliate["basic_quota"],
         "premium_quota": affiliate["premium_quota"],
-        "ad_active": False,
     }
 
 
@@ -1028,10 +1077,12 @@ async def update_affiliate(affiliate_id: str, payload: AffiliateUpdate, current_
         raise HTTPException(status_code=409, detail="Kuota Premium affiliate melebihi batas kombinasi Business.")
     if basic_quota < await db.invitations.count_documents({"affiliate_id": affiliate_id, "plan_id": "basic"}) or premium_quota < await db.invitations.count_documents({"affiliate_id": affiliate_id, "plan_id": "premium"}):
         raise HTTPException(status_code=409, detail="Kuota tidak boleh lebih rendah dari jumlah undangan yang sudah dibuat.")
+    if updates.get("active") is False:
+        updates["ad_active"] = False
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.users.update_one({"id": affiliate_id}, {"$set": updates})
     updated = await db.users.find_one({"id": affiliate_id}, {"_id": 0, "password_hash": 0})
-    return dashboard_account_view(updated) | {key: updated.get(key) for key in ("basic_quota", "premium_quota", "ad_title", "ad_description", "ad_url", "ad_image", "ad_active")}
+    return dashboard_account_view(updated) | {key: updated.get(key) for key in ("basic_quota", "premium_quota")}
 
 
 @api_router.get("/public/advertisements")

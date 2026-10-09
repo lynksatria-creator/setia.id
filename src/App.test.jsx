@@ -7,6 +7,7 @@ import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
 import { getThemeCatalog } from './lib/themeCatalog';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
 import { regionalInvitationTemplates } from './lib/regionalInvitationTemplates';
+import AdminBilling from './pages/AdminBilling';
 import PublicInvitation from './pages/PublicInvitation';
 
 const renderApp = () => render(<AuthProvider><App /></AuthProvider>);
@@ -632,6 +633,73 @@ test('shows the unified super admin login page', () => {
 
   expect(screen.getByRole('heading', { name: 'Super Admin' })).toBeDefined();
   expect(screen.getByLabelText('Email admin')).toBeDefined();
+});
+
+test('super admin can review affiliate history, manage ads, and deactivate without deletion', async () => {
+  const affiliate = {
+    id: 'affiliate-1',
+    full_name: 'Mitra Undangan',
+    email: 'mitra@example.com',
+    owner_name: 'Pemilik Undangan',
+    owner_email: 'owner@example.com',
+    basic_quota: 2,
+    premium_quota: 1,
+    basic_used: 1,
+    premium_used: 0,
+    invitation_count: 1,
+    ad_title: '',
+    ad_description: '',
+    ad_url: '',
+    ad_image: '',
+    ad_active: false,
+    active: true,
+    created_at: '2025-01-01T00:00:00+00:00',
+  };
+  const responses = {
+    '/api/admin/billing/config': {
+      plans: [],
+      payment_methods: [],
+      affiliate_combinations: [],
+      dashboard_admin_limit: 3,
+    },
+    '/api/admin/invitations': [],
+    '/api/admin/payments': [],
+    '/api/admin/demo-accounts': [],
+    '/api/admin/affiliate-accounts': [affiliate],
+  };
+  const fetchMock = vi.fn(async (url) => ({
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => responses[new URL(url, window.location.origin).pathname] ?? {},
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+
+  render(<AdminBilling />);
+  fireEvent.click(await screen.findByRole('button', { name: /affiliate & iklan/i }));
+
+  expect(await screen.findByText(/1 undangan · 1\/2 basic · 0\/1 premium/i)).toBeDefined();
+  fireEvent.change(screen.getByLabelText('Judul iklan'), { target: { value: 'Promo spesial' } });
+  fireEvent.change(screen.getByLabelText('Link tujuan'), { target: { value: 'https://example.com/promo' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Simpan iklan' }));
+  expect(await screen.findByText('Pengaturan iklan affiliate tersimpan.')).toBeDefined();
+  expect(fetchMock.mock.calls.some(([url, options]) => (
+    url.endsWith('/admin/affiliate-accounts/affiliate-1')
+    && options.method === 'PATCH'
+    && JSON.parse(options.body).ad_title === 'Promo spesial'
+  ))).toBe(true);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Nonaktifkan' }));
+  expect(await screen.findByText(/riwayat undangan dan atribusi penjualan tetap disimpan/i)).toBeDefined();
+  expect(fetchMock.mock.calls.some(([url, options]) => (
+    url.endsWith('/admin/affiliate-accounts/affiliate-1')
+    && options.method === 'PATCH'
+    && JSON.parse(options.body).active === false
+  ))).toBe(true);
+
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 
 test.each([
