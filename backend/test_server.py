@@ -132,6 +132,56 @@ class FakeCursor:
         return self.documents[:length]
 
 
+class FakeInvitationAccessCollection:
+    def __init__(self, documents):
+        self.documents = copy.deepcopy(documents)
+
+    async def find_one(self, query, _projection=None):
+        for document in self.documents:
+            if all(
+                document.get(key) in value["$in"] if isinstance(value, dict) and "$in" in value else document.get(key) == value
+                for key, value in query.items()
+            ):
+                return copy.deepcopy(document)
+        return None
+
+    def find(self, query, _projection=None):
+        documents = [
+            document for document in self.documents
+            if all(
+                document.get(key) in value["$in"] if isinstance(value, dict) and "$in" in value else document.get(key) == value
+                for key, value in query.items()
+            )
+        ]
+        return FakeCursor(documents)
+
+
+class FakeDashboardUsers:
+    def __init__(self, documents):
+        self.documents = copy.deepcopy(documents)
+
+    async def create_index(self, *_args, **_kwargs):
+        return None
+
+    def find(self, query, _projection=None):
+        return FakeCursor([
+            document for document in self.documents
+            if all(document.get(key) == value for key, value in query.items())
+        ])
+
+    async def find_one(self, query, _projection=None):
+        return next((
+            copy.deepcopy(document) for document in self.documents
+            if all(document.get(key) == value for key, value in query.items())
+        ), None)
+
+    async def count_documents(self, query):
+        return sum(all(document.get(key) == value for key, value in query.items()) for document in self.documents)
+
+    async def insert_one(self, document):
+        self.documents.append(copy.deepcopy(document))
+
+
 class FakeAdvertisementUsers:
     def __init__(self, affiliate, owner):
         self.affiliate = affiliate
@@ -198,6 +248,35 @@ def test_health_endpoint_is_public():
 
     assert response.status_code == 200
     assert response.json()["message"] == "Undangan.id API is running"
+
+
+def test_public_invitation_only_exposes_enabled_digital_envelope_methods(monkeypatch):
+    invitation = {
+        "id": "invitation-1",
+        "title": "Hari Bahagia",
+        "slug": "hari-bahagia",
+        "status": "published",
+        "active_until": "9999-12-31T23:59:59+00:00",
+        "content": {
+            "event_type": "Pernikahan",
+            "digital_envelope": {
+                "bank": {"enabled": True, "name": "BCA", "account_name": "Aulia", "account_number": "12345"},
+                "e_wallet": {"enabled": False, "provider": "DANA", "account_name": "Aulia", "account_number": "67890"},
+                "qris": {"enabled": False, "image_url": "https://example.com/private-qris.png", "instructions": "Private instructions"},
+            },
+        },
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(invitations=FakeCollection(invitation)))
+
+    response = TestClient(server.app).get("/api/public/invitations/hari-bahagia")
+
+    assert response.status_code == 200
+    public_content = response.json()["content"]
+    assert public_content["digital_envelope"] == {
+        "bank": {"enabled": True, "name": "BCA", "account_name": "Aulia", "account_number": "12345"},
+    }
+    assert "67890" not in response.text
+    assert "private-qris" not in response.text
 
 
 def test_account_endpoint_requires_bearer_token():
@@ -349,6 +428,83 @@ def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(mon
     assert check_in.json()["entry"]["status"] == "hidden"
     assert duplicate_check_in.json()["already_checked_in"] is True
     assert len(guestbook.documents) == 1
+
+
+def test_dashboard_admins_can_be_added_for_a_current_active_invitation(monkeypatch):
+    now = datetime.now(timezone.utc)
+    active_until = (now + timedelta(hours=2)).astimezone(timezone(timedelta(hours=7))).isoformat()
+    expired_until = (now - timedelta(hours=2)).astimezone(timezone(timedelta(hours=7))).isoformat()
+    owner = {"id": "owner-1", "role": "user"}
+    users = FakeDashboardUsers([owner])
+    monkeypatch.setattr(server, "db", SimpleNamespace(invitations=FakeInvitationAccessCollection([
+        {"owner_id": "owner-1", "status": "published", "active_until": expired_until},
+        {"owner_id": "owner-1", "status": "active", "active_until": active_until},
+        {"owner_id": "owner-2", "status": "published", "active_until": active_until},
+    ]), users=users, platform_settings=FakeCollection(copy.deepcopy(server.DEFAULT_BILLING_CONFIG))))
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: owner)
+    client = TestClient(server.app)
+
+    assert asyncio.run(server.has_active_invitation_package("owner-1")) is True
+    assert asyncio.run(server.has_active_invitation_package("owner-2")) is True
+    listed = client.get("/api/dashboard-admins")
+    assert listed.status_code == 200
+    assert listed.json()["eligible"] is True
+    created = client.post("/api/dashboard-admins", json={
+        "full_name": "Admin Acara",
+        "email": "admin@example.com",
+        "password": "secure-password",
+    })
+    assert created.status_code == 200
+    assert created.json()["email"] == "admin@example.com"
+    assert len(users.documents) == 2
+
+
+def test_affiliate_and_dashboard_admin_can_check_in_and_read_their_assigned_invitation(monkeypatch):
+    invitation = {
+        "id": "invitation-1",
+        "owner_id": "owner-1",
+        "affiliate_id": "affiliate-1",
+        "title": "Hari Bahagia",
+        "slug": "hari-bahagia",
+        "status": "published",
+        "active_until": "9999-12-31T23:59:59+00:00",
+        "content": {},
+    }
+    ticket = {
+        "id": "ticket-1",
+        "invitation_id": "invitation-1",
+        "name": "Alya",
+        "phone": "6281234567890",
+        "token": "a" * 40,
+    }
+    guestbook = FakeGuestbookCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        invitations=FakeInvitationAccessCollection([invitation]),
+        invitation_tickets=FakeTicketCollection(),
+        guestbook_entries=guestbook,
+    ))
+    server.db.invitation_tickets.documents.append(ticket)
+    affiliate = {"id": "affiliate-1", "role": "affiliate", "active": True}
+    dashboard_admin = {"id": "admin-1", "owner_id": "owner-1", "role": "dashboard_admin", "active": True}
+
+    affiliate_invitation = asyncio.run(server.get_dashboard_invitation("invitation-1", affiliate))
+    assert affiliate_invitation["affiliate_id"] == "affiliate-1"
+    first_check_in = asyncio.run(server.check_in_invitation_ticket(
+        "invitation-1",
+        server.InvitationTicketCheckIn(ticket_token=ticket["token"]),
+        affiliate,
+    ))
+    duplicate_check_in = asyncio.run(server.check_in_invitation_ticket(
+        "invitation-1",
+        server.InvitationTicketCheckIn(ticket_token=ticket["token"]),
+        dashboard_admin,
+    ))
+
+    assert first_check_in["already_checked_in"] is False
+    assert first_check_in["entry"]["owner_id"] == "owner-1"
+    assert duplicate_check_in["already_checked_in"] is True
+    assert len(guestbook.documents) == 1
+
 
 def test_mayar_webhook_does_not_activate_when_invoice_amount_mismatches(monkeypatch):
     payment_collection = FakeCollection({

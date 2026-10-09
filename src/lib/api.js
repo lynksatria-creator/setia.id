@@ -62,7 +62,7 @@ export const invitationsApi = {
 };
 
 export const dashboardManagementApi = {
-  admins: () => apiRequest('/dashboard-admins'),
+  admins: (token) => apiRequest('/dashboard-admins', { token }),
   createAdmin: (token, data) => apiRequest('/dashboard-admins', { token, method: 'POST', body: JSON.stringify(data) }),
   setAdminActive: (token, id, active) => apiRequest(`/dashboard-admins/${id}`, { token, method: 'PATCH', body: JSON.stringify({ active }) }),
   affiliateProgram: (token) => apiRequest('/affiliate-program', { token }),

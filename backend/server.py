@@ -362,6 +362,16 @@ async def get_dashboard_invitation(invitation_id: str, user: dict):
         if invitation is None or invitation.get("status") not in {"active", "published"}:
             raise HTTPException(status_code=404, detail="Undangan tidak ditemukan.")
         return invitation
+    if user.get("role") == "affiliate":
+        if not user.get("active", True):
+            raise HTTPException(status_code=403, detail="Akses affiliate sudah dinonaktifkan.")
+        invitation = await db.invitations.find_one(
+            {"id": invitation_id, "affiliate_id": user["id"]},
+            {"_id": 0},
+        )
+        if invitation is None or invitation.get("status") not in {"active", "published"}:
+            raise HTTPException(status_code=404, detail="Undangan tidak ditemukan.")
+        return invitation
     return await get_owned_invitation(invitation_id, user["id"])
 
 
@@ -380,12 +390,22 @@ async def require_business_owner(user: dict):
 
 
 async def has_active_invitation_package(owner_id: str):
-    now = datetime.now(timezone.utc).isoformat()
-    return await db.invitations.count_documents({
+    invitations = await db.invitations.find({
         "owner_id": owner_id,
         "status": {"$in": ["active", "published"]},
-        "active_until": {"$gt": now},
-    }) > 0
+    }, {"_id": 0, "active_until": 1}).to_list(length=500)
+    now = datetime.now(timezone.utc)
+    for invitation in invitations:
+        try:
+            value = invitation["active_until"]
+            active_until = value if isinstance(value, datetime) else datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+        if active_until.tzinfo is None:
+            active_until = active_until.replace(tzinfo=timezone.utc)
+        if active_until > now:
+            return True
+    return False
 
 
 async def activate_invitation(payment):
@@ -1177,6 +1197,50 @@ async def publish_invitation(invitation_id: str, current_user=Depends(get_curren
     return {"status": "published", "url": f"/i/{invitation['slug']}", "active_until": invitation["active_until"]}
 
 
+def public_digital_envelope(content):
+    envelope = content.get("digital_envelope")
+    if not isinstance(envelope, dict):
+        return {}
+
+    public_envelope = {}
+    bank = envelope.get("bank")
+    if isinstance(bank, dict) and bank.get("enabled"):
+        name = str(bank.get("name") or "").strip()
+        account_name = str(bank.get("account_name") or "").strip()
+        account_number = str(bank.get("account_number") or "").strip()
+        if name and account_name and account_number:
+            public_envelope["bank"] = {
+                "enabled": True,
+                "name": name,
+                "account_name": account_name,
+                "account_number": account_number,
+            }
+
+    e_wallet = envelope.get("e_wallet")
+    if isinstance(e_wallet, dict) and e_wallet.get("enabled"):
+        provider = str(e_wallet.get("provider") or "").strip()
+        account_name = str(e_wallet.get("account_name") or "").strip()
+        account_number = str(e_wallet.get("account_number") or "").strip()
+        if provider and account_name and account_number:
+            public_envelope["e_wallet"] = {
+                "enabled": True,
+                "provider": provider,
+                "account_name": account_name,
+                "account_number": account_number,
+            }
+
+    qris = envelope.get("qris")
+    if isinstance(qris, dict) and qris.get("enabled"):
+        image_url = str(qris.get("image_url") or "").strip()
+        if image_url:
+            public_envelope["qris"] = {
+                "enabled": True,
+                "image_url": image_url,
+                "instructions": str(qris.get("instructions") or "").strip(),
+            }
+    return public_envelope
+
+
 @api_router.get("/public/invitations/{slug}")
 async def get_public_invitation(slug: str):
     invitation = await db.invitations.find_one({"slug": slug, "status": "published"}, {"_id": 0})
@@ -1185,7 +1249,13 @@ async def get_public_invitation(slug: str):
     if datetime.fromisoformat(invitation["active_until"]) <= datetime.now(timezone.utc):
         await db.invitations.update_one({"id": invitation["id"]}, {"$set": {"status": "expired"}})
         raise HTTPException(status_code=410, detail="Masa aktif undangan sudah berakhir.")
-    return {"title": invitation["title"], "slug": invitation["slug"], "content": invitation["content"]}
+    content = dict(invitation["content"])
+    public_envelope = public_digital_envelope(content)
+    if public_envelope:
+        content["digital_envelope"] = public_envelope
+    else:
+        content.pop("digital_envelope", None)
+    return {"title": invitation["title"], "slug": invitation["slug"], "content": content}
 
 
 async def get_published_invitation(slug: str):
@@ -1266,7 +1336,9 @@ async def create_invitation_tickets(
     payload: InvitationTicketBatch,
     current_user=Depends(get_current_user),
 ):
-    invitation = await get_owned_invitation(invitation_id, current_user["id"])
+    if current_user.get("role") == "dashboard_admin":
+        raise HTTPException(status_code=403, detail="Admin tambahan tidak dapat membuat atau mengelola tiket.")
+    invitation = await get_dashboard_invitation(invitation_id, current_user)
     if invitation.get("status") != "published" or datetime.fromisoformat(invitation["active_until"]) <= datetime.now(timezone.utc):
         raise HTTPException(status_code=409, detail="Publish undangan yang masih aktif sebelum membuat tiket barcode.")
     if invitation.get("plan_id") == "basic" and len(payload.recipients) > 1:
@@ -1290,7 +1362,7 @@ async def create_invitation_tickets(
             ticket = {
                 "id": str(uuid.uuid4()),
                 **identity,
-                "owner_id": current_user["id"],
+                "owner_id": invitation["owner_id"],
                 "token": secrets.token_urlsafe(32),
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -1342,7 +1414,7 @@ async def check_in_invitation_ticket(
     payload: InvitationTicketCheckIn,
     current_user=Depends(get_current_user),
 ):
-    await get_owned_invitation(invitation_id, current_user["id"])
+    invitation = await get_dashboard_invitation(invitation_id, current_user)
     ticket = await db.invitation_tickets.find_one(
         {"invitation_id": invitation_id, "token": payload.ticket_token},
         {"_id": 0},
@@ -1352,7 +1424,7 @@ async def check_in_invitation_ticket(
 
     await db.guestbook_entries.create_index([("ticket_id", 1)], unique=True, sparse=True)
     if ticket.get("checked_in_at"):
-        entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, current_user["id"])
+        entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, invitation["owner_id"])
         return {"already_checked_in": True, "entry": entry}
 
     checked_in_at = datetime.now(timezone.utc).isoformat()
@@ -1364,11 +1436,11 @@ async def check_in_invitation_ticket(
         ticket = await db.invitation_tickets.find_one({"id": ticket["id"]}, {"_id": 0})
         if ticket is None:
             raise HTTPException(status_code=404, detail="Tiket undangan tidak ditemukan.")
-        entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, current_user["id"])
+        entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, invitation["owner_id"])
         return {"already_checked_in": True, "entry": entry}
 
     ticket["checked_in_at"] = checked_in_at
-    entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, current_user["id"])
+    entry = await ensure_ticket_guestbook_entry(ticket, invitation_id, invitation["owner_id"])
     return {"already_checked_in": False, "entry": entry}
 
 

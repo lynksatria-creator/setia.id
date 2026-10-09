@@ -41,6 +41,11 @@ const emptyForm = {
   video_url: '',
   rsvp_url: '',
   gallery: '',
+  digital_envelope: {
+    bank: { enabled: false, name: '', account_name: '', account_number: '' },
+    e_wallet: { enabled: false, provider: '', account_name: '', account_number: '' },
+    qris: { enabled: false, image_url: '', instructions: '' },
+  },
 };
 
 const invitationTemplates = [
@@ -78,14 +83,16 @@ const invitationTemplates = [
 ];
 
 const eventGroups = [
-  { label: 'Pernikahan', options: ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy', 'Anniversary'] },
+  { label: 'Pernikahan', options: ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy'] },
   { label: 'Acara Islami & Keluarga', options: ['Aqiqah', 'Khitanan', 'Walimatul Khitan', 'Tasyakuran', 'Pengajian', 'Haul', 'Syukuran', 'Milad'] },
-  { label: 'Anak & Pendidikan', options: ['Ulang Tahun Anak', 'Ulang Tahun Dewasa', 'Baby Shower', 'Gender Reveal', 'Wisuda', 'Kelulusan', 'Reuni'] },
+  { label: 'Perayaan', options: ['Anniversary', 'Ulang Tahun Anak', 'Ulang Tahun Dewasa', 'Baby Shower', 'Gender Reveal'] },
+  { label: 'Pendidikan & Komunitas', options: ['Wisuda', 'Kelulusan', 'Reuni'] },
   { label: 'Acara Umum', options: ['Gathering', 'Family Gathering', 'Halal Bihalal', 'Seminar', 'Workshop', 'Meeting', 'Grand Opening', 'Event', 'Acara Komunitas', 'Custom Event'] },
 ];
 
-const weddingEventTypes = ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy', 'Anniversary'];
+const weddingEventTypes = ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy'];
 const organizerEventTypes = ['Reuni', 'Gathering', 'Family Gathering', 'Halal Bihalal', 'Seminar', 'Workshop', 'Meeting', 'Grand Opening', 'Event', 'Acara Komunitas', 'Custom Event'];
+const eWalletProviders = ['GoPay', 'DANA', 'OVO', 'ShopeePay', 'LinkAja'];
 
 const eventTemplateRecommendations = {
   Pernikahan: { categories: ['Pernikahan', 'Gen Z'] },
@@ -195,14 +202,35 @@ const readWorkbook = (file) => new Promise((resolve, reject) => {
   reader.onload = () => resolve(reader.result);
   reader.readAsArrayBuffer(file);
 });
+const loadOwnerGuestbookEntries = async (token, invitations) => {
+  const allEntries = [];
+  for (let index = 0; index < invitations.length; index += 5) {
+    const batch = invitations.slice(index, index + 5);
+    const entriesByInvitation = await Promise.all(batch.map(async (invitation) => {
+      const entries = await guestbookApi.listOwner(token, invitation.id);
+      return entries.map((entry) => ({
+        ...entry,
+        invitation_id: invitation.id,
+        invitation_title: invitation.title,
+      }));
+    }));
+    allEntries.push(...entriesByInvitation.flat());
+  }
+  return allEntries.sort((left, right) => (
+    new Date(right.created_at || right.checked_in_at || 0) - new Date(left.created_at || left.checked_in_at || 0)
+  ));
+};
 
 export default function Dashboard({ onSignIn }) {
   const { user, token, isChecking, logout } = useAuth();
   const [billing, setBilling] = useState({ plans: [], payment_methods: [] });
   const [invitations, setInvitations] = useState([]);
+  const [buyerMenu, setBuyerMenu] = useState('dashboard');
   const [previewInvitation, setPreviewInvitation] = useState(null);
   const [guestbookInvitation, setGuestbookInvitation] = useState(null);
   const [ownerGuestbook, setOwnerGuestbook] = useState([]);
+  const [dashboardGuestbook, setDashboardGuestbook] = useState([]);
+  const [isLoadingDashboardGuestbook, setIsLoadingDashboardGuestbook] = useState(false);
   const [demoTemplate, setDemoTemplate] = useState(null);
   const [setupComplete, setSetupComplete] = useState(false);
   const [setupGroup, setSetupGroup] = useState('');
@@ -231,6 +259,7 @@ export default function Dashboard({ onSignIn }) {
   const [recipientNames, setRecipientNames] = useState({});
   const [qrInvitationId, setQrInvitationId] = useState('');
   const openedGuestbookSlug = useRef('');
+  const autoOpenedScanInvitationId = useRef('');
   const [dashboardAdmins, setDashboardAdmins] = useState({ eligible: false, max_admins: 3, admins: [] });
   const [affiliateProgram, setAffiliateProgram] = useState({ eligible: false, program: null, combinations: [], affiliates: [] });
   const [selectedAffiliateCombination, setSelectedAffiliateCombination] = useState('');
@@ -266,7 +295,7 @@ export default function Dashboard({ onSignIn }) {
     }
 
     if (user?.role === 'user') {
-      Promise.all([dashboardManagementApi.admins(), dashboardManagementApi.affiliateProgram()])
+      Promise.all([dashboardManagementApi.admins(token), dashboardManagementApi.affiliateProgram(token)])
         .then(([adminResult, affiliateResult]) => {
           if (!active) return;
           setDashboardAdmins(adminResult);
@@ -280,6 +309,12 @@ export default function Dashboard({ onSignIn }) {
 
   const selectedPlan = billing.plans.find((plan) => plan.id === form.plan_id);
   const selectedPaymentMethod = billing.payment_methods.find((method) => method.id === paymentMethodId);
+  const checkInInvitations = invitations.filter((invitation) => (
+    invitation.status === 'published' && new Date(invitation.active_until) > new Date()
+  ));
+  const showBuyerDashboard = user?.role !== 'user' || buyerMenu === 'dashboard';
+  const showBuyerInvitations = user?.role !== 'user' || buyerMenu === 'invitations';
+  const showBuyerGuide = user?.role !== 'user' || buyerMenu === 'guide';
   const affiliatePlanCounts = {
     basic: invitations.filter((invitation) => invitation.plan_id === 'basic').length,
     premium: invitations.filter((invitation) => invitation.plan_id === 'premium').length,
@@ -301,14 +336,41 @@ export default function Dashboard({ onSignIn }) {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
+  const updateEnvelopeField = (method, field, value) => {
+    setForm((current) => ({
+      ...current,
+      digital_envelope: {
+        ...emptyForm.digital_envelope,
+        ...(current.digital_envelope || {}),
+        [method]: {
+          ...emptyForm.digital_envelope[method],
+          ...(current.digital_envelope?.[method] || {}),
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const refreshDashboardGuestbook = async () => {
+    setIsLoadingDashboardGuestbook(true);
+    setError('');
+    try {
+      setDashboardGuestbook(await loadOwnerGuestbookEntries(token, invitations));
+    } catch (requestError) {
+      setError(`Daftar tamu belum dapat dimuat: ${requestError.message}`);
+    } finally {
+      setIsLoadingDashboardGuestbook(false);
+    }
+  };
+
   const refreshInvitations = async () => {
     setInvitations(await invitationsApi.list(token));
   };
 
   const refreshBusinessManagement = async () => {
     const [admins, program] = await Promise.all([
-      dashboardManagementApi.admins(),
-      dashboardManagementApi.affiliateProgram(),
+      dashboardManagementApi.admins(token),
+      dashboardManagementApi.affiliateProgram(token),
     ]);
     setDashboardAdmins(admins);
     setAffiliateProgram(program);
@@ -444,10 +506,10 @@ export default function Dashboard({ onSignIn }) {
       template_id: demoTemplate.id,
       couple_names: weddingEventTypes.includes(form.event_type) ? form.couple_names || 'Aulia & Farhan' : '',
       honoree_name: weddingEventTypes.includes(form.event_type) ? '' : form.honoree_name || form.title || form.event_type,
-      groom_parents: form.groom_parents,
-      bride_parents: form.bride_parents,
-      groom_instagram: form.groom_instagram,
-      bride_instagram: form.bride_instagram,
+      groom_parents: weddingEventTypes.includes(form.event_type) ? form.groom_parents : '',
+      bride_parents: weddingEventTypes.includes(form.event_type) ? form.bride_parents : '',
+      groom_instagram: weddingEventTypes.includes(form.event_type) ? form.groom_instagram : '',
+      bride_instagram: weddingEventTypes.includes(form.event_type) ? form.bride_instagram : '',
       cover_image: form.cover_image,
       event_date: form.event_date || '2026-12-12',
       event_time: form.event_time || '10:00',
@@ -464,6 +526,7 @@ export default function Dashboard({ onSignIn }) {
       music_url: form.music_url,
       video_url: form.video_url,
       rsvp_url: form.rsvp_url,
+      digital_envelope: form.digital_envelope,
       gallery: form.gallery.trim() ? form.gallery.split('\n').map((url) => url.trim()).filter(Boolean) : [
         'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1000&q=85',
         'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1000&q=85',
@@ -517,6 +580,13 @@ export default function Dashboard({ onSignIn }) {
       bride_parents: content.bride_parents || '',
       groom_instagram: content.groom_instagram || '',
       bride_instagram: content.bride_instagram || '',
+      digital_envelope: {
+        ...emptyForm.digital_envelope,
+        ...(content.digital_envelope || {}),
+        bank: { ...emptyForm.digital_envelope.bank, ...(content.digital_envelope?.bank || {}) },
+        e_wallet: { ...emptyForm.digital_envelope.e_wallet, ...(content.digital_envelope?.e_wallet || {}) },
+        qris: { ...emptyForm.digital_envelope.qris, ...(content.digital_envelope?.qris || {}) },
+      },
       cover_image: content.cover_image || '',
       event_date: content.event_date || '',
       event_time: content.event_time || '',
@@ -562,6 +632,27 @@ export default function Dashboard({ onSignIn }) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+
+  const handleQrisUpload = async (event) => {
+    const [file] = event.target.files || [];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('File QRIS harus berupa gambar.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Ukuran gambar QRIS maksimal 5 MB.');
+      return;
+    }
+    setError('');
+    try {
+      const imageUrl = await readImageFile(file);
+      updateEnvelopeField('qris', 'image_url', imageUrl);
+      setMessage('Gambar QRIS berhasil dimuat. Simpan undangan untuk menerapkannya.');
+    } catch {
+      setError('Gambar QRIS tidak dapat dibaca.');
+    }
+  };
 
   const handleCoverUpload = async (event) => {
     const [file] = event.target.files;
@@ -609,6 +700,19 @@ export default function Dashboard({ onSignIn }) {
       setError('Akun demo hanya dapat membuat maksimal 2 undangan.');
       return;
     }
+    const envelope = form.digital_envelope || emptyForm.digital_envelope;
+    if (envelope.bank.enabled && (!envelope.bank.name.trim() || !envelope.bank.account_name.trim() || !envelope.bank.account_number.trim())) {
+      setError('Lengkapi nama bank, nama pemilik rekening, dan nomor rekening sebelum mengaktifkan transfer bank.');
+      return;
+    }
+    if (envelope.e_wallet.enabled && (!envelope.e_wallet.provider.trim() || !envelope.e_wallet.account_name.trim() || !envelope.e_wallet.account_number.trim())) {
+      setError('Lengkapi penyedia e-wallet, nama pemilik akun, dan nomor akun sebelum mengaktifkan e-wallet.');
+      return;
+    }
+    if (envelope.qris.enabled && !envelope.qris.image_url.trim()) {
+      setError('Tambahkan URL gambar QRIS sebelum mengaktifkan QRIS.');
+      return;
+    }
     setError('');
     setMessage('');
     setIsSaving(true);
@@ -620,13 +724,13 @@ export default function Dashboard({ onSignIn }) {
       custom_primary: form.custom_primary,
       custom_accent: form.custom_accent,
       custom_background: form.custom_background,
-      honoree_name: form.honoree_name,
-      groom_parents: form.groom_parents,
-      bride_parents: form.bride_parents,
-      groom_instagram: form.groom_instagram,
-      bride_instagram: form.bride_instagram,
+      honoree_name: weddingEventTypes.includes(form.event_type) ? '' : form.honoree_name,
+      groom_parents: weddingEventTypes.includes(form.event_type) ? form.groom_parents : '',
+      bride_parents: weddingEventTypes.includes(form.event_type) ? form.bride_parents : '',
+      groom_instagram: weddingEventTypes.includes(form.event_type) ? form.groom_instagram : '',
+      bride_instagram: weddingEventTypes.includes(form.event_type) ? form.bride_instagram : '',
       cover_image: form.cover_image,
-      couple_names: form.couple_names,
+      couple_names: weddingEventTypes.includes(form.event_type) ? form.couple_names : '',
       event_date: form.event_date,
       event_time: form.event_time,
       reception_date: form.reception_date,
@@ -643,6 +747,25 @@ export default function Dashboard({ onSignIn }) {
       video_url: form.video_url,
       rsvp_url: form.rsvp_url,
       gallery: form.gallery.split('\n').map((url) => url.trim()).filter(Boolean),
+      digital_envelope: {
+        bank: {
+          ...envelope.bank,
+          name: envelope.bank.name.trim(),
+          account_name: envelope.bank.account_name.trim(),
+          account_number: envelope.bank.account_number.trim(),
+        },
+        e_wallet: {
+          ...envelope.e_wallet,
+          provider: envelope.e_wallet.provider.trim(),
+          account_name: envelope.e_wallet.account_name.trim(),
+          account_number: envelope.e_wallet.account_number.trim(),
+        },
+        qris: {
+          ...envelope.qris,
+          image_url: envelope.qris.image_url.trim(),
+          instructions: envelope.qris.instructions.trim(),
+        },
+      },
     };
     const plan = selectedPlan;
     const planId = user.is_test_account ? 'business' : form.plan_id;
@@ -773,6 +896,10 @@ export default function Dashboard({ onSignIn }) {
   const handleTicketScan = async (scannedValue) => {
     setError('');
     setMessage('');
+    if (!guestbookInvitation) {
+      setError('Pilih undangan terlebih dahulu sebelum memindai tiket.');
+      return;
+    }
     let ticketToken = '';
     try {
       const ticketUrl = new URL(scannedValue, window.location.origin);
@@ -872,6 +999,8 @@ export default function Dashboard({ onSignIn }) {
 
   const openGuestbook = async (invitation) => {
     setGuestbookInvitation(invitation);
+    setOwnerGuestbook([]);
+    if (user?.role === 'user') setBuyerMenu('scan');
     try {
       setOwnerGuestbook(await guestbookApi.listOwner(token, invitation.id));
     } catch (requestError) {
@@ -888,6 +1017,50 @@ export default function Dashboard({ onSignIn }) {
     openedGuestbookSlug.current = requestedSlug;
     openGuestbook(requestedInvitation);
   }, [invitations, token]);
+
+  useEffect(() => {
+    if (user?.role !== 'user' || buyerMenu !== 'scan') {
+      autoOpenedScanInvitationId.current = '';
+      return;
+    }
+    if (checkInInvitations.length !== 1) {
+      autoOpenedScanInvitationId.current = '';
+      return;
+    }
+
+    const [invitation] = checkInInvitations;
+    if (guestbookInvitation?.id === invitation.id) {
+      autoOpenedScanInvitationId.current = invitation.id;
+      return;
+    }
+    if (autoOpenedScanInvitationId.current === invitation.id) return;
+
+    autoOpenedScanInvitationId.current = invitation.id;
+    openGuestbook(invitation);
+  }, [buyerMenu, guestbookInvitation, invitations, user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== 'user' || !invitations.length) {
+      setDashboardGuestbook([]);
+      setIsLoadingDashboardGuestbook(false);
+      return undefined;
+    }
+
+    let active = true;
+    setIsLoadingDashboardGuestbook(true);
+    loadOwnerGuestbookEntries(token, invitations)
+      .then((entries) => {
+        if (active) setDashboardGuestbook(entries);
+      })
+      .catch((requestError) => {
+        if (active) setError(`Daftar tamu belum dapat dimuat: ${requestError.message}`);
+      })
+      .finally(() => {
+        if (active) setIsLoadingDashboardGuestbook(false);
+      });
+
+    return () => { active = false; };
+  }, [invitations, token, user?.role]);
 
   const moderateGuestbook = async (entry, status) => {
     try {
@@ -929,11 +1102,55 @@ export default function Dashboard({ onSignIn }) {
           <div className="account-heading">
             <div><p className="eyebrow">Ruang undangan Anda</p><h1>Rancang cerita hari istimewa.</h1><p>{user.is_test_account ? 'Pilih paket Basic, Premium, atau Business selama masa akses tester.' : 'Buat draft, edit detail acara, lalu aktifkan setelah pembayaran dikonfirmasi.'}</p></div>
           </div>
-          {user.is_test_account ? <p className="account-message" role="status">Akun tester · akses semua paket tanpa pembayaran hingga {user.test_access_until ? new Date(user.test_access_until).toLocaleDateString('id-ID') : 'masa akses berakhir'}. Undangan aktif mengikuti batas masa akses akun.</p> : null}
-          {user.is_demo ? <section className="account-panel demo-account-notice" role="status"><strong>Akun demo · Paket {user.demo_plan_id}</strong><p>Akses berakhir {new Date(user.demo_until).toLocaleString('id-ID')}. Akun demo hanya dapat mengirim maksimal 2 undangan{user.demo_plan_id === 'business' ? ' untuk seluruh jaringan akun' : ''} dan tidak dapat melakukan pembayaran.</p><span>{invitations.length}/2 undangan digunakan</span></section> : null}
+          {user.role === 'user' ? (
+            <>
+              <nav className="buyer-dashboard-nav" aria-label="Menu akun pembeli">
+                <button type="button" aria-current={buyerMenu === 'dashboard' ? 'page' : undefined} onClick={() => setBuyerMenu('dashboard')}>Dashboard</button>
+                <button type="button" aria-current={buyerMenu === 'invitations' ? 'page' : undefined} onClick={() => setBuyerMenu('invitations')}>Undangan</button>
+                <button type="button" aria-current={buyerMenu === 'guide' ? 'page' : undefined} onClick={() => setBuyerMenu('guide')}>Cara penggunaan</button>
+                <button type="button" aria-current={buyerMenu === 'scan' ? 'page' : undefined} onClick={() => setBuyerMenu('scan')}>Scan QR</button>
+              </nav>
+              <section className="buyer-dashboard-overview buyer-dashboard-view" hidden={!showBuyerDashboard}>
+                <div>
+                  <span className="eyebrow">Dashboard pembeli</span>
+                  <h2>Semua kebutuhan undangan, dalam satu tempat.</h2>
+                  <p>Pantau undangan Anda, lanjutkan rancangan, dan bagikan momen istimewa dengan mudah.</p>
+                </div>
+                <div className="buyer-dashboard-stats">
+                  <article><strong>{invitations.length}</strong><span>Total undangan</span></article>
+                  <article><strong>{invitations.filter((invitation) => invitation.status === 'published').length}</strong><span>Sudah dipublikasikan</span></article>
+                  <article><strong>{invitations.filter((invitation) => invitation.status !== 'published').length}</strong><span>Draft / belum tayang</span></article>
+                </div>
+                <button type="button" className="primary-btn" onClick={() => setBuyerMenu('invitations')}>Buat atau lanjutkan undangan</button>
+              </section>
+              <section className="account-panel buyer-dashboard-guestbook buyer-dashboard-view" hidden={!showBuyerDashboard}>
+                <div className="account-panel-heading">
+                  <div><span className="eyebrow">RSVP & ucapan</span><h2>Daftar tamu dan pesan terbaru</h2></div>
+                  <button type="button" className="text-button" onClick={refreshDashboardGuestbook} disabled={isLoadingDashboardGuestbook}>
+                    {isLoadingDashboardGuestbook ? 'Memuat…' : 'Muat ulang'}
+                  </button>
+                </div>
+                <p className="form-hint">Konfirmasi kehadiran dan ucapan dari seluruh undangan Anda ditampilkan di sini.</p>
+                {isLoadingDashboardGuestbook && !dashboardGuestbook.length ? <p role="status">Memuat daftar tamu…</p> : null}
+                {!isLoadingDashboardGuestbook && !dashboardGuestbook.length ? <p className="form-hint">Belum ada RSVP atau ucapan dari tamu.</p> : null}
+                <div className="owner-guestbook-list">
+                  {dashboardGuestbook.map((entry) => (
+                    <article key={`${entry.invitation_id}-${entry.id}`}>
+                      <strong>{entry.name}</strong>
+                      <span>{entry.invitation_title} · {entry.attendance === 'attending' ? 'Akan hadir' : entry.attendance === 'maybe' ? 'Masih tentatif' : 'Belum bisa hadir'}{entry.guests > 1 ? ` · ${entry.guests} tamu` : ''}</span>
+                      <p>{entry.message}</p>
+                      <span>{entry.created_at ? new Date(entry.created_at).toLocaleString('id-ID') : 'Waktu belum tersedia'}</span>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </>
+          ) : null}
+          {user.is_test_account ? <p className="account-message buyer-dashboard-view" hidden={!showBuyerDashboard} role="status">Akun tester · akses semua paket tanpa pembayaran hingga {user.test_access_until ? new Date(user.test_access_until).toLocaleDateString('id-ID') : 'masa akses berakhir'}. Undangan aktif mengikuti batas masa akses akun.</p> : null}
+          {user.is_demo ? <section className="account-panel demo-account-notice buyer-dashboard-view" hidden={!showBuyerDashboard} role="status"><strong>Akun demo · Paket {user.demo_plan_id}</strong><p>Akses berakhir {new Date(user.demo_until).toLocaleString('id-ID')}. Akun demo hanya dapat mengirim maksimal 2 undangan{user.demo_plan_id === 'business' ? ' untuk seluruh jaringan akun' : ''} dan tidak dapat melakukan pembayaran.</p><span>{invitations.length}/2 undangan digunakan</span></section> : null}
 
           {user.role === 'user' ? (
-            <section className="account-panel dashboard-admin-management">
+            <section className="account-panel dashboard-admin-management buyer-dashboard-view" hidden={!showBuyerDashboard}>
               <div className="account-panel-heading"><div><span className="eyebrow">Tim acara</span><h2>Admin dashboard buku tamu</h2></div><strong>{dashboardAdmins.admins.length}/{dashboardAdmins.max_admins}</strong></div>
               <p className="form-hint">Buat maksimal tiga akun admin tambahan. Mereka dapat melihat QR undangan dan membaca buku tamu, tetapi tidak dapat mengedit atau mengelola pembayaran.</p>
               {!dashboardAdmins.eligible ? <p className="form-hint">Kelola admin tersedia setelah Anda memiliki undangan dengan paket aktif.</p> : null}
@@ -956,7 +1173,7 @@ export default function Dashboard({ onSignIn }) {
           ) : null}
 
           {user.role === 'user' && affiliateProgram.eligible ? (
-            <section className="account-panel affiliate-management-panel">
+            <section className="account-panel affiliate-management-panel buyer-dashboard-view" hidden={!showBuyerDashboard}>
               <div className="account-panel-heading"><div><span className="eyebrow">Paket Business</span><h2>Kelola affiliate & iklan</h2></div><span className="status-label status-active">Penjualan milik Anda</span></div>
               <p className="form-hint">Semua pesanan dari jaringan affiliate tercatat dan dibayar kepada pemilik paket Business. Alokasi paket untuk seluruh affiliate mengikuti satu kombinasi yang diatur Super Admin.</p>
               <div className="affiliate-program-controls">
@@ -1001,24 +1218,26 @@ export default function Dashboard({ onSignIn }) {
 
           {user.role === 'dashboard_admin' ? (
             <section className="account-panel"><p className="eyebrow">Akses admin buku tamu</p><h2>Anda dapat melihat undangan dan RSVP pemilik.</h2><p>Pengaturan paket, pembayaran, dan perubahan undangan hanya tersedia bagi pemilik paket.</p></section>
-          ) : !setupComplete ? <section className="account-panel invitation-setup-panel">
+          ) : !setupComplete ? <section className="account-panel invitation-setup-panel buyer-invitations-view" hidden={!showBuyerInvitations}>
+            <div id="buyer-invitations" className="buyer-section-anchor" />
             <div className="account-panel-heading"><div><span className="eyebrow">Langkah 1 dari 3</span><h2>Mulai rancangan undangan</h2></div></div>
             <p className="setup-intro">Pilih kelompok acara, jenis undangan, dan template agar form berikutnya menyesuaikan kebutuhan Anda.</p>
             <div className="setup-grid">
               <label>Kelompok acara<select value={setupGroup} onChange={(event) => { setSetupGroup(event.target.value); setSetupProvince(''); setSetupEventType(''); setSetupTemplateId(''); }}><option value="">Pilih kelompok</option>{eventGroups.map((group) => <option key={group.label} value={group.label}>{group.label}</option>)}</select></label>
-              <label>Jenis acara<select value={setupEventType} disabled={!setupGroup} onChange={(event) => { const eventType = event.target.value; setSetupEventType(eventType); setSetupTemplateId(getTemplatesForEvent(invitationTemplates, eventType)[0]?.id || ''); }}><option value="">Pilih jenis acara</option>{eventGroups.find((group) => group.label === setupGroup)?.options.map((option) => <option key={option}>{option}</option>)}</select></label>
+              <label>Jenis acara<select value={setupEventType} disabled={!setupGroup} onChange={(event) => { const eventType = event.target.value; setSetupProvince(''); setSetupEventType(eventType); setSetupTemplateId(getTemplatesForEvent(invitationTemplates, eventType)[0]?.id || ''); }}><option value="">Pilih jenis acara</option>{eventGroups.find((group) => group.label === setupGroup)?.options.map((option) => <option key={option}>{option}</option>)}</select></label>
             </div>
             <label className="province-select-field">Inspirasi daerah (opsional)<select value={setupProvince} disabled={!setupEventType} onChange={(event) => { const province = event.target.value; setSetupProvince(province); setSetupTemplateId(province ? regionalInvitationTemplates.find((template) => template.province === province)?.id || '' : getTemplatesForEvent(invitationTemplates, setupEventType)[0]?.id || ''); }}><option value="">Tanpa inspirasi daerah</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province}</option>)}</optgroup>)}</select><small className="form-hint">Tersedia inspirasi visual untuk seluruh 38 provinsi Indonesia.</small></label>
             <div className="setup-template-section"><span className="form-label">{setupProvince ? `Template daerah · ${setupProvince}` : setupEventType ? `Template untuk ${setupEventType}` : 'Template acara'}</span><div className="setup-template-grid">{setupTemplates.map((template) => <button type="button" key={template.id} className={`setup-template-card ${setupTemplateId === template.id ? 'selected' : ''}`} onClick={() => setSetupTemplateId(template.id)}><span className="template-choice-swatch" style={{ background: `linear-gradient(135deg, ${template.colors[0]}, ${template.colors[1]})` }} /><strong>{template.name}</strong><small>{template.province ? `${template.islandGroup} · ${template.inspiration}` : `${template.category} · Cocok untuk ${setupEventType}`}</small></button>)}</div></div>
             {setupEventType ? <p className="form-hint">Menampilkan {setupTemplates.length} template yang disesuaikan untuk acara {setupEventType}{setupProvince ? ` dengan inspirasi ${setupProvince}` : ''}.</p> : null}
             <button className="primary-btn setup-continue-button" onClick={beginInvitation}>Lanjutkan ke isi data</button>
-          </section> : <section className="account-panel invitation-editor-panel">
+          </section> : <section className="account-panel invitation-editor-panel buyer-invitations-view" hidden={!showBuyerInvitations}>
+            <div id="buyer-invitations" className="buyer-section-anchor" />
             <div className="account-panel-heading"><div><span className="eyebrow">{editingId ? 'Edit undangan' : 'Undangan baru'}</span><h2>{editingId ? 'Perbarui detail acara' : 'Mulai dengan detail acara'}</h2></div>{editingId ? <button className="text-button" onClick={resetForm}>Buat draft baru</button> : null}</div>
             <form className="invitation-editor-form" onSubmit={saveInvitation}>
               <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder="Pernikahan Aulia & Farhan" /></label>
               <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_demo} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {user.is_test_account ? 'akses tester' : user.role === 'affiliate' ? `kuota tersisa ${(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}` : `Rp ${Number(plan.price).toLocaleString('id-ID')}`} · {plan.duration_days} hari</option>)}</select></label>
               {selectedPlan?.slug_mode === 'custom' ? <label>Link pilihan<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} required minLength={3} maxLength={64} placeholder="aulia-farhan" /><small>URL publik: {window.location.host}/i/{form.slug || 'link-pilihan'}</small></label> : <p className="form-hint">Paket Basic memakai link otomatis setelah draft dibuat.</p>}
-              <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; const recommendedTemplate = getTemplatesForEvent(invitationTemplates, eventType)[0]; setSetupGroup(group); setForm((current) => ({ ...current, event_type: eventType, template_id: current.province ? regionalInvitationTemplates.find((template) => template.province === current.province)?.id || recommendedTemplate?.id || current.template_id : recommendedTemplate?.id || current.template_id, custom_design: false })); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
+              <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; const recommendedTemplate = getTemplatesForEvent(invitationTemplates, eventType)[0]; setSetupGroup(group); setForm((current) => ({ ...current, event_type: eventType, province: '', template_id: recommendedTemplate?.id || current.template_id, custom_design: false })); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
               <label>Inspirasi daerah<select value={form.province} onChange={(event) => { const province = event.target.value; const regionalTemplate = regionalInvitationTemplates.find((template) => template.province === province); const recommendedTemplate = getTemplatesForEvent(invitationTemplates, form.event_type)[0]; setForm((current) => ({ ...current, province, template_id: regionalTemplate?.id || recommendedTemplate?.id || current.template_id, custom_design: false })); }}><option value="">Tidak memakai gaya daerah khusus</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province} · {template.inspiration}</option>)}</optgroup>)}</select></label>
               <div className="template-picker-field">
                 <span className="form-label">Pilih template {form.province ? `· ${form.province}` : `· ${form.event_type}`}</span>
@@ -1054,6 +1273,10 @@ export default function Dashboard({ onSignIn }) {
                     <label>Instagram mempelai wanita<input value={form.bride_instagram} onChange={(event) => updateField('bride_instagram', event.target.value)} placeholder="@username (opsional)" /></label>
                   </div>
                 </>
+              ) : form.event_type === 'Anniversary' ? (
+                <label>Nama pasangan yang merayakan
+                  <input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder="Contoh: Aulia & Farhan" />
+                </label>
               ) : (
                 <label>{organizerEventTypes.includes(form.event_type) ? 'Nama penyelenggara / komunitas' : `Nama ${form.event_type.toLowerCase()} / yang dirayakan`}
                   <input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder={organizerEventTypes.includes(form.event_type) ? 'Contoh: Komunitas ...' : `Contoh: nama ${form.event_type.toLowerCase()}`} />
@@ -1079,12 +1302,48 @@ export default function Dashboard({ onSignIn }) {
               <label>{weddingEventTypes.includes(form.event_type) ? 'Video prewedding / cerita pasangan' : `Video ${form.event_type.toLowerCase()}`}<input type="url" value={form.video_url} onChange={(event) => updateField('video_url', event.target.value)} placeholder="YouTube, Vimeo, atau URL MP4/WebM" /><small className="form-hint">Video YouTube/Vimeo tampil sebagai film di undangan. URL MP4/WebM langsung menjadi latar video bergerak saat sampul dibuka.</small></label>
               <label>Link RSVP<input type="url" value={form.rsvp_url} onChange={(event) => updateField('rsvp_url', event.target.value)} placeholder="https://forms.google.com/..." /></label>
               <div className="media-upload-field"><label>Link galeri, satu URL per baris<textarea value={form.gallery} onChange={(event) => updateField('gallery', event.target.value)} rows={3} placeholder="https://foto-1.jpg\nhttps://foto-2.jpg" /></label><label>Atau upload foto galeri<input type="file" accept="image/*" multiple onChange={handleGalleryUpload} /></label><small className="form-hint">Pilih beberapa foto sekaligus. Maksimal 5 MB per foto.</small></div>
+              <section className="digital-envelope-editor">
+                <div><span className="eyebrow">Amplop digital</span><h3>Atur cara tamu mengirim hadiah</h3><p className="form-hint">Aktifkan metode yang ingin ditampilkan. Detail metode yang tidak aktif tidak akan dibagikan kepada tamu.</p></div>
+                <fieldset>
+                  <legend>Transfer bank</legend>
+                  <label className="digital-envelope-toggle"><input type="checkbox" checked={form.digital_envelope.bank.enabled} onChange={(event) => updateEnvelopeField('bank', 'enabled', event.target.checked)} /> Tampilkan rekening bank</label>
+                  {form.digital_envelope.bank.enabled ? <div className="account-form-row">
+                    <label>Nama bank<input value={form.digital_envelope.bank.name} onChange={(event) => updateEnvelopeField('bank', 'name', event.target.value)} placeholder="BCA" /></label>
+                    <label>Nama pemilik rekening<input value={form.digital_envelope.bank.account_name} onChange={(event) => updateEnvelopeField('bank', 'account_name', event.target.value)} /></label>
+                    <label>Nomor rekening<input inputMode="numeric" value={form.digital_envelope.bank.account_number} onChange={(event) => updateEnvelopeField('bank', 'account_number', event.target.value)} /></label>
+                  </div> : null}
+                </fieldset>
+                <fieldset>
+                  <legend>E-wallet</legend>
+                  <label className="digital-envelope-toggle"><input type="checkbox" checked={form.digital_envelope.e_wallet.enabled} onChange={(event) => updateEnvelopeField('e_wallet', 'enabled', event.target.checked)} /> Tampilkan e-wallet</label>
+                  {form.digital_envelope.e_wallet.enabled ? <div className="account-form-row">
+                    <label>Penyedia e-wallet<select value={form.digital_envelope.e_wallet.provider} onChange={(event) => updateEnvelopeField('e_wallet', 'provider', event.target.value)} required>
+                      <option value="">Pilih penyedia</option>
+                      {form.digital_envelope.e_wallet.provider && !eWalletProviders.includes(form.digital_envelope.e_wallet.provider) ? <option value={form.digital_envelope.e_wallet.provider}>{form.digital_envelope.e_wallet.provider}</option> : null}
+                      {eWalletProviders.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                    </select></label>
+                    <label>Nama pemilik akun<input value={form.digital_envelope.e_wallet.account_name} onChange={(event) => updateEnvelopeField('e_wallet', 'account_name', event.target.value)} /></label>
+                    <label>Nomor akun / telepon<input inputMode="tel" value={form.digital_envelope.e_wallet.account_number} onChange={(event) => updateEnvelopeField('e_wallet', 'account_number', event.target.value)} /></label>
+                  </div> : null}
+                </fieldset>
+                <fieldset>
+                  <legend>QRIS</legend>
+                  <label className="digital-envelope-toggle"><input type="checkbox" checked={form.digital_envelope.qris.enabled} onChange={(event) => updateEnvelopeField('qris', 'enabled', event.target.checked)} /> Tampilkan QRIS</label>
+                  {form.digital_envelope.qris.enabled ? <div className="qris-editor-fields">
+                    <label>URL gambar QRIS (opsional)<input type="url" value={form.digital_envelope.qris.image_url.startsWith('data:') ? '' : form.digital_envelope.qris.image_url} onChange={(event) => updateEnvelopeField('qris', 'image_url', event.target.value)} placeholder="https://..." /></label>
+                    <label>Atau upload QRIS milik Anda<input type="file" accept="image/*" onChange={handleQrisUpload} /></label>
+                    {form.digital_envelope.qris.image_url ? <img className="qris-editor-preview" src={form.digital_envelope.qris.image_url} alt="Pratinjau QRIS yang akan ditampilkan" /> : null}
+                    <label>Keterangan QRIS (opsional)<input value={form.digital_envelope.qris.instructions} onChange={(event) => updateEnvelopeField('qris', 'instructions', event.target.value)} placeholder="Contoh: Pindai QR untuk mengirim hadiah" /></label>
+                    <small className="form-hint">Unggah gambar QRIS (maksimal 5 MB) atau masukkan URL gambar. Keterangan akan tampil di bawah QR pada undangan.</small>
+                  </div> : null}
+                </fieldset>
+              </section>
               <button className="primary-btn" type="submit" disabled={isSaving || (user.role === 'affiliate' && !availablePlans.some((plan) => plan.id === form.plan_id))}>{isSaving ? 'Menyimpan…' : editingId ? 'Simpan semua perubahan' : 'Simpan draft'}</button>
             </form>
           </section>}
 
           {activePayment?.manual_details ? (
-            <section className="account-panel manual-payment-panel">
+            <section className="account-panel manual-payment-panel buyer-invitations-view" hidden={!showBuyerInvitations}>
               <p className="eyebrow">Menunggu transfer</p><h2>{activePayment.manual_details.bank_name}</h2>
               <p>Nama rekening: <strong>{activePayment.manual_details.account_name}</strong></p>
               <p>Nomor rekening: <strong>{activePayment.manual_details.account_number}</strong></p>
@@ -1098,7 +1357,7 @@ export default function Dashboard({ onSignIn }) {
           {message ? <p className="account-message" role="status">{message}</p> : null}
           {error ? <p className="form-error account-error" role="alert">{error}</p> : null}
 
-          <section className="account-panel">
+          <section className="account-panel buyer-invitations-view" id="buyer-invitation-list" hidden={!showBuyerInvitations}>
             <div className="account-panel-heading"><div><span className="eyebrow">Koleksi Anda</span><h2>Undangan dan masa aktif</h2></div><button className="text-button" onClick={() => refreshInvitations().catch((requestError) => setError(requestError.message))}>Muat ulang</button></div>
             {!invitations.length ? <p className="form-hint">Belum ada draft. Isi form di atas untuk memulai.</p> : (
               <div className="account-invitation-list">
@@ -1124,7 +1383,7 @@ export default function Dashboard({ onSignIn }) {
                       <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p></div>
                       <div className="account-card-actions">
                         <button className="secondary-btn" onClick={() => setPreviewInvitation(invitation)}>Preview</button>
-                        {user.role !== 'affiliate' ? <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button> : null}
+                        <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
                         {user.role === 'user' ? <button className="secondary-btn" onClick={() => editInvitation(invitation)}>Edit</button> : null}
                         {user.role === 'user' && active && invitation.status !== 'published' ? <button className="primary-btn" onClick={() => publishInvitation(invitation)}>Publish</button> : null}
                         {user.role === 'user' && active && invitation.status === 'published' && (isBasicPlan || isPremiumPlan || isBusinessPlan) ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
@@ -1154,15 +1413,14 @@ export default function Dashboard({ onSignIn }) {
                             </a>
                           </div>
                         ) : null}
-                        {user.role !== 'affiliate' ? (
-                          <div className="invitation-owner-qr">
+                        <div className="invitation-owner-qr">
                           <button
                             className="secondary-btn"
                             type="button"
                             aria-expanded={qrInvitationId === invitation.id}
                             onClick={() => setQrInvitationId((current) => current === invitation.id ? '' : invitation.id)}
                           >
-                            {qrInvitationId === invitation.id ? 'Tutup QR buku tamu' : 'QR buku tamu pemilik'}
+                            {qrInvitationId === invitation.id ? 'Tutup QR buku tamu' : 'QR buku tamu'}
                           </button>
                           {qrInvitationId === invitation.id ? (
                             <div className="invitation-owner-qr-panel">
@@ -1176,8 +1434,7 @@ export default function Dashboard({ onSignIn }) {
                               <span>Scan untuk masuk ke dashboard pemilik dan membuka buku tamu.</span>
                             </div>
                           ) : null}
-                          </div>
-                        ) : null}
+                        </div>
                       </div>
                       {whatsAppInvitationId === invitation.id ? <div className="invitation-whatsapp-form">
                         <h4>{isBasicPlan ? 'Kirim WhatsApp ke satu penerima' : 'Kirim undangan ke daftar penerima'}</h4>
@@ -1207,17 +1464,99 @@ export default function Dashboard({ onSignIn }) {
               </div>
             )}
           </section>
+          {user.role === 'user' ? (
+            <section className="account-panel buyer-usage-guide buyer-guide-view" id="buyer-guide" hidden={!showBuyerGuide}>
+              <div className="account-panel-heading">
+                <div><span className="eyebrow">Panduan singkat</span><h2>Cara menggunakan undangan</h2></div>
+              </div>
+              <p className="form-hint">Ikuti langkah berikut untuk menyiapkan undangan dan membagikannya kepada tamu.</p>
+              <ol>
+                <li><strong>Pilih acara dan template.</strong><span>Tentukan jenis acara dan pilih desain yang sesuai. Formulir akan menyesuaikan dengan acara Anda.</span></li>
+                <li><strong>Lengkapi detail undangan.</strong><span>Isi nama, waktu, lokasi, peta, foto, dan informasi lain yang ingin dibagikan kepada tamu.</span></li>
+                <li><strong>Simpan lalu periksa preview.</strong><span>Simpan rancangan sebagai draft, kemudian gunakan tombol Preview untuk memastikan semua informasi sudah benar.</span></li>
+                <li><strong>Aktifkan dan publikasikan.</strong><span>Selesaikan pembayaran paket bila diperlukan, lalu pilih Publish agar tautan undangan dapat dibuka oleh tamu.</span></li>
+                <li><strong>Bagikan dan pantau tamu.</strong><span>Kirim tautan undangan melalui WhatsApp. Buka RSVP & Buku Tamu untuk membaca konfirmasi kehadiran atau memindai tiket barcode saat acara.</span></li>
+              </ol>
+              <button type="button" className="secondary-btn" onClick={() => setBuyerMenu('invitations')}>Mulai kelola undangan</button>
+            </section>
+          ) : null}
 
-          {guestbookInvitation ? <section className="account-panel guestbook-management-panel"><div className="account-panel-heading"><div><span className="eyebrow">Tamu undangan</span><h2>RSVP, ucapan, dan buku tamu</h2><p>{guestbookInvitation.title}</p></div><button className="text-button" onClick={() => setGuestbookInvitation(null)}>Tutup</button></div><div className="guestbook-summary"><strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span><strong>{ownerGuestbook.filter((entry) => entry.source === 'barcode_check_in').length}</strong><span>check-in barcode</span><strong>{ownerGuestbook.length}</strong><span>total kiriman</span></div><div className="guestbook-checkin"><h3>Scan tiket barcode tamu</h3><p>Pemindaian hanya mencatat kehadiran untuk undangan ini. Tiket yang sama tidak dapat check-in dua kali.</p><GuestbookScanner onScan={handleTicketScan} /></div><div className="owner-guestbook-list">{ownerGuestbook.length ? ownerGuestbook.map((entry) => <article key={entry.id} className={entry.status === 'hidden' ? 'is-hidden' : ''}><div><strong>{entry.name}</strong><span>{entry.source === 'barcode_check_in' ? `Check-in barcode · ${new Date(entry.checked_in_at || entry.created_at).toLocaleString('id-ID')}` : `${entry.attendance} · ${entry.guests} tamu`}</span><p>{entry.message}</p></div>{user.role === 'user' && entry.source !== 'barcode_check_in' ? <div><button onClick={() => moderateGuestbook(entry, entry.status === 'visible' ? 'hidden' : 'visible')}>{entry.status === 'visible' ? 'Sembunyikan' : 'Tampilkan'}</button><button className="danger-text" onClick={() => removeGuestbook(entry)}>Hapus</button></div> : null}</article>) : <p className="form-hint">Belum ada RSVP, check-in, atau ucapan untuk undangan ini.</p>}</div></section> : null}
+          {(user.role === 'user' && buyerMenu === 'scan') || (user.role !== 'user' && guestbookInvitation) ? (
+            <section className="account-panel guestbook-management-panel buyer-scan-view">
+              <div className="account-panel-heading">
+                <div>
+                  <span className="eyebrow">Tamu undangan</span>
+                  <h2>Scan QR & buku tamu</h2>
+                  {guestbookInvitation ? <p>{guestbookInvitation.title}</p> : null}
+                </div>
+                {guestbookInvitation ? <button className="text-button" onClick={() => setGuestbookInvitation(null)}>Tutup buku tamu</button> : null}
+              </div>
+              {user.role === 'user' ? (
+                <label className="scan-invitation-select">
+                  Pilih undangan yang akan dipindai
+                  <select
+                    value={guestbookInvitation?.id || ''}
+                    onChange={(event) => {
+                      const invitation = checkInInvitations.find((item) => item.id === event.target.value);
+                      if (invitation) openGuestbook(invitation);
+                      else {
+                        setGuestbookInvitation(null);
+                        setOwnerGuestbook([]);
+                      }
+                    }}
+                  >
+                    <option value="">Pilih undangan aktif</option>
+                    {checkInInvitations.map((invitation) => <option key={invitation.id} value={invitation.id}>{invitation.title}</option>)}
+                  </select>
+                  {!checkInInvitations.length ? (
+                    <span>Belum ada undangan aktif yang dapat dipindai. Aktifkan dan publikasikan undangan terlebih dahulu.</span>
+                  ) : null}
+                </label>
+              ) : null}
+              {guestbookInvitation ? (
+                <>
+                  <div className="guestbook-summary">
+                    <strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span>
+                    <strong>{ownerGuestbook.filter((entry) => entry.source === 'barcode_check_in').length}</strong><span>check-in barcode</span>
+                    <strong>{ownerGuestbook.length}</strong><span>total kiriman</span>
+                  </div>
+                  <div className="guestbook-checkin">
+                    <h3>Scan tiket QR tamu</h3>
+                    <p>Pilih undangan di atas, lalu arahkan kamera ke QR tiket tamu untuk mencatat check-in. Tiket terhubung langsung ke buku tamu undangan ini dan tidak dapat digunakan dua kali.</p>
+                    <GuestbookScanner onScan={handleTicketScan} autoStart={user.role === 'user' && checkInInvitations.length === 1} />
+                  </div>
+                  <div className="owner-guestbook-list">
+                    {ownerGuestbook.length ? ownerGuestbook.map((entry) => (
+                      <article key={entry.id} className={entry.status === 'hidden' ? 'is-hidden' : ''}>
+                        <div>
+                          <strong>{entry.name}</strong>
+                          <span>{entry.source === 'barcode_check_in' ? `Check-in barcode · ${new Date(entry.checked_in_at || entry.created_at).toLocaleString('id-ID')}` : `${entry.attendance} · ${entry.guests} tamu`}</span>
+                          <p>{entry.message}</p>
+                        </div>
+                        {user.role === 'user' && entry.source !== 'barcode_check_in' ? (
+                          <div>
+                            <button onClick={() => moderateGuestbook(entry, entry.status === 'visible' ? 'hidden' : 'visible')}>{entry.status === 'visible' ? 'Sembunyikan' : 'Tampilkan'}</button>
+                            <button className="danger-text" onClick={() => removeGuestbook(entry)}>Hapus</button>
+                          </div>
+                        ) : null}
+                      </article>
+                    )) : <p className="form-hint">Belum ada RSVP, check-in, atau ucapan untuk undangan ini.</p>}
+                  </div>
+                </>
+              ) : user.role === 'user' ? (
+                <p className="form-hint">Pilih salah satu undangan aktif untuk menampilkan RSVP, buku tamu, dan pemindai QR.</p>
+              ) : null}
+            </section>
+          ) : null}
 
           {previewInvitation ? (
-            <section className="account-panel invitation-preview-panel">
+            <section className="account-panel invitation-preview-panel buyer-invitations-view" hidden={!showBuyerInvitations}>
               <div className="account-panel-heading"><div><span className="eyebrow">Preview untuk calon undangan</span><h2>{previewInvitation.title}</h2></div><button className="text-button" onClick={() => setPreviewInvitation(null)}>Tutup preview</button></div>
               <div className="invitation-preview-viewport"><PublicInvitation invitation={previewInvitation} slug={previewInvitation.slug} /></div>
             </section>
           ) : null}
         </section>
-        {user.role === 'user' ? <aside className="account-side-column"><section className="account-panel"><span className="eyebrow">{user.is_test_account ? 'Akses akun tester' : user.is_demo ? 'Akun demo' : 'Pilihan paket'}</span><h2>{user.is_test_account ? 'Semua fitur, tanpa batas waktu.' : user.is_demo ? `Paket ${user.demo_plan_id} · akses sementara.` : 'Waktu tayang dan link mengikuti paket.'}</h2>{user.is_test_account ? <div className="account-plan-row"><strong>Business · QA</strong><span>Selamanya</span><small>Undangan tanpa batas · semua fitur aktif · tanpa pembayaran</small><b>AKTIF</b></div> : (user.is_demo ? billing.plans.filter((plan) => plan.id === user.demo_plan_id) : billing.plans).map((plan) => <div className="account-plan-row" key={plan.id}><strong>{plan.name}</strong><span>{plan.duration_days} hari</span><small>{plan.slug_mode === 'custom' ? 'Link pilihan' : 'Link otomatis'} · maks. {plan.max_invitations || 1} undangan</small><b>{user.is_demo ? 'DEMO' : `Rp ${Number(plan.price).toLocaleString('id-ID')}`}</b></div>)}</section>{user.is_test_account || user.is_demo ? null : <p className="account-secure-note">Pembayaran gateway divalidasi server. Undangan tidak bisa dibagikan sebelum pembayaran terkonfirmasi.</p>}</aside> : null}
+        {user.role === 'user' ? <aside className="account-side-column buyer-dashboard-view" hidden={!showBuyerDashboard}><section className="account-panel"><span className="eyebrow">{user.is_test_account ? 'Akses akun tester' : user.is_demo ? 'Akun demo' : 'Pilihan paket'}</span><h2>{user.is_test_account ? 'Semua fitur, tanpa batas waktu.' : user.is_demo ? `Paket ${user.demo_plan_id} · akses sementara.` : 'Waktu tayang dan link mengikuti paket.'}</h2>{user.is_test_account ? <div className="account-plan-row"><strong>Business · QA</strong><span>Selamanya</span><small>Undangan tanpa batas · semua fitur aktif · tanpa pembayaran</small><b>AKTIF</b></div> : (user.is_demo ? billing.plans.filter((plan) => plan.id === user.demo_plan_id) : billing.plans).map((plan) => <div className="account-plan-row" key={plan.id}><strong>{plan.name}</strong><span>{plan.duration_days} hari</span><small>{plan.slug_mode === 'custom' ? 'Link pilihan' : 'Link otomatis'} · maks. {plan.max_invitations || 1} undangan</small><b>{user.is_demo ? 'DEMO' : `Rp ${Number(plan.price).toLocaleString('id-ID')}`}</b></div>)}</section>{user.is_test_account || user.is_demo ? null : <p className="account-secure-note">Pembayaran gateway divalidasi server. Undangan tidak bisa dibagikan sebelum pembayaran terkonfirmasi.</p>}</aside> : null}
       </div>
     </main>
   );

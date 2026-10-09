@@ -2,13 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { apiRequest, guestbookApi } from '../lib/api';
 import { getRegionalInvitationTemplate } from '../lib/regionalInvitationTemplates';
 
-const defaultStory = [
-  { title: 'Pertama Bertemu', date: '2019', text: 'Sebuah pertemuan sederhana yang menjadi awal dari perjalanan panjang kami.' },
-  { title: 'Mulai Bersama', date: '2021', text: 'Kami belajar tumbuh, saling menjaga, dan merayakan setiap langkah bersama.' },
-  { title: 'Lamaran', date: '2025', text: 'Dengan doa keluarga, kami mengikat niat untuk melangkah ke jenjang berikutnya.' },
-  { title: 'Pernikahan', date: 'Hari ini', text: 'Dua hati, satu janji, dan perjalanan baru yang kami mulai bersama.' },
-];
-
 const defaultSchedule = [
   { time: '08.00 WIB', title: 'Akad Nikah' },
   { time: '10.00 WIB', title: 'Sesi Foto' },
@@ -27,7 +20,7 @@ const formatCountdown = (target) => {
 };
 
 const calendarUrl = (content, invitation) => {
-  const eventDate = content.event_date || new Date().toISOString().slice(0, 10);
+  const eventDate = content.event_date;
   const start = `${eventDate.replaceAll('-', '')}T${(content.event_time || '10:00').replace(':', '')}00`;
   const title = encodeURIComponent(`${content.event_type || 'Acara'} ${content.couple_names || content.honoree_name || invitation.title}`);
   const details = encodeURIComponent(content.opening_text || `Undangan resmi ${content.event_type || 'acara'}`);
@@ -218,16 +211,22 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   if (!invitation) return <main className="public-invitation-state"><p>Memuat undangan…</p></main>;
 
   const content = invitation.content || {};
+  const digitalEnvelope = content.digital_envelope || {};
+  const hasDigitalEnvelope = Boolean(
+    (digitalEnvelope.bank?.enabled && digitalEnvelope.bank.name && digitalEnvelope.bank.account_name && digitalEnvelope.bank.account_number)
+    || (digitalEnvelope.e_wallet?.enabled && digitalEnvelope.e_wallet.provider && digitalEnvelope.e_wallet.account_name && digitalEnvelope.e_wallet.account_number)
+    || (digitalEnvelope.qris?.enabled && digitalEnvelope.qris.image_url),
+  );
   const gallery = Array.isArray(content.gallery) ? content.gallery : [];
-  const story = Array.isArray(content.love_story) && content.love_story.length ? content.love_story : defaultStory;
-  const schedule = Array.isArray(content.schedule) && content.schedule.length ? content.schedule : defaultSchedule;
-  const coupleNames = content.couple_names || invitation.title;
+  const story = Array.isArray(content.love_story) ? content.love_story : [];
+  const schedule = Array.isArray(content.schedule) ? content.schedule : (content.demo_template ? defaultSchedule : []);
+  const coupleNames = (content.couple_names || '').trim();
   const [groomName, brideName] = coupleNames.split(/\s*&\s*/);
   const recipientName = new URLSearchParams(window.location.search).get('to')?.trim() || '';
   const prefersReducedMotion = typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const isCoupleEvent = Boolean(content.couple_names)
-    || ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy', 'Anniversary'].includes(content.event_type);
+    || ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy'].includes(content.event_type);
   const honoreeName = content.honoree_name || invitation.title;
   const eventLabel = content.event_type || 'Acara istimewa';
   const defaultEvents = content.event_type === 'Akad & Resepsi'
@@ -236,7 +235,9 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       { title: 'RESEPSI', date: content.reception_date || content.event_date, time: content.reception_time || content.event_time, venue: content.reception_venue || content.venue, address: content.reception_address || content.address, maps_url: content.reception_maps_url || content.maps_url },
     ]
     : [{ title: (content.event_type || 'ACARA PERNIKAHAN').toUpperCase(), date: content.event_date, time: content.event_time, venue: content.venue, address: content.address, maps_url: content.maps_url }];
-  const eventItems = (Array.isArray(content.events) ? content.events : defaultEvents).filter((event) => event.date || event.venue || event.address);
+  const eventItems = (Array.isArray(content.events) ? content.events : defaultEvents).filter((event) => (
+    [event.date, event.time, event.venue, event.address, event.maps_url].some((value) => typeof value === 'string' && value.trim())
+  ));
   const templateClass = content.custom_design ? 'custom' : content.template_id || 'luxury-gold';
   const isTemplateDemo = Boolean(content.demo_template);
   const regionTemplate = getRegionalInvitationTemplate(templateClass);
@@ -254,6 +255,24 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       : isTemplateDemo
         ? [{ title: copy.storyTitle, date: 'Our chapter', text: copy.storyText }]
         : story;
+  const coupleProfileItems = [
+    {
+      name: groomName,
+      photo: content.groom_photo || content.cover_image,
+      parents: content.groom_parents,
+      instagram: content.groom_instagram,
+      relationship: 'Putra',
+      alt: 'Mempelai pria',
+    },
+    {
+      name: brideName,
+      photo: content.bride_photo || content.cover_image,
+      parents: content.bride_parents,
+      instagram: content.bride_instagram,
+      relationship: 'Putri',
+      alt: 'Mempelai wanita',
+    },
+  ].filter((person) => person.name || person.photo || person.parents || person.instagram);
   const storySectionTitle = isCoupleEvent ? copy.storyTitle : `Cerita ${eventLabel.toLowerCase()}`;
   const defaultGreeting = isCoupleEvent
     ? copy.greeting
@@ -342,7 +361,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
           {recipientName || inviteeName ? <p className="wedding-recipient-name"><span>Kepada Yth.</span><strong>{recipientName || inviteeName}</strong></p> : null}
           {inviteeError ? <p className="wedding-recipient-error" role="alert">Nama penerima tiket tidak dapat diverifikasi.</p> : null}
           <p className="wedding-event-label">{copy.kicker}</p>
-          <h1>{isCoupleEvent ? <>{groomName || invitation.title}<span>&amp;</span>{brideName || ''}</> : honoreeName}</h1>
+          <h1>{isCoupleEvent ? coupleNames ? <>{groomName || coupleNames}{brideName ? <><span>&amp;</span>{brideName}</> : null}</> : invitation.title : honoreeName}</h1>
           <p className="wedding-cover-date">{content.event_date ? new Date(content.event_date).toLocaleDateString('id-ID', { dateStyle: 'full' }) : 'Save the date'}{content.event_time ? ` · ${content.event_time}` : ''}</p>
           {regionTemplate ? <p className="wedding-region-label">{regionTemplate.province} · Inspirasi {regionTemplate.inspiration}</p> : null}
           <button className="wedding-open-button" disabled={inviteeLoading || Boolean(ticketToken && inviteeError)} onClick={openInvitation}>{inviteeLoading ? 'MEMUAT NAMA TAMU…' : 'BUKA UNDANGAN'}</button>
@@ -358,15 +377,21 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
         {isCoupleEvent ? <section className="wedding-section wedding-quote"><p>“{copy.quote}”</p><strong>{copy.source}</strong></section> : null}
 
-        {isCoupleEvent ? <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid"><div className="wedding-person"><img src={content.groom_photo || content.cover_image || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=85'} alt={groomName || 'Mempelai pria'} /><h3>{groomName || 'Nama Mempelai Pria'}</h3><p>Putra dari<br />{content.groom_parents || 'Bapak Nama Ayah & Ibu Nama Ibu'}</p>{content.groom_instagram ? <a href={`https://instagram.com/${content.groom_instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{content.groom_instagram}</a> : null}</div><span className="wedding-ampersand">&amp;</span><div className="wedding-person"><img src={content.bride_photo || content.cover_image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=700&q=85'} alt={brideName || 'Mempelai wanita'} /><h3>{brideName || 'Nama Mempelai Wanita'}</h3><p>Putri dari<br />{content.bride_parents || 'Bapak Nama Ayah & Ibu Nama Ibu'}</p>{content.bride_instagram ? <a href={`https://instagram.com/${content.bride_instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{content.bride_instagram}</a> : null}</div></div></section> : <section className="wedding-section wedding-honoree"><p className="wedding-eyebrow">ACARA SPESIAL</p><h2>{honoreeName}</h2><p>{content.story || greeting}</p></section>}
+        {isCoupleEvent ? coupleProfileItems.length ? <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid">{coupleProfileItems.map((person, index) => <div className="wedding-person" key={`${person.relationship}-${index}`}>{person.photo ? <img src={person.photo} alt={person.name || person.alt} /> : null}{person.name ? <h3>{person.name}</h3> : null}{person.parents ? <p>{person.relationship} dari<br />{person.parents}</p> : null}{person.instagram ? <a href={`https://instagram.com/${person.instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{person.instagram}</a> : null}</div>)}</div></section> : null : content.honoree_name || content.story ? <section className="wedding-section wedding-honoree"><p className="wedding-eyebrow">ACARA SPESIAL</p>{content.honoree_name ? <h2>{content.honoree_name}</h2> : null}{content.story ? <p>{content.story}</p> : null}</section> : null}
 
-        <section className="wedding-section wedding-countdown"><p className="wedding-eyebrow">{isCoupleEvent ? 'MENUJU HARI BAHAGIA' : 'MENUJU ACARA'}</p><h2>{isCoupleEvent ? 'Our special day' : 'Hitung mundur acara'}</h2><div className="countdown-grid">{Object.entries(countdown).map(([label, value]) => <div key={label}><strong>{String(value).padStart(2, '0')}</strong><span>{label}</span></div>)}</div><a className="wedding-calendar-button" href={calendarUrl(content, invitation)} target="_blank" rel="noreferrer">TAMBAHKAN KE KALENDER</a></section>
+        {content.event_date ? <section className="wedding-section wedding-countdown"><p className="wedding-eyebrow">{isCoupleEvent ? 'MENUJU HARI BAHAGIA' : 'MENUJU ACARA'}</p><h2>{isCoupleEvent ? 'Our special day' : 'Hitung mundur acara'}</h2><div className="countdown-grid">{Object.entries(countdown).map(([label, value]) => <div key={label}><strong>{String(value).padStart(2, '0')}</strong><span>{label}</span></div>)}</div><a className="wedding-calendar-button" href={calendarUrl(content, invitation)} target="_blank" rel="noreferrer">TAMBAHKAN KE KALENDER</a></section> : null}
 
-        <section className="wedding-section wedding-story"><p className="wedding-eyebrow">{storySectionTitle}</p><h2>{storySectionTitle}</h2><div className="love-story-timeline">{storyItems.map((item, index) => <article key={`${item.title}-${index}`}><span>{item.date}</span><div><h3>{item.title}</h3><p>{item.text}</p>{item.image ? <img src={item.image} alt={item.title} loading="lazy" /> : null}</div></article>)}</div></section>
+        {storyItems.length ? <section className="wedding-section wedding-story"><p className="wedding-eyebrow">{storySectionTitle}</p><h2>{storySectionTitle}</h2><div className="love-story-timeline">{storyItems.map((item, index) => <article key={`${item.title}-${index}`}>{item.date ? <span>{item.date}</span> : null}<div>{item.title ? <h3>{item.title}</h3> : null}{item.text ? <p>{item.text}</p> : null}{item.image ? <img src={item.image} alt={item.title || 'Cerita acara'} loading="lazy" /> : null}</div></article>)}</div></section> : null}
 
-        {eventItems.length ? <section className="wedding-section wedding-events"><p className="wedding-eyebrow">SAVE THE DATE</p><h2>Detail acara</h2><div className="wedding-event-grid">{eventItems.map((event) => <article className="wedding-event-card" key={event.title}><p className="wedding-eyebrow">{event.title}</p><h3>{event.date ? new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' }) : 'Tanggal acara'}</h3><strong>{event.time || 'Waktu acara'} WIB</strong><p>{event.venue || 'Nama tempat'}<br />{event.address || 'Alamat lengkap'}</p>{event.maps_url ? <a href={event.maps_url} target="_blank" rel="noreferrer">LIHAT LOKASI ↗</a> : null}</article>)}</div></section> : null}
+        {eventItems.length ? <section className="wedding-section wedding-events"><p className="wedding-eyebrow">SAVE THE DATE</p><h2>Detail acara</h2><div className="wedding-event-grid">{eventItems.map((event, index) => <article className="wedding-event-card" key={`${event.title || 'acara'}-${index}`}>{event.title ? <p className="wedding-eyebrow">{event.title}</p> : null}{event.date ? <h3>{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</h3> : null}{event.time ? <strong>{event.time} WIB</strong> : null}{event.venue || event.address ? <p>{event.venue ? <>{event.venue}<br /></> : null}{event.address || null}</p> : null}{event.maps_url ? <a href={event.maps_url} target="_blank" rel="noreferrer">LIHAT LOKASI ↗</a> : null}</article>)}</div></section> : null}
 
-        <section className="wedding-section wedding-schedule"><p className="wedding-eyebrow">SUSUNAN ACARA</p><h2>Rangkaian momen</h2><div className="schedule-list">{schedule.map((item, index) => <div key={`${item.time}-${index}`}><strong>{item.time}</strong><span>{item.title}</span></div>)}</div></section>
+        {hasDigitalEnvelope ? <section className="wedding-section wedding-digital-envelope"><p className="wedding-eyebrow">HADIAH DIGITAL</p><h2>Kirim tanda kasih</h2><p>Doa dan kehadiran Anda adalah hadiah terindah. Jika berkenan, Anda dapat mengirim tanda kasih melalui pilihan berikut.</p><div className="wedding-envelope-options">
+          {digitalEnvelope.bank?.enabled && digitalEnvelope.bank.name && digitalEnvelope.bank.account_name && digitalEnvelope.bank.account_number ? <article><h3>Transfer bank · {digitalEnvelope.bank.name}</h3><p>Atas nama <strong>{digitalEnvelope.bank.account_name}</strong></p><p>Nomor rekening <strong>{digitalEnvelope.bank.account_number}</strong></p></article> : null}
+          {digitalEnvelope.e_wallet?.enabled && digitalEnvelope.e_wallet.provider && digitalEnvelope.e_wallet.account_name && digitalEnvelope.e_wallet.account_number ? <article><h3>{digitalEnvelope.e_wallet.provider}</h3><p>Atas nama <strong>{digitalEnvelope.e_wallet.account_name}</strong></p><p>Nomor akun <strong>{digitalEnvelope.e_wallet.account_number}</strong></p></article> : null}
+          {digitalEnvelope.qris?.enabled && digitalEnvelope.qris.image_url ? <article><h3>QRIS</h3><img src={digitalEnvelope.qris.image_url} alt="Kode QRIS untuk hadiah digital" loading="lazy" />{digitalEnvelope.qris.instructions ? <p>{digitalEnvelope.qris.instructions}</p> : null}</article> : null}
+        </div></section> : null}
+
+        {schedule.length ? <section className="wedding-section wedding-schedule"><p className="wedding-eyebrow">SUSUNAN ACARA</p><h2>Rangkaian momen</h2><div className="schedule-list">{schedule.map((item, index) => <div key={`${item.time || ''}-${item.title || index}`}>{item.time ? <strong>{item.time}</strong> : null}{item.title ? <span>{item.title}</span> : null}</div>)}</div></section> : null}
 
         {gallery.length ? <section className="wedding-section wedding-gallery"><p className="wedding-eyebrow">MOMENTS</p><h2>Our beautiful moments</h2><div className="wedding-gallery-grid">{gallery.map((image, index) => <button key={`${image}-${index}`} onClick={() => setSelectedImage(image)}><img src={image} alt={`Momen acara ${index + 1}`} loading="lazy" /></button>)}</div></section> : null}
 
@@ -374,7 +399,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
         <section className="wedding-section wedding-rsvp"><p className="wedding-eyebrow">UNDANGAN RESMI</p><h2>Konfirmasi kehadiran</h2><p>{isCoupleEvent ? 'Mohon konfirmasi kehadiran dan titipkan doa terbaik untuk perjalanan kami.' : `Mohon konfirmasi kehadiran Anda di acara ${eventLabel.toLowerCase()}.`}</p>{content.rsvp_url ? <a className="wedding-calendar-button" href={content.rsvp_url} target="_blank" rel="noreferrer">KONFIRMASI RSVP</a> : null}<form className="wedding-guest-form" onSubmit={submitGuestbook}><input value={guestForm.name} onChange={(event) => setGuestForm({ ...guestForm, name: event.target.value })} placeholder="Nama Anda" required minLength={2} /><select value={guestForm.attendance} onChange={(event) => setGuestForm({ ...guestForm, attendance: event.target.value })}><option value="attending">Saya akan hadir</option><option value="not_attending">Maaf, belum bisa hadir</option><option value="maybe">Masih tentatif</option></select><input type="number" min="1" max="10" value={guestForm.guests} onChange={(event) => setGuestForm({ ...guestForm, guests: Number(event.target.value) })} aria-label="Jumlah tamu" /><textarea value={guestForm.message} onChange={(event) => setGuestForm({ ...guestForm, message: event.target.value })} placeholder="Tulis ucapan dan doa..." required minLength={2} /><button className="wedding-calendar-button" disabled={isGuestSubmitting}>{isGuestSubmitting ? 'MENGIRIM...' : 'KIRIM RSVP & UCAPAN'}</button>{guestMessage ? <span className="wedding-guest-message" role="status">{guestMessage}</span> : null}</form></section>
         <section className="wedding-section wedding-guestbook"><p className="wedding-eyebrow">BUKU TAMU</p><h2>Ucapan untuk kami</h2><div className="wedding-guestbook-list">{guestbook.length ? guestbook.map((entry) => <article key={entry.id}><strong>{entry.name}</strong><span>{entry.attendance === 'attending' ? 'Akan hadir' : entry.attendance === 'maybe' ? 'Masih tentatif' : 'Belum bisa hadir'}{entry.guests > 1 ? ` · ${entry.guests} tamu` : ''}</span><p>{entry.message}</p></article>) : <p>Jadilah yang pertama meninggalkan ucapan.</p>}</div></section>
-        <section className="wedding-section wedding-closing"><p>{isTemplateDemo ? copy.closing : isCoupleEvent ? 'Terima kasih atas doa dan kasih yang mengiringi langkah kami.' : 'Terima kasih atas perhatian dan kesediaan Anda untuk hadir.'}</p><h2>{isCoupleEvent ? coupleNames : honoreeName}</h2><span>{copy.kicker}</span></section>
+        <section className="wedding-section wedding-closing"><p>{isTemplateDemo ? copy.closing : isCoupleEvent ? 'Terima kasih atas doa dan kasih yang mengiringi langkah kami.' : 'Terima kasih atas perhatian dan kesediaan Anda untuk hadir.'}</p>{isCoupleEvent ? coupleNames ? <h2>{coupleNames}</h2> : null : honoreeName ? <h2>{honoreeName}</h2> : null}<span>{copy.kicker}</span></section>
       </div>
 
       {selectedImage ? <div className="wedding-lightbox" role="dialog" aria-label="Preview foto" onClick={() => setSelectedImage(null)}><button onClick={() => setSelectedImage(null)} aria-label="Tutup preview">×</button><img src={selectedImage} alt="Preview momen acara" /></div> : null}

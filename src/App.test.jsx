@@ -190,6 +190,85 @@ test('shows the formal invitation cover, named guest, regional design, and cover
   expect(container.querySelector('.wedding-honoree')).not.toBeNull();
 });
 
+test('public invitation hides empty event details and shows the Google Maps link when configured', () => {
+  const invitation = {
+    id: 'event-details',
+    title: 'Pernikahan Aulia & Farhan',
+    slug: 'aulia-farhan',
+    content: { event_type: 'Pernikahan' },
+  };
+  const { container, rerender } = render(<PublicInvitation invitation={invitation} />);
+
+  expect(container.querySelector('.wedding-events')).toBeNull();
+  expect(container.querySelector('.wedding-countdown')).toBeNull();
+  expect(container.querySelector('.wedding-couple')).toBeNull();
+  expect(container.querySelector('.wedding-story')).toBeNull();
+  expect(container.querySelector('.wedding-schedule')).toBeNull();
+  expect(screen.queryByText(/Nama tempat|Alamat lengkap|Waktu acara|Tanggal acara/)).toBeNull();
+
+  rerender(<PublicInvitation invitation={{
+    ...invitation,
+    content: {
+      event_type: 'Pernikahan',
+      venue: 'Gedung Melati',
+      maps_url: 'https://maps.google.com/?q=gedung-melati',
+    },
+  }} />);
+
+  expect(screen.getByText('Gedung Melati')).toBeDefined();
+  expect(container.querySelector('.wedding-events a').getAttribute('href')).toBe('https://maps.google.com/?q=gedung-melati');
+  expect(container.querySelector('.wedding-events h3')).toBeNull();
+  expect(screen.queryByText(/Nama tempat|Alamat lengkap|Waktu acara|Tanggal acara/)).toBeNull();
+});
+
+test('anniversary invitations use the honoree layout instead of wedding couple details', () => {
+  const invitation = {
+    id: 'demo-anniversary',
+    title: 'Anniversary Aulia & Farhan',
+    slug: 'anniversary-aulia-farhan',
+    content: {
+      event_type: 'Anniversary',
+      honoree_name: 'Aulia & Farhan',
+      template_id: 'anniversary',
+    },
+  };
+  const { container } = render(<PublicInvitation invitation={invitation} />);
+
+  expect(container.querySelector('.public-template-anniversary')).not.toBeNull();
+  expect(container.querySelector('.wedding-couple')).toBeNull();
+  expect(container.querySelector('.wedding-honoree h2').textContent).toBe('Aulia & Farhan');
+  expect(screen.getByRole('heading', { name: 'Aulia & Farhan' })).toBeDefined();
+});
+
+test('public invitations display only enabled digital envelope methods', () => {
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  const invitation = {
+    id: 'demo-envelope',
+    title: 'Pernikahan Aulia & Farhan',
+    slug: 'aulia-farhan',
+    content: {
+      event_type: 'Pernikahan',
+      digital_envelope: {
+        bank: { enabled: true, name: 'BCA', account_name: 'Aulia Putri', account_number: '001234567' },
+        e_wallet: { enabled: false, provider: 'DANA', account_name: 'Aulia Putri', account_number: '089999999' },
+        qris: { enabled: false, image_url: 'https://example.com/disabled-qris.png', instructions: 'Jangan tampilkan' },
+      },
+    },
+  };
+  try {
+    const { container } = render(<PublicInvitation invitation={invitation} />);
+
+    expect(container.querySelector('.wedding-digital-envelope')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'BUKA UNDANGAN' }));
+    expect(screen.getByRole('heading', { name: /transfer bank · bca/i })).toBeDefined();
+    expect(screen.getByText('001234567')).toBeDefined();
+    expect(screen.queryByText('089999999')).toBeNull();
+    expect(container.querySelector('img[src="https://example.com/disabled-qris.png"]')).toBeNull();
+  } finally {
+    play.mockRestore();
+  }
+});
+
 test('attempts invitation music automatically and explains when browser playback is blocked', async () => {
   const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('Autoplay blocked'));
   const invitation = {
@@ -294,6 +373,7 @@ test('test account can select each package and sees its access expiry', async ()
   window.history.pushState({}, '', '/undangan-dashboard');
   const { container } = renderApp();
 
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.change(await screen.findByLabelText('Kelompok acara'), { target: { value: 'Pernikahan' } });
   fireEvent.change(screen.getByLabelText('Jenis acara'), { target: { value: 'Pernikahan' } });
   expect(screen.getByText('Template untuk Pernikahan')).toBeDefined();
@@ -323,9 +403,18 @@ test('test account can select each package and sees its access expiry', async ()
   expect(container.querySelector('.template-choice.selected strong').textContent).toBe('Khitanan Royal');
   fireEvent.click(container.querySelector('.template-picker .template-demo-button'));
   expect(container.querySelector('.template-demo-viewport .wedding-cover h1').textContent).toBe('Khitanan');
+
+  fireEvent.change(screen.getByLabelText('Inspirasi daerah'), { target: { value: 'Jawa Barat' } });
+  expect(container.querySelector('.template-choice.selected strong').textContent).toBe('Jawa Barat · Mega Mendung');
+  fireEvent.change(screen.getByLabelText('Undangan ini untuk acara apa?'), { target: { value: 'Anniversary' } });
+  expect(screen.getByLabelText('Inspirasi daerah').value).toBe('');
+  expect(container.querySelector('.template-choice.selected strong').textContent).toBe('Anniversary');
+  expect(screen.getByLabelText('Nama pasangan yang merayakan')).toBeDefined();
+  expect(screen.queryByLabelText('Orang tua mempelai pria')).toBeNull();
+  expect(screen.queryByLabelText('Orang tua mempelai wanita')).toBeNull();
 });
 
-const mountPublishedInvitationDashboard = (planId) => {
+const mountPublishedInvitationDashboard = (planId, settings = {}) => {
   const invitation = {
     id: 'invitation-1',
     title: 'Hari Bahagia',
@@ -333,7 +422,7 @@ const mountPublishedInvitationDashboard = (planId) => {
     plan_id: planId,
     status: 'published',
     active_until: '9999-12-31T23:59:59+00:00',
-    content: {},
+    content: settings.content || {},
   };
   sessionStorage.setItem('undangan.id.session', JSON.stringify({
     access_token: 'test-token',
@@ -349,6 +438,8 @@ const mountPublishedInvitationDashboard = (planId) => {
           ? { eligible: true, max_admins: 3, admins: [] }
           : path.endsWith('/affiliate-program')
             ? { eligible: true, program: null, combinations: [], affiliates: [] }
+        : path.endsWith('/guestbook')
+              ? settings.guestbookEntries || []
         : path.endsWith('/tickets')
           ? { tickets: JSON.parse(options.body).recipients.map((recipient, index) => ({
             ...recipient,
@@ -367,9 +458,72 @@ const mountPublishedInvitationDashboard = (planId) => {
   renderApp();
 };
 
+test('buyer dashboard shows guests, attendance responses, and greetings', async () => {
+  mountPublishedInvitationDashboard('basic', {
+    guestbookEntries: [{
+      id: 'guest-1',
+      name: 'Dewi Lestari',
+      attendance: 'attending',
+      guests: 2,
+      message: 'Semoga acaranya lancar dan penuh kebahagiaan.',
+      created_at: '2026-05-01T09:30:00+00:00',
+    }],
+  });
+
+  expect(await screen.findByText('Dewi Lestari')).toBeDefined();
+  expect(screen.getByText(/Hari Bahagia · Akan hadir · 2 tamu/)).toBeDefined();
+  expect(screen.getByText('Semoga acaranya lancar dan penuh kebahagiaan.')).toBeDefined();
+  const managementRequests = globalThis.fetch.mock.calls.filter(([url]) => {
+    const path = new URL(url, window.location.origin).pathname;
+    return path.endsWith('/dashboard-admins') || path.endsWith('/affiliate-program');
+  });
+  expect(managementRequests).toHaveLength(2);
+  expect(managementRequests.every(([, options]) => options.headers.get('Authorization') === 'Bearer test-token')).toBe(true);
+});
+
+test('buyer can independently configure digital envelope methods for an invitation', async () => {
+  mountPublishedInvitationDashboard('basic');
+
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  try {
+    fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit', exact: true }));
+    fireEvent.click(screen.getByLabelText('Tampilkan rekening bank'));
+    fireEvent.change(screen.getByLabelText('Nama bank'), { target: { value: 'BCA' } });
+    fireEvent.change(screen.getByLabelText('Nama pemilik rekening'), { target: { value: 'Aulia Putri' } });
+    fireEvent.change(screen.getByLabelText('Nomor rekening'), { target: { value: '001234567' } });
+    fireEvent.click(screen.getByLabelText('Tampilkan e-wallet'));
+    fireEvent.change(screen.getByLabelText('Penyedia e-wallet'), { target: { value: 'DANA' } });
+    fireEvent.change(screen.getByLabelText('Nama pemilik akun'), { target: { value: 'Aulia Putri' } });
+    fireEvent.change(screen.getByLabelText('Nomor akun / telepon'), { target: { value: '08987654321' } });
+    fireEvent.click(screen.getByLabelText('Tampilkan QRIS'));
+    const qrisFile = new File(['QR image'], 'qris.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('Atau upload QRIS milik Anda'), { target: { files: [qrisFile] } });
+    expect(await screen.findByText('Gambar QRIS berhasil dimuat. Simpan undangan untuk menerapkannya.')).toBeDefined();
+    expect(screen.getByAltText('Pratinjau QRIS yang akan ditampilkan')).toBeDefined();
+    fireEvent.change(screen.getByLabelText('Keterangan QRIS (opsional)'), { target: { value: 'Pindai untuk mengirim hadiah.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Simpan semua perubahan' }));
+
+    expect(await screen.findByText('Perubahan undangan tersimpan.')).toBeDefined();
+    const updateCall = globalThis.fetch.mock.calls.find(([url, options]) => (
+      new URL(url, window.location.origin).pathname.endsWith('/invitations/invitation-1')
+      && options.method === 'PATCH'
+    ));
+    expect(updateCall).toBeDefined();
+    expect(JSON.parse(updateCall[1].body).content.digital_envelope).toEqual({
+      bank: { enabled: true, name: 'BCA', account_name: 'Aulia Putri', account_number: '001234567' },
+      e_wallet: { enabled: true, provider: 'DANA', account_name: 'Aulia Putri', account_number: '08987654321' },
+      qris: { enabled: true, image_url: expect.stringMatching(/^data:image\/png;base64,/), instructions: 'Pindai untuk mengirim hadiah.' },
+    });
+  } finally {
+    scrollTo.mockRestore();
+  }
+});
+
 test('Basic package sends to one WhatsApp recipient at a time', async () => {
   mountPublishedInvitationDashboard('basic');
 
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /kirim via whatsapp/i }));
   expect(screen.getByLabelText(/nama penerima undangan/i)).toBeDefined();
   expect(screen.getByLabelText(/nomor whatsapp penerima/i)).toBeDefined();
@@ -386,6 +540,7 @@ test('Basic package sends to one WhatsApp recipient at a time', async () => {
 test('Premium package imports an XLSX recipient list and advances after manual confirmation', async () => {
   mountPublishedInvitationDashboard('premium');
 
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /kirim via whatsapp/i }));
   expect(screen.getByRole('button', { name: /download template \.xlsx/i })).toBeDefined();
   expect(screen.queryByLabelText(/nomor whatsapp penerima/i)).toBeNull();
@@ -416,17 +571,39 @@ test('Premium package imports an XLSX recipient list and advances after manual c
   sessionStorage.clear();
 });
 
+test('buyer menu switches between dashboard, invitations, guide, and QR scanner', async () => {
+  mountPublishedInvitationDashboard('basic');
+
+  expect(await screen.findByRole('heading', { name: /semua kebutuhan undangan/i })).toBeDefined();
+  expect(screen.queryByRole('heading', { name: /undangan dan masa aktif/i })).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Undangan', exact: true }));
+  expect(await screen.findByRole('heading', { name: /undangan dan masa aktif/i })).toBeDefined();
+  expect(screen.queryByRole('heading', { name: /semua kebutuhan undangan/i })).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: /cara penggunaan/i }));
+  expect(screen.getByRole('heading', { name: /cara menggunakan undangan/i })).toBeDefined();
+  expect(screen.queryByRole('heading', { name: /undangan dan masa aktif/i })).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Scan QR', exact: true }));
+  expect(await screen.findByRole('heading', { name: /scan tiket qr tamu/i })).toBeDefined();
+  expect(screen.getByLabelText(/pilih undangan yang akan dipindai/i).value).toBe('invitation-1');
+  expect(screen.getByRole('button', { name: /scan barcode dengan kamera/i })).toBeDefined();
+});
+
 test('the event dashboard opens a camera scanner in its guestbook', async () => {
   mountPublishedInvitationDashboard('basic');
 
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /rsvp & buku tamu/i }));
-  expect(await screen.findByRole('heading', { name: /scan tiket barcode tamu/i })).toBeDefined();
+  expect(await screen.findByRole('heading', { name: /scan tiket qr tamu/i })).toBeDefined();
   expect(screen.getByRole('button', { name: /scan barcode dengan kamera/i })).toBeDefined();
 });
 
 test('Business package prepares WhatsApp recipients in sequence', async () => {
   mountPublishedInvitationDashboard('business');
 
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /kirim via whatsapp/i }));
   fireEvent.change(screen.getByLabelText(/daftar penerima/i), {
     target: { value: '081234567890 | Andi\n+6281298765432 | Siti' },
