@@ -238,6 +238,7 @@ class InvitationUpdate(BaseModel):
 class PaymentCreate(BaseModel):
     payment_method_id: str
     mobile: str | None = Field(default=None, min_length=8, max_length=24)
+    plan_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]{2,32}$")
 
 
 class PaymentProof(BaseModel):
@@ -573,7 +574,11 @@ async def has_active_invitation_package(owner_id: str):
 
 async def activate_invitation(payment):
     now = datetime.now(timezone.utc)
-    invitation = await db.invitations.find_one({"id": payment["invitation_id"]}, {"_id": 0, "active_until": 1})
+    invitation = await db.invitations.find_one(
+        {"id": payment["invitation_id"]},
+        {"_id": 0, "active_until": 1, "plan_id": 1},
+    )
+    plan_id = payment.get("plan_id") or (invitation or {}).get("plan_id")
     current_expiry = invitation.get("active_until") if invitation else None
     if current_expiry:
         parsed_expiry = datetime.fromisoformat(current_expiry)
@@ -585,10 +590,11 @@ async def activate_invitation(payment):
         {"$set": {
             "status": "active",
             "payment_id": payment["id"],
+            **({"plan_id": plan_id} if plan_id else {}),
             "activated_at": now.isoformat(),
             "active_until": expires_at.isoformat(),
             "package_entitlements": payment.get("package_entitlements", package_entitlements(
-                next((plan for plan in DEFAULT_BILLING_CONFIG["plans"] if plan["id"] == payment.get("plan_id")), {})
+                next((plan for plan in DEFAULT_BILLING_CONFIG["plans"] if plan["id"] == plan_id), {})
             )),
             "updated_at": now.isoformat(),
         }},
@@ -1935,7 +1941,8 @@ async def create_invitation_tickets(
     if invitation.get("status") != "published" or datetime.fromisoformat(invitation["active_until"]) <= datetime.now(timezone.utc):
         raise HTTPException(status_code=409, detail="Publish undangan yang masih aktif sebelum membuat tiket barcode.")
     entitlements = invitation_entitlements(invitation)
-    if not entitlements["bulk_upload_enabled"] and len(payload.recipients) > 1:
+    bulk_upload_enabled = invitation.get("plan_id") in {"premium", "business"} and entitlements["bulk_upload_enabled"]
+    if not bulk_upload_enabled and len(payload.recipients) > 1:
         raise HTTPException(status_code=403, detail="Paket ini tidak mengaktifkan upload massal; buat satu tiket penerima per permintaan.")
     if len(payload.recipients) > entitlements["max_recipients"]:
         raise HTTPException(
@@ -2082,7 +2089,8 @@ async def create_invitation_payment(invitation_id: str, payload: PaymentCreate, 
     if current_user.get("is_demo"):
         raise HTTPException(status_code=403, detail="Akun demo tidak dapat membuat pembayaran.")
     invitation = await get_owned_invitation(invitation_id, current_user["id"])
-    lock_id, lock_token = await acquire_package_capacity_lock(current_user["id"], invitation["plan_id"])
+    plan_id = payload.plan_id or invitation["plan_id"]
+    lock_id, lock_token = await acquire_package_capacity_lock(current_user["id"], plan_id)
     try:
         return await create_invitation_payment_locked(invitation_id, payload, current_user, invitation)
     finally:
@@ -2091,7 +2099,8 @@ async def create_invitation_payment(invitation_id: str, payload: PaymentCreate, 
 
 async def create_invitation_payment_locked(invitation_id: str, payload: PaymentCreate, current_user: dict, invitation: dict):
     config = await get_billing_config()
-    plan = next((item for item in config["plans"] if item["id"] == invitation["plan_id"] and item.get("enabled", True)), None)
+    plan_id = payload.plan_id or invitation["plan_id"]
+    plan = next((item for item in config["plans"] if item["id"] == plan_id and item.get("enabled", True)), None)
     method = next((item for item in config["payment_methods"] if item["id"] == payload.payment_method_id and item.get("enabled", True)), None)
     if plan is None or method is None:
         raise HTTPException(status_code=422, detail="Paket atau metode pembayaran tidak tersedia.")
@@ -2106,12 +2115,14 @@ async def create_invitation_payment_locked(invitation_id: str, payload: PaymentC
         "expires_at": {"$gt": now.isoformat()},
     }, {"_id": 0})
     if existing_payment:
-        if existing_payment["payment_method"] == method["name"]:
+        if existing_payment["payment_method"] == method["name"] and existing_payment.get("plan_id") == plan["id"]:
             return public_payment(existing_payment)
-        raise HTTPException(status_code=409, detail="Selesaikan atau tunggu kedaluwarsa pembayaran yang sedang berlangsung.")
+        raise HTTPException(status_code=409, detail="Selesaikan atau tunggu kedaluwarsa pembayaran yang sedang berlangsung sebelum mengganti paket atau metode.")
 
     current_expiry = invitation.get("active_until")
     currently_active = invitation.get("status") in {"active", "published"} and current_expiry and datetime.fromisoformat(current_expiry) > now
+    if currently_active and plan["id"] != invitation.get("plan_id"):
+        raise HTTPException(status_code=409, detail="Paket hanya dapat diganti setelah masa aktif undangan berakhir.")
     if not currently_active:
         active_count = await db.invitations.count_documents({
             "owner_id": current_user["id"],

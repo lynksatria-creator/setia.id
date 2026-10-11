@@ -413,7 +413,7 @@ test('protects the user dashboard when no account is signed in', async () => {
   expect(await screen.findByRole('heading', { name: /masuk untuk mengelola undangan/i })).toBeDefined();
 });
 
-test('test account can select each package and sees its access expiry', async () => {
+test('test account does not select a package while filling invitation details', async () => {
   sessionStorage.setItem('undangan.id.session', JSON.stringify({
     access_token: 'test-token',
     user: {
@@ -469,12 +469,8 @@ test('test account can select each package and sees its access expiry', async ()
   fireEvent.change(screen.getByLabelText('Jenis acara'), { target: { value: 'Akad & Resepsi' } });
   fireEvent.click(container.querySelector('.setup-template-card'));
   fireEvent.click(screen.getByRole('button', { name: 'Lanjutkan ke isi data' }));
-  const packageSelect = await screen.findByLabelText('Paket');
-  expect(packageSelect.disabled).toBe(false);
-  expect([...packageSelect.options].map((option) => option.value)).toEqual(['basic', 'premium', 'business']);
+  expect(screen.queryByLabelText('Paket')).toBeNull();
   expect(screen.getByText(/akses semua paket tanpa pembayaran hingga/)).toBeDefined();
-  fireEvent.change(packageSelect, { target: { value: 'premium' } });
-  expect(packageSelect.value).toBe('premium');
 
   fireEvent.change(screen.getByLabelText('Undangan ini untuk acara apa?'), { target: { value: 'Akad & Resepsi' } });
   expect(screen.getByLabelText('Tanggal resepsi')).toBeDefined();
@@ -502,8 +498,8 @@ const mountPublishedInvitationDashboard = (planId, settings = {}) => {
     slug: 'hari-bahagia',
     plan_id: planId,
     ...(settings.packageEntitlements ? { package_entitlements: settings.packageEntitlements } : {}),
-    status: 'published',
-    active_until: '9999-12-31T23:59:59+00:00',
+    status: settings.status || 'published',
+    active_until: settings.activeUntil === undefined ? '9999-12-31T23:59:59+00:00' : settings.activeUntil,
     content: settings.content || {},
   };
   sessionStorage.setItem('undangan.id.session', JSON.stringify({
@@ -515,7 +511,7 @@ const mountPublishedInvitationDashboard = (planId, settings = {}) => {
     const payload = path.endsWith('/auth/me')
       ? { user: { id: 'user-1', full_name: 'Test User', email: 'test@example.com', role: 'user', is_test_account: false } }
       : path.endsWith('/billing/config')
-        ? { plans: [{ id: planId, name: planId, price: 599000, duration_days: 365, slug_mode: planId === 'basic' ? 'generated' : 'custom', ...(settings.planConfig || {}) }], payment_methods: [] }
+        ? { plans: settings.billingPlans || [{ id: planId, name: planId, price: 599000, duration_days: 365, slug_mode: planId === 'basic' ? 'generated' : 'custom', ...(settings.planConfig || {}) }], payment_methods: settings.paymentMethods || [] }
         : path.endsWith('/dashboard-admins')
           ? { eligible: true, max_admins: 3, admins: [] }
           : path.endsWith('/affiliate-program')
@@ -527,6 +523,8 @@ const mountPublishedInvitationDashboard = (planId, settings = {}) => {
             ...recipient,
             token: `${String(index + 1).padStart(2, '0')}${'t'.repeat(41)}`,
           })) }
+          : path.endsWith('/payments')
+            ? { id: 'payment-1', amount: 249000, manual_details: { bank_name: 'Bank' } }
           : [invitation];
     return {
       ok: true,
@@ -539,6 +537,33 @@ const mountPublishedInvitationDashboard = (planId, settings = {}) => {
   window.history.pushState({}, '', '/undangan-dashboard');
   renderApp();
 };
+
+test('package is selected only when activating an invitation', async () => {
+  mountPublishedInvitationDashboard('basic', {
+    status: 'draft',
+    activeUntil: null,
+    billingPlans: [
+      { id: 'basic', name: 'Basic', price: 99000, duration_days: 30, enabled: true },
+      { id: 'premium', name: 'Premium', price: 249000, duration_days: 365, enabled: true },
+    ],
+    paymentMethods: [{ id: 'bank', name: 'Transfer bank', provider: 'manual', enabled: true }],
+  });
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
+  expect(screen.queryByLabelText('Paket')).toBeNull();
+  const activationPackage = screen.getByLabelText('Paket aktivasi');
+  expect(activationPackage.value).toBe('basic');
+  fireEvent.change(activationPackage, { target: { value: 'premium' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Bayar & aktifkan · Rp 249.000' }));
+
+  await screen.findByText('Menunggu transfer');
+  const paymentRequest = globalThis.fetch.mock.calls.find(([url]) => new URL(url, window.location.origin).pathname.endsWith('/payments'));
+  expect(JSON.parse(paymentRequest[1].body)).toEqual({
+    payment_method_id: 'bank',
+    mobile: '',
+    plan_id: 'premium',
+  });
+});
 
 test('buyer dashboard shows guests, attendance responses, and greetings', async () => {
   mountPublishedInvitationDashboard('basic', {
@@ -651,6 +676,10 @@ test('Basic package sends to one WhatsApp recipient at a time', async () => {
 
   fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /kirim via whatsapp/i }));
+  expect(screen.getByRole('button', { name: /1\. kirim ke satu orang/i })).toBeDefined();
+  expect(screen.queryByRole('button', { name: /2\. kirim bulk/i })).toBeNull();
+  expect(screen.queryByLabelText(/nama penerima undangan/i)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /1\. kirim ke satu orang/i }));
   expect(screen.getByLabelText(/nama penerima undangan/i)).toBeDefined();
   expect(screen.getByLabelText(/nomor whatsapp penerima/i)).toBeDefined();
   expect(screen.queryByRole('button', { name: /download template/i })).toBeNull();
@@ -663,14 +692,15 @@ test('Basic package sends to one WhatsApp recipient at a time', async () => {
   expect(decodeURIComponent(new URL(whatsappLink.href).searchParams.get('text'))).toContain('/undangan-ticket/');
 });
 
-test('configured package entitlements control bulk upload and recipient caps regardless of package ID', async () => {
-  mountPublishedInvitationDashboard('basic', {
+test('configured package entitlements control bulk upload and recipient caps for Premium', async () => {
+  mountPublishedInvitationDashboard('premium', {
     planConfig: { bulk_upload_enabled: true, max_recipients: 2 },
     packageEntitlements: { bulk_upload_enabled: true, max_recipients: 2 },
   });
 
   fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /kirim via whatsapp/i }));
+  fireEvent.click(screen.getByRole('button', { name: /2\. kirim bulk/i }));
   expect(screen.getByRole('button', { name: /download template \.xlsx/i })).toBeDefined();
   fireEvent.change(screen.getByLabelText(/daftar penerima/i), {
     target: { value: '081234567890 | Andi\n081298765432 | Siti\n081277788899 | Rina' },
@@ -711,6 +741,10 @@ test('Premium package imports an XLSX recipient list and advances after manual c
 
   fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /kirim via whatsapp/i }));
+  expect(screen.getByRole('button', { name: /1\. kirim ke satu orang/i })).toBeDefined();
+  expect(screen.getByRole('button', { name: /2\. kirim bulk/i })).toBeDefined();
+  expect(screen.queryByLabelText(/daftar penerima/i)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /2\. kirim bulk/i }));
   expect(screen.getByRole('button', { name: /download template \.xlsx/i })).toBeDefined();
   expect(screen.queryByLabelText(/nomor whatsapp penerima/i)).toBeNull();
   expect(screen.getByLabelText(/daftar penerima/i).getAttribute('placeholder')).toContain('|');
@@ -774,6 +808,7 @@ test('Business package prepares WhatsApp recipients in sequence', async () => {
 
   fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /kirim via whatsapp/i }));
+  fireEvent.click(screen.getByRole('button', { name: /2\. kirim bulk/i }));
   fireEvent.change(screen.getByLabelText(/daftar penerima/i), {
     target: { value: '081234567890 | Andi\n+6281298765432 | Siti' },
   });

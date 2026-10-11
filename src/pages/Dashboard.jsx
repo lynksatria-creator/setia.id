@@ -314,11 +314,13 @@ export default function Dashboard({ onSignIn }) {
   const [setupTemplateId, setSetupTemplateId] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [activationPlanSelections, setActivationPlanSelections] = useState({});
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [paymentMobile, setPaymentMobile] = useState('');
   const [activePayment, setActivePayment] = useState(null);
   const [transferReference, setTransferReference] = useState('');
   const [whatsAppInvitationId, setWhatsAppInvitationId] = useState(null);
+  const [whatsAppSendMode, setWhatsAppSendMode] = useState('choice');
   const [whatsAppPhone, setWhatsAppPhone] = useState('');
   const [whatsAppName, setWhatsAppName] = useState('');
   const [whatsAppRecipients, setWhatsAppRecipients] = useState('');
@@ -965,8 +967,9 @@ export default function Dashboard({ onSignIn }) {
   const beginPayment = async (invitation) => {
     setError('');
     setMessage('');
+    const planId = activationPlanSelections[invitation.id] || invitation.plan_id;
     try {
-      const payment = await paymentsApi.create(token, invitation.id, paymentMethodId, paymentMobile);
+      const payment = await paymentsApi.create(token, invitation.id, paymentMethodId, paymentMobile, planId);
       setActivePayment(payment);
       if (payment.redirect_url) window.location.assign(payment.redirect_url);
       else setMessage('Instruksi transfer siap. Setelah transfer, kirim referensi untuk verifikasi admin.');
@@ -1073,7 +1076,8 @@ export default function Dashboard({ onSignIn }) {
     setError('');
     const invitation = invitations.find((item) => item.id === invitationId);
     const plan = billing.plans.find((item) => item.id === invitation?.plan_id);
-    const { bulkUploadEnabled, maxRecipients } = getPackageEntitlements(invitation || {}, plan);
+    const { bulkUploadEnabled: hasBulkUploadEntitlement, maxRecipients } = getPackageEntitlements(invitation || {}, plan);
+    const bulkUploadEnabled = ['premium', 'business'].includes(invitation?.plan_id) && hasBulkUploadEntitlement;
     if (!bulkUploadEnabled && recipients.length > 1) {
       setError('Paket ini tidak mengaktifkan upload massal dan hanya dapat membuat satu tiket per permintaan.');
       return;
@@ -1516,7 +1520,7 @@ export default function Dashboard({ onSignIn }) {
             <div className="account-panel-heading"><div><span className="eyebrow">{editingId ? 'Edit undangan' : 'Undangan baru'}</span><h2>{editingId ? 'Perbarui detail acara' : 'Mulai dengan detail acara'}</h2></div>{editingId ? <button className="text-button" onClick={resetForm}>Buat draft baru</button> : null}</div>
             <form className="invitation-editor-form" onSubmit={saveInvitation}>
               <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder="Pernikahan Aulia & Farhan" /></label>
-              <label>Paket<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId) || user.is_demo} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {user.is_test_account ? 'akses tester' : user.role === 'affiliate' ? `kuota tersisa ${(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}` : `Rp ${Number(plan.price).toLocaleString('id-ID')}`} · {plan.duration_days} hari</option>)}</select></label>
+              {user.role === 'affiliate' ? <label>Paket kuota<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId)} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · kuota tersisa {(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}</option>)}</select></label> : null}
               {selectedPlan?.id !== 'basic' ? <label>Link undangan (opsional, dapat diedit)<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} minLength={3} maxLength={64} placeholder={form.title ? form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : 'nama-acara'} /><small>Kosongkan untuk membuat link otomatis saat disimpan. Anda tetap dapat mengubah link ini nanti.</small></label> : <p className="form-hint">Paket Basic menggunakan link otomatis yang dibuat sistem.</p>}
               <div className="generated-rsvp-link">
                 <label>Link RSVP otomatis<input readOnly value={editingInvitation ? `${window.location.origin}/i/${editingInvitation.slug}#rsvp` : 'Link RSVP dibuat setelah draft disimpan'} /></label>
@@ -1722,10 +1726,13 @@ export default function Dashboard({ onSignIn }) {
               <div className="account-invitation-list">
                 {invitations.map((invitation) => {
                   const plan = billing.plans.find((item) => item.id === invitation.plan_id);
+                  const activationPlanId = activationPlanSelections[invitation.id] || invitation.plan_id;
+                  const activationPlan = billing.plans.find((item) => item.id === activationPlanId && item.enabled !== false) || plan;
                   const active = user.is_test_account || (['active', 'published'].includes(invitation.status) && new Date(invitation.active_until) > new Date());
                   const invitationUrl = `${window.location.origin}/i/${invitation.slug}`;
                   const { bulkUploadEnabled } = getPackageEntitlements(invitation, plan);
-                  const isSingleRecipientPlan = !bulkUploadEnabled;
+                  const supportsBulkUpload = ['premium', 'business'].includes(invitation.plan_id) && bulkUploadEnabled;
+                  const isSingleRecipientPlan = !supportsBulkUpload;
                   const maxRecipients = getPackageEntitlements(invitation, plan).maxRecipients;
                   const currentTicket = whatsAppQueue[whatsAppQueueIndex];
                   const recipientInvitationUrl = currentTicket
@@ -1758,11 +1765,12 @@ export default function Dashboard({ onSignIn }) {
                         <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
                         {user.role === 'user' ? <button className="secondary-btn" onClick={() => editInvitation(invitation)}>Edit</button> : null}
                         {user.role === 'user' && active && invitation.status !== 'published' ? <button className="primary-btn" onClick={() => publishInvitation(invitation)}>Publish</button> : null}
-                        {user.role === 'user' && active && invitation.status === 'published' ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
+                        {user.role === 'user' && active && invitation.status === 'published' ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppSendMode('choice'); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
                         {user.role === 'user' && !active ? <>
+                          <label className="payment-method-select">Paket aktivasi<select value={activationPlan?.id || ''} onChange={(event) => setActivationPlanSelections((current) => ({ ...current, [invitation.id]: event.target.value }))}>{billing.plans.filter((item) => item.enabled !== false).map((item) => <option key={item.id} value={item.id}>{item.name} · Rp {Number(item.price).toLocaleString('id-ID')} · {item.duration_days} hari</option>)}</select></label>
                           <label className="payment-method-select">Metode<select value={paymentMethodId} onChange={(event) => setPaymentMethodId(event.target.value)}>{billing.payment_methods.map((method) => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label>
                           {selectedPaymentMethod?.provider === 'mayar' ? <label className="payment-method-select">Nomor ponsel untuk invoice Mayar<input type="tel" inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" value={paymentMobile} onChange={(event) => setPaymentMobile(event.target.value)} /></label> : null}
-                          <button className="primary-btn" disabled={!paymentMethodId || (selectedPaymentMethod?.provider === 'mayar' && !paymentMobile.trim())} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(plan?.price || 0).toLocaleString('id-ID')}</button>
+                          <button className="primary-btn" disabled={!activationPlan || !paymentMethodId || (selectedPaymentMethod?.provider === 'mayar' && !paymentMobile.trim())} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(activationPlan?.price || 0).toLocaleString('id-ID')}</button>
                         </> : null}
                         {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/i/${invitation.slug}`} target="_blank" rel="noreferrer">Buka link ↗</a> : null}
                         {user.role === 'user' && invitation.status === 'published' ? <>
@@ -1853,8 +1861,14 @@ export default function Dashboard({ onSignIn }) {
                         </div>
                       </div>
                       {whatsAppInvitationId === invitation.id ? <div className="invitation-whatsapp-form">
-                        <h4>{isSingleRecipientPlan ? 'Kirim WhatsApp ke satu penerima' : 'Kirim undangan ke daftar penerima'}</h4>
-                        {isSingleRecipientPlan ? <><label>Nama penerima undangan<input type="text" autoComplete="name" value={whatsAppName} onChange={(event) => { setWhatsAppName(event.target.value); setWhatsAppQueue([]); }} placeholder="Nama penerima" /></label><label>Nomor WhatsApp penerima <span>Gunakan nomor Indonesia seperti 081234567890.</span><input type="tel" inputMode="tel" autoComplete="tel" value={whatsAppPhone} onChange={(event) => { setWhatsAppPhone(event.target.value); setWhatsAppQueue([]); }} placeholder="08xxxxxxxxxx" /></label></> : <div className="whatsapp-recipient-import">
+                        <h4>{whatsAppSendMode === 'choice' ? 'Pilih cara mengirim undangan' : whatsAppSendMode === 'bulk' ? 'Kirim undangan secara bulk' : 'Kirim WhatsApp ke satu penerima'}</h4>
+                        {whatsAppSendMode === 'choice' ? <div className="whatsapp-send-mode-options">
+                          <p>Pilih cara mengirim undangan ke tamu:</p>
+                          <button type="button" className="secondary-btn" onClick={() => { setWhatsAppSendMode('single'); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); }}>1. Kirim ke satu orang</button>
+                          {supportsBulkUpload ? <button type="button" className="secondary-btn" onClick={() => { setWhatsAppSendMode('bulk'); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); }}>2. Kirim bulk · upload daftar tamu</button> : <p className="form-hint">Bulk upload tersedia pada paket Premium dan Business.</p>}
+                          <button type="button" className="secondary-btn" onClick={() => setWhatsAppInvitationId(null)}>Tutup</button>
+                        </div> : <>
+                        {whatsAppSendMode === 'single' || isSingleRecipientPlan ? <><label>Nama penerima undangan<input type="text" autoComplete="name" value={whatsAppName} onChange={(event) => { setWhatsAppName(event.target.value); setWhatsAppQueue([]); }} placeholder="Nama penerima" /></label><label>Nomor WhatsApp penerima <span>Gunakan nomor Indonesia seperti 081234567890.</span><input type="tel" inputMode="tel" autoComplete="tel" value={whatsAppPhone} onChange={(event) => { setWhatsAppPhone(event.target.value); setWhatsAppQueue([]); }} placeholder="08xxxxxxxxxx" /></label></> : <div className="whatsapp-recipient-import">
                           <div><button type="button" className="whatsapp-template-download" onClick={downloadRecipientTemplate}>Download template .xlsx</button><span>Isi kolom nomor_hp dan nama_penerima untuk tiap tamu.</span></div>
                           <label>Upload daftar nomor (.xlsx)<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={importWhatsAppRecipients} disabled={isImportingRecipients} /></label>
                           {isImportingRecipients ? <span className="form-hint">Memproses file…</span> : null}
@@ -1864,15 +1878,17 @@ export default function Dashboard({ onSignIn }) {
                         <label>Pesan <span>Gunakan {'{{nama}}'} untuk menyisipkan nama penerima; jika dihapus, sapaan nama ditambahkan otomatis.</span><textarea rows={3} maxLength={1000} value={whatsAppMessage} onChange={(event) => setWhatsAppMessage(event.target.value)} /></label>
                         <p className="form-hint">Setiap penerima mendapatkan tautan undangan dan tiket barcode unik. Panitia dapat memindai tiket untuk mencatat kehadiran. Setelah mengirim pesan di WhatsApp, kembali ke dashboard dan konfirmasi untuk membuka chat berikutnya.</p>
                         <div className="whatsapp-bulk-actions">
-                          {bulkUploadEnabled ? <>
+                          {supportsBulkUpload ? <>
                             {whatsAppRecipients.trim() && !whatsAppQueue.length ? <button type="button" className="secondary-btn" disabled={isPreparingTickets} onClick={() => prepareWhatsAppQueue(invitation.id)}>{isPreparingTickets ? 'Membuat tiket…' : 'Buat tiket & siapkan antrean'}</button> : null}
                             {whatsAppQueue.length ? <><span>Penerima {whatsAppQueueIndex + 1} dari {whatsAppQueue.length} · {whatsAppQueue[whatsAppQueueIndex]?.name}</span><a className={`primary-btn ${!whatsAppUrl ? 'is-disabled' : ''}`} href={whatsAppUrl || undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!whatsAppUrl}>Buka chat WhatsApp</a>{whatsAppQueueIndex < whatsAppQueue.length - 1 ? <button type="button" className="secondary-btn" onClick={() => setWhatsAppQueueIndex((index) => index + 1)}>Sudah terkirim, lanjut</button> : <span>Antrean selesai. Pastikan pesan untuk penerima terakhir sudah dikirim.</span>}</> : null}
                           </> : <>
                             {!whatsAppQueue.length ? <button type="button" className="secondary-btn" disabled={isPreparingTickets} onClick={() => prepareBasicWhatsAppTicket(invitation.id)}>{isPreparingTickets ? 'Membuat tiket…' : 'Buat tiket barcode'}</button> : null}
                             {whatsAppQueue.length ? <><span>Tiket unik untuk {currentTicket?.name}</span><a className={`primary-btn ${!whatsAppUrl ? 'is-disabled' : ''}`} href={whatsAppUrl || undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!whatsAppUrl}>Buka WhatsApp</a></> : null}
                           </>}
+                          <button type="button" className="secondary-btn" onClick={() => { setWhatsAppSendMode('choice'); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setError(''); }}>Ganti cara kirim</button>
                           <button type="button" className="secondary-btn" onClick={() => setWhatsAppInvitationId(null)}>Tutup</button>
                         </div>
+                        </>}
                       </div> : null}
                     </article>
                   );

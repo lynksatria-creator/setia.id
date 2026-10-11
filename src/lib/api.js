@@ -107,10 +107,10 @@ export const guestbookApi = {
 };
 
 export const paymentsApi = {
-  create: (token, invitationId, paymentMethodId, mobile) => apiRequest(`/invitations/${invitationId}/payments`, {
+  create: (token, invitationId, paymentMethodId, mobile, planId) => apiRequest(`/invitations/${invitationId}/payments`, {
     token,
     method: 'POST',
-    body: JSON.stringify({ payment_method_id: paymentMethodId, mobile }),
+    body: JSON.stringify({ payment_method_id: paymentMethodId, mobile, ...(planId ? { plan_id: planId } : {}) }),
   }),
   get: (token, id) => apiRequest(`/payments/${id}`, { token }),
   submitTransferReference: (token, id, transferReference) => apiRequest(`/payments/${id}/proof`, {

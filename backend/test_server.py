@@ -602,7 +602,52 @@ def test_payment_activation_copies_the_payment_entitlement_snapshot(monkeypatch)
     }))
 
     assert invitations.document["package_entitlements"] == entitlements
+    assert invitations.document["plan_id"] == "premium"
     assert invitations.document["status"] == "active"
+
+
+def test_draft_payment_uses_package_selected_at_activation(monkeypatch):
+    config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    transfer = next(method for method in config["payment_methods"] if method["id"] == "bank-transfer")
+    transfer.update(enabled=True, account_number="123456", bank_name="Bank", account_name="Owner")
+
+    class PaymentCollection:
+        def __init__(self):
+            self.document = None
+
+        async def find_one(self, *_args, **_kwargs):
+            return copy.deepcopy(self.document)
+
+        async def count_documents(self, _query):
+            return 0
+
+        async def insert_one(self, document):
+            self.document = copy.deepcopy(document)
+
+    class InvitationCollection:
+        async def count_documents(self, _query):
+            return 0
+
+        async def update_one(self, *_args, **_kwargs):
+            return None
+
+    payments = PaymentCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        platform_settings=FakeCollection(config),
+        payment_orders=payments,
+        invitations=InvitationCollection(),
+    ))
+
+    asyncio.run(server.create_invitation_payment_locked(
+        "invitation-1",
+        server.PaymentCreate(payment_method_id="bank-transfer", plan_id="premium"),
+        {"id": "owner-1"},
+        {"id": "invitation-1", "plan_id": "basic", "status": "draft"},
+    ))
+
+    assert payments.document["plan_id"] == "premium"
+    assert payments.document["amount"] == 249000
+    assert payments.document["duration_days"] == 365
 
 
 def test_reseller_access_uses_entitlements_on_active_plan_snapshots(monkeypatch):
@@ -689,10 +734,11 @@ def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(mon
     ("plan_id", "entitlements", "recipient_count", "expected_status", "message"),
     [
         ("basic", {"bulk_upload_enabled": False, "max_recipients": 1}, 2, 403, "upload massal"),
+        ("basic", {"bulk_upload_enabled": True, "max_recipients": 10}, 2, 403, "upload massal"),
         ("premium", {"bulk_upload_enabled": True, "max_recipients": 2}, 3, 409, "maksimal 2 penerima"),
     ],
 )
-def test_ticket_issuance_enforces_configured_bulk_and_recipient_limits(
+def test_ticket_issuance_enforces_plan_bulk_availability_and_recipient_limits(
     monkeypatch, plan_id, entitlements, recipient_count, expected_status, message,
 ):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
