@@ -167,10 +167,10 @@ const normalizeWhatsAppPhone = (phone) => {
   else if (digits.startsWith('8')) digits = `62${digits}`;
   return digits.length >= 8 && digits.length <= 15 ? digits : '';
 };
-const buildWhatsAppUrl = (phone, message, invitationUrl, ticketUrl) => {
+const buildWhatsAppUrl = (phone, message, invitationUrl) => {
   const digits = normalizeWhatsAppPhone(phone);
-  if (!digits || !message.trim() || !ticketUrl) return '';
-  return `https://wa.me/${digits}?text=${encodeURIComponent(`${message.trim()}\n${invitationUrl}\n\nTiket barcode masuk: ${ticketUrl}`)}`;
+  if (!digits || !message.trim() || !invitationUrl) return '';
+  return `https://wa.me/${digits}?text=${encodeURIComponent(`${message.trim()}\n\n${invitationUrl}`)}`;
 };
 const buildTicketUrl = (ticketToken) => `${window.location.origin}/undangan-ticket/${encodeURIComponent(ticketToken)}`;
 const getPackageEntitlements = (invitation, plan) => {
@@ -190,6 +190,7 @@ const personalizeWhatsAppMessage = (message, name) => {
   if (message.includes('{{nama}}')) return message.replaceAll('{{nama}}', recipientName);
   return `Yth. ${recipientName},\n\n${message}`;
 };
+const WHATSAPP_GREETING_PREFIX = 'Yth. {{nama}},\n\n';
 const parseRecipientRows = (rows) => {
   const headers = (rows[0]?.values || []).map((header) => String(header).trim().toLowerCase().replace(/[\s_-]/g, ''));
   const phoneHeaders = new Set(['nohp', 'nomorhp', 'phone', 'phonenumber', 'mobile', 'whatsapp', 'nowhatsapp']);
@@ -239,7 +240,7 @@ const loadOwnerGuestbookEntries = async (token, invitations) => {
         ...entry,
         invitation_id: invitation.id,
         invitation_title: invitation.title,
-      }));
+      })).filter((entry) => entry.source !== 'barcode_check_in');
     }));
     allEntries.push(...entriesByInvitation.flat());
   }
@@ -263,7 +264,7 @@ const copyTextToClipboard = async (value) => {
   input.remove();
   if (!copied) throw new Error('Tautan tidak dapat disalin. Silakan salin secara manual.');
 };
-const downloadGuestbookSpreadsheet = async (entries, filename) => {
+const downloadGuestbookSpreadsheet = async (entries, filename, tickets = null) => {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('RSVP & Buku Tamu');
@@ -275,7 +276,7 @@ const downloadGuestbookSpreadsheet = async (entries, filename) => {
     { header: 'Nama undangan', key: 'invitation_title', width: 30 },
     { header: 'Waktu RSVP', key: 'created_at', width: 25 },
   ];
-  sheet.addRows(entries.map((entry) => ({
+  sheet.addRows(entries.filter((entry) => entry.source !== 'barcode_check_in').map((entry) => ({
     ...entry,
     attendance: entry.attendance === 'attending'
       ? 'Akan hadir'
@@ -286,6 +287,24 @@ const downloadGuestbookSpreadsheet = async (entries, filename) => {
   })));
   sheet.getRow(1).font = { bold: true };
   sheet.views = [{ state: 'frozen', ySplit: 1 }];
+  if (tickets) {
+    const ticketSheet = workbook.addWorksheet('Daftar Undangan');
+    ticketSheet.columns = [
+      { header: 'Nama tamu', key: 'name', width: 28 },
+      { header: 'Nomor WhatsApp', key: 'phone', width: 22 },
+      { header: 'Konfirmasi kehadiran', key: 'attendance', width: 24 },
+      { header: 'Keterangan', key: 'note', width: 48 },
+      { header: 'Waktu check-in', key: 'checked_in_at', width: 25 },
+    ];
+    ticketSheet.addRows(tickets.map((ticket) => ({
+      ...ticket,
+      attendance: ticket.checked_in_at ? 'Hadir' : '',
+      note: ticket.checked_in_at ? 'Check-in kehadiran melalui barcode undangan.' : '',
+      checked_in_at: ticket.checked_in_at ? new Date(ticket.checked_in_at).toLocaleString('id-ID') : '',
+    })));
+    ticketSheet.getRow(1).font = { bold: true };
+    ticketSheet.views = [{ state: 'frozen', ySplit: 1 }];
+  }
   const content = await workbook.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([content], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -305,6 +324,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const [previewInvitation, setPreviewInvitation] = useState(null);
   const [guestbookInvitation, setGuestbookInvitation] = useState(null);
   const [ownerGuestbook, setOwnerGuestbook] = useState([]);
+  const [invitationTickets, setInvitationTickets] = useState([]);
   const [ticketScanStatus, setTicketScanStatus] = useState('');
   const [dashboardGuestbook, setDashboardGuestbook] = useState([]);
   const [isLoadingDashboardGuestbook, setIsLoadingDashboardGuestbook] = useState(false);
@@ -322,6 +342,8 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const [activePayment, setActivePayment] = useState(null);
   const [transferReference, setTransferReference] = useState('');
   const [whatsAppInvitationId, setWhatsAppInvitationId] = useState(null);
+  const [shareDialogInvitationId, setShareDialogInvitationId] = useState(null);
+  const [shareDialogType, setShareDialogType] = useState('whatsapp');
   const [whatsAppSendMode, setWhatsAppSendMode] = useState('choice');
   const [whatsAppPhone, setWhatsAppPhone] = useState('');
   const [whatsAppName, setWhatsAppName] = useState('');
@@ -357,6 +379,17 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const [affiliateForm, setAffiliateForm] = useState({
     full_name: '', email: '', password: '', basic_quota: 0, premium_quota: 0,
   });
+
+  useEffect(() => {
+    if (!shareDialogInvitationId) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      setShareDialogInvitationId(null);
+      setWhatsAppInvitationId(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [shareDialogInvitationId]);
 
   useEffect(() => {
     if (!token) {
@@ -1011,11 +1044,11 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
     }
   };
 
-  const exportGuestbook = async (entries, filename) => {
+  const exportGuestbook = async (entries, filename, tickets = null) => {
     setError('');
     try {
-      await downloadGuestbookSpreadsheet(entries, filename);
-      setMessage('Data RSVP berhasil diunduh dalam format .xlsx.');
+      await downloadGuestbookSpreadsheet(entries, filename, tickets);
+      setMessage(tickets ? 'Data RSVP dan daftar undangan berhasil diunduh dalam format .xlsx.' : 'Data RSVP berhasil diunduh dalam format .xlsx.');
     } catch (requestError) {
       setError(requestError.message || 'Data RSVP tidak dapat diekspor.');
     }
@@ -1113,7 +1146,32 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       setError('Isi nama dan nomor WhatsApp penerima yang valid sebelum membuat tiket.');
       return;
     }
-    await issueInvitationTickets(invitationId, [{ name: whatsAppName.trim(), phone }]);
+    const whatsappWindow = window.open('about:blank', '_blank');
+    if (whatsappWindow) whatsappWindow.opener = null;
+    const tickets = await issueInvitationTickets(invitationId, [{ name: whatsAppName.trim(), phone }]);
+    const ticket = tickets?.[0];
+    const invitation = invitations.find((item) => item.id === invitationId);
+    if (!ticket?.token || !invitation) {
+      whatsappWindow?.close();
+      return;
+    }
+
+    const personalizedInvitationUrl = `${window.location.origin}/i/${invitation.slug}?ticket=${encodeURIComponent(ticket.token)}`;
+    const whatsappUrl = buildWhatsAppUrl(
+      ticket.phone,
+      personalizeWhatsAppMessage(whatsAppMessage, ticket.name),
+      personalizedInvitationUrl,
+    );
+    if (!whatsappUrl) {
+      whatsappWindow?.close();
+      setError('Tautan WhatsApp tidak dapat dibuat. Periksa nomor penerima dan coba kembali.');
+      return;
+    }
+    if (whatsappWindow) {
+      whatsappWindow.location.href = whatsappUrl;
+    } else {
+      setMessage(`QR untuk ${ticket.name} berhasil dibuat. Pop-up WhatsApp diblokir; gunakan tombol Buka WhatsApp.`);
+    }
   };
 
   const preparePersonalizedInvitation = async (invitation) => {
@@ -1160,6 +1218,11 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       const result = await guestbookApi.checkInTicket(token, guestbookInvitation.id, ticketToken);
       if (result.entry) {
         setOwnerGuestbook((current) => [result.entry, ...current.filter((entry) => entry.id !== result.entry.id)]);
+        setInvitationTickets((current) => current.map((ticket) => (
+          ticket.id === result.entry.ticket_id
+            ? { ...ticket, checked_in_at: result.entry.checked_in_at || result.entry.created_at }
+            : ticket
+        )));
       }
       const resultMessage = createTicketCheckInMessage(result);
       setMessage(resultMessage);
@@ -1248,10 +1311,16 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const openGuestbook = async (invitation) => {
     setGuestbookInvitation(invitation);
     setOwnerGuestbook([]);
+    setInvitationTickets([]);
     setTicketScanStatus('');
     if (user?.role === 'user') setBuyerMenu('scan');
     try {
-      setOwnerGuestbook(await guestbookApi.listOwner(token, invitation.id));
+      const [entries, { tickets }] = await Promise.all([
+        guestbookApi.listOwner(token, invitation.id),
+        guestbookApi.listTickets(token, invitation.id),
+      ]);
+      setOwnerGuestbook(entries);
+      setInvitationTickets(tickets);
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -1757,7 +1826,6 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                     whatsAppInvitationId === invitation.id ? currentTicket?.phone || '' : '',
                     personalizeWhatsAppMessage(whatsAppMessage, currentTicket?.name || ''),
                     recipientInvitationUrl,
-                    currentTicket ? buildTicketUrl(currentTicket.token) : '',
                   );
                   const personalizedTicket = personalizedTickets[invitation.id];
                   const personalizedTicketUrl = personalizedTicket ? buildTicketUrl(personalizedTicket.token) : '';
@@ -1767,9 +1835,8 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                   const personalizedWhatsAppUrl = personalizedTicket
                     ? buildWhatsAppUrl(
                       personalizedTicket.phone,
-                      personalizeWhatsAppMessage(`Dengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`, personalizedTicket.name),
+                      personalizeWhatsAppMessage(`Kami mengundang Anda ke acara ${invitation.title}.`, personalizedTicket.name),
                       personalizedInvitationUrl,
-                      personalizedTicketUrl,
                     )
                     : '';
                   return (
@@ -1780,7 +1847,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                         <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
                         {user.role === 'user' ? <button className="secondary-btn" onClick={() => editInvitation(invitation)}>Edit</button> : null}
                         {user.role === 'user' && active && invitation.status !== 'published' ? <button className="primary-btn" onClick={() => publishInvitation(invitation)}>Publish</button> : null}
-                        {user.role === 'user' && active && invitation.status === 'published' ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppSendMode('choice'); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
+                        {user.role === 'user' && active && invitation.status === 'published' ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId(invitation.id); setShareDialogInvitationId(invitation.id); setShareDialogType('whatsapp'); setWhatsAppSendMode('choice'); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`${WHATSAPP_GREETING_PREFIX}Kami mengundang Anda ke acara ${invitation.title}.`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
                         {user.role === 'user' && !active ? <>
                           <label className="payment-method-select">Paket aktivasi<select value={activationPlan?.id || ''} onChange={(event) => setActivationPlanSelections((current) => ({ ...current, [invitation.id]: event.target.value }))}>{billing.plans.filter((item) => item.enabled !== false).map((item) => <option key={item.id} value={item.id}>{item.name} · Rp {Number(item.price).toLocaleString('id-ID')} · {item.duration_days} hari</option>)}</select></label>
                           <label className="payment-method-select">Metode<select value={paymentMethodId} onChange={(event) => setPaymentMethodId(event.target.value)}>{billing.payment_methods.map((method) => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label>
@@ -1790,10 +1857,15 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                         {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/i/${invitation.slug}`} target="_blank" rel="noreferrer">Buka link ↗</a> : null}
                         {user.role === 'user' && invitation.status === 'published' ? <>
                           <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(invitation, '#rsvp')}>Salin link dashboard RSVP</button>
-                          <button className="secondary-btn" type="button" onClick={() => shareInvitation(invitation)}>Bagikan undangan</button>
+                          <button className="secondary-btn" type="button" onClick={() => { setShareDialogInvitationId(invitation.id); setShareDialogType('invitation'); }}>Bagikan undangan</button>
                         </> : null}
-                        {user.role === 'user' && invitation.status === 'published' ? (
-                          <div className="personalized-invitation-share">
+                        {shareDialogInvitationId === invitation.id ? (
+                          shareDialogType === 'invitation' ? (
+                          <div className="invitation-share-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShareDialogInvitationId(null); }}>
+                            <section className="invitation-share-modal" role="dialog" aria-modal="true" aria-labelledby={`share-dialog-title-${invitation.id}`}>
+                              <button className="invitation-share-modal-close" type="button" aria-label="Tutup" onClick={() => { setShareDialogInvitationId(null); setWhatsAppInvitationId(null); }}>×</button>
+                              <h3 id={`share-dialog-title-${invitation.id}`}>Bagikan undangan</h3>
+                              <div className="personalized-invitation-share">
                             <label>
                               Nama calon tamu
                               <input
@@ -1831,8 +1903,8 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                               <div className="personalized-ticket-card">
                                 <QRCodeSVG
                                   value={personalizedTicketUrl}
-                                  size={156}
-                                  level="H"
+                                  size={240}
+                                  level="M"
                                   title={`Tiket QR buku tamu untuk ${personalizedTicket.name}`}
                                 />
                                 <span>QR unik untuk {personalizedTicket.name}</span>
@@ -1850,7 +1922,11 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                               </button>
                             )}
                             <p className="form-hint">Tiket QR dibuat khusus untuk nama dan nomor ini. Link undangan dan barcode unik langsung disertakan dalam pesan WhatsApp.</p>
+                            <button className="secondary-btn" type="button" onClick={() => shareInvitation(invitation)}>Bagikan link undangan</button>
+                              </div>
+                            </section>
                           </div>
+                          ) : null
                         ) : null}
                         <div className="invitation-owner-qr">
                           <button
@@ -1875,13 +1951,17 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                           ) : null}
                         </div>
                       </div>
-                      {whatsAppInvitationId === invitation.id ? <div className="invitation-whatsapp-form">
-                        <h4>{whatsAppSendMode === 'choice' ? 'Pilih cara mengirim undangan' : whatsAppSendMode === 'bulk' ? 'Kirim undangan secara bulk' : 'Kirim WhatsApp ke satu penerima'}</h4>
+                      {whatsAppInvitationId === invitation.id ? (
+                        <div className="invitation-share-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setWhatsAppInvitationId(null); setShareDialogInvitationId(null); } }}>
+                          <section className="invitation-share-modal" role="dialog" aria-modal="true" aria-labelledby={`share-dialog-title-${invitation.id}`}>
+                            <button className="invitation-share-modal-close" type="button" aria-label="Tutup" onClick={() => { setWhatsAppInvitationId(null); setShareDialogInvitationId(null); }}>×</button>
+                            <div className="invitation-whatsapp-form">
+                        <h3 id={`share-dialog-title-${invitation.id}`}>{whatsAppSendMode === 'choice' ? 'Pilih cara mengirim undangan' : whatsAppSendMode === 'bulk' ? 'Kirim undangan secara bulk' : 'Kirim WhatsApp ke satu penerima'}</h3>
                         {whatsAppSendMode === 'choice' ? <div className="whatsapp-send-mode-options">
                           <p>Pilih cara mengirim undangan ke tamu:</p>
                           <button type="button" className="secondary-btn" onClick={() => { setWhatsAppSendMode('single'); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); }}>1. Kirim ke satu orang</button>
                           {supportsBulkUpload ? <button type="button" className="secondary-btn" onClick={() => { setWhatsAppSendMode('bulk'); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); }}>2. Kirim bulk · upload daftar tamu</button> : <p className="form-hint">Bulk upload tersedia pada paket Premium dan Business.</p>}
-                          <button type="button" className="secondary-btn" onClick={() => setWhatsAppInvitationId(null)}>Tutup</button>
+                          <button type="button" className="secondary-btn" onClick={() => { setWhatsAppInvitationId(null); setShareDialogInvitationId(null); }}>Tutup</button>
                         </div> : <>
                         {whatsAppSendMode === 'single' || isSingleRecipientPlan ? <><label>Nama penerima undangan<input type="text" autoComplete="name" value={whatsAppName} onChange={(event) => { setWhatsAppName(event.target.value); setWhatsAppQueue([]); }} placeholder="Nama penerima" /></label><label>Nomor WhatsApp penerima <span>Gunakan nomor Indonesia seperti 081234567890.</span><input type="tel" inputMode="tel" autoComplete="tel" value={whatsAppPhone} onChange={(event) => { setWhatsAppPhone(event.target.value); setWhatsAppQueue([]); }} placeholder="08xxxxxxxxxx" /></label></> : <div className="whatsapp-recipient-import">
                           <div><button type="button" className="whatsapp-template-download" onClick={downloadRecipientTemplate}>Download template .xlsx</button><span>Isi kolom nomor_hp dan nama_penerima untuk tiap tamu.</span></div>
@@ -1890,21 +1970,24 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                           <label>Daftar penerima <span>Maks. {maxRecipients} penerima per permintaan. Satu penerima per baris dengan format nomor_hp | nama_penerima.</span><textarea rows={4} value={whatsAppRecipients} onChange={(event) => { setWhatsAppRecipients(event.target.value); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); }} placeholder={'081234567890 | Andi\n081298765432 | Siti'} /></label>
                           {whatsAppQueue.length ? <p className="form-hint">{whatsAppQueue.length} nomor siap di antrean.</p> : null}
                         </div>}
-                        <label>Pesan <span>Gunakan {'{{nama}}'} untuk menyisipkan nama penerima; jika dihapus, sapaan nama ditambahkan otomatis.</span><textarea rows={3} maxLength={1000} value={whatsAppMessage} onChange={(event) => setWhatsAppMessage(event.target.value)} /></label>
+                        <label>Pesan <span>Sapaan Yth. {'{{nama}}'}, tidak dapat dihapus. Tulis isi undangan setelah sapaan.</span><div className="whatsapp-message-editor"><div className="whatsapp-message-greeting" aria-hidden="true">Yth. {'{{nama}}'},</div><textarea aria-label="Isi pesan undangan" rows={3} maxLength={1000 - WHATSAPP_GREETING_PREFIX.length} value={whatsAppMessage.startsWith(WHATSAPP_GREETING_PREFIX) ? whatsAppMessage.slice(WHATSAPP_GREETING_PREFIX.length) : ''} onChange={(event) => setWhatsAppMessage(`${WHATSAPP_GREETING_PREFIX}${event.target.value}`)} /></div></label>
                         <p className="form-hint">Setiap penerima mendapatkan tautan undangan dan tiket barcode unik. Panitia dapat memindai tiket untuk mencatat kehadiran. Setelah mengirim pesan di WhatsApp, kembali ke dashboard dan konfirmasi untuk membuka chat berikutnya.</p>
                         <div className="whatsapp-bulk-actions">
-                          {supportsBulkUpload ? <>
+                          {supportsBulkUpload && whatsAppSendMode !== 'single' ? <>
                             {whatsAppRecipients.trim() && !whatsAppQueue.length ? <button type="button" className="secondary-btn" disabled={isPreparingTickets} onClick={() => prepareWhatsAppQueue(invitation.id)}>{isPreparingTickets ? 'Membuat tiket…' : 'Buat tiket & siapkan antrean'}</button> : null}
                             {whatsAppQueue.length ? <><span>Penerima {whatsAppQueueIndex + 1} dari {whatsAppQueue.length} · {whatsAppQueue[whatsAppQueueIndex]?.name}</span><a className={`primary-btn ${!whatsAppUrl ? 'is-disabled' : ''}`} href={whatsAppUrl || undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!whatsAppUrl}>Buka chat WhatsApp</a>{whatsAppQueueIndex < whatsAppQueue.length - 1 ? <button type="button" className="secondary-btn" onClick={() => setWhatsAppQueueIndex((index) => index + 1)}>Sudah terkirim, lanjut</button> : <span>Antrean selesai. Pastikan pesan untuk penerima terakhir sudah dikirim.</span>}</> : null}
                           </> : <>
-                            {!whatsAppQueue.length ? <button type="button" className="secondary-btn" disabled={isPreparingTickets} onClick={() => prepareBasicWhatsAppTicket(invitation.id)}>{isPreparingTickets ? 'Membuat tiket…' : 'Buat tiket barcode'}</button> : null}
+                            {!whatsAppQueue.length && whatsAppName.trim() && normalizeWhatsAppPhone(whatsAppPhone) ? <button type="button" className="primary-btn" disabled={isPreparingTickets} onClick={() => prepareBasicWhatsAppTicket(invitation.id)}>{isPreparingTickets ? 'Membuat QR & membuka WhatsApp…' : 'Kirim WhatsApp'}</button> : null}
                             {whatsAppQueue.length ? <><span>Tiket unik untuk {currentTicket?.name}</span><a className={`primary-btn ${!whatsAppUrl ? 'is-disabled' : ''}`} href={whatsAppUrl || undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!whatsAppUrl}>Buka WhatsApp</a></> : null}
                           </>}
                           <button type="button" className="secondary-btn" onClick={() => { setWhatsAppSendMode('choice'); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setError(''); }}>Ganti cara kirim</button>
-                          <button type="button" className="secondary-btn" onClick={() => setWhatsAppInvitationId(null)}>Tutup</button>
+                          <button type="button" className="secondary-btn" onClick={() => { setWhatsAppInvitationId(null); setShareDialogInvitationId(null); }}>Tutup</button>
                         </div>
                         </>}
-                      </div> : null}
+                            </div>
+                          </section>
+                          </div>
+                      ) : null}
                     </article>
                   );
                 })}
@@ -1965,12 +2048,12 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                 <>
                 <div className="account-card-actions guestbook-export-actions">
                   <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(guestbookInvitation, '#rsvp')}>Salin link dashboard RSVP</button>
-                  <button className="secondary-btn" type="button" onClick={() => exportGuestbook(ownerGuestbook, `rsvp-${guestbookInvitation.slug}.xlsx`)} disabled={!ownerGuestbook.length}>Unduh RSVP .xlsx</button>
+                  <button className="secondary-btn" type="button" onClick={() => exportGuestbook(ownerGuestbook, `rsvp-${guestbookInvitation.slug}.xlsx`, invitationTickets)} disabled={!ownerGuestbook.length && !invitationTickets.length}>Unduh RSVP .xlsx</button>
                 </div>
                 <div className="guestbook-summary">
-                    <strong>{ownerGuestbook.filter((entry) => entry.attendance === 'attending').length}</strong><span>akan hadir</span>
-                    <strong>{ownerGuestbook.filter((entry) => entry.source === 'barcode_check_in').length}</strong><span>check-in barcode</span>
-                    <strong>{ownerGuestbook.length}</strong><span>total kiriman</span>
+                    <strong>{ownerGuestbook.filter((entry) => entry.source !== 'barcode_check_in' && entry.attendance === 'attending').length}</strong><span>akan hadir</span>
+                    <strong>{invitationTickets.filter((ticket) => ticket.checked_in_at).length}</strong><span>check-in barcode</span>
+                    <strong>{ownerGuestbook.filter((entry) => entry.source !== 'barcode_check_in').length}</strong><span>total RSVP</span>
                   </div>
                   <div className="guestbook-checkin">
                     <h3>Scan tiket QR tamu</h3>
@@ -1978,22 +2061,36 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                     {ticketScanStatus ? <p className="guestbook-scan-result" role="status">{ticketScanStatus}</p> : null}
                     <GuestbookScanner onScan={handleTicketScan} autoStart={user.role === 'user' && checkInInvitations.length === 1} />
                   </div>
+                  <section className="invitation-recipient-roster">
+                    <h3>Daftar tamu undangan</h3>
+                    <p className="form-hint">Semua tamu yang sudah dibuatkan tiket undangan. Konfirmasi hadir dan keterangan check-in hanya terisi setelah tiket dipindai.</p>
+                    {invitationTickets.length ? <div className="invitation-recipient-table-wrap"><table className="invitation-recipient-table">
+                      <thead><tr><th>Nama tamu</th><th>Nomor WhatsApp</th><th>Konfirmasi kehadiran</th><th>Keterangan</th><th>Waktu check-in</th></tr></thead>
+                      <tbody>{invitationTickets.map((ticket) => <tr key={ticket.id}>
+                        <td>{ticket.name}</td>
+                        <td>{ticket.phone}</td>
+                        <td>{ticket.checked_in_at ? 'Hadir' : ''}</td>
+                        <td>{ticket.checked_in_at ? 'Check-in kehadiran melalui barcode undangan.' : ''}</td>
+                        <td>{ticket.checked_in_at ? new Date(ticket.checked_in_at).toLocaleString('id-ID') : ''}</td>
+                      </tr>)}</tbody>
+                    </table></div> : <p className="form-hint">Belum ada tiket tamu yang dibuat untuk undangan ini.</p>}
+                  </section>
                   <div className="owner-guestbook-list">
-                    {ownerGuestbook.length ? ownerGuestbook.map((entry) => (
+                    {ownerGuestbook.filter((entry) => entry.source !== 'barcode_check_in').length ? ownerGuestbook.filter((entry) => entry.source !== 'barcode_check_in').map((entry) => (
                       <article key={entry.id} className={entry.status === 'hidden' ? 'is-hidden' : ''}>
                         <div>
                           <strong>{entry.name}</strong>
-                          <span>{entry.source === 'barcode_check_in' ? `Check-in barcode · ${new Date(entry.checked_in_at || entry.created_at).toLocaleString('id-ID')}` : `${entry.attendance} · ${entry.guests} tamu`}</span>
+                          <span>{`${entry.attendance} · ${entry.guests} tamu`}</span>
                           <p>{entry.message}</p>
                         </div>
-                        {user.role === 'user' && entry.source !== 'barcode_check_in' ? (
+                        {user.role === 'user' ? (
                           <div>
                             <button onClick={() => moderateGuestbook(entry, entry.status === 'visible' ? 'hidden' : 'visible')}>{entry.status === 'visible' ? 'Sembunyikan' : 'Tampilkan'}</button>
                             <button className="danger-text" onClick={() => removeGuestbook(entry)}>Hapus</button>
                           </div>
                         ) : null}
                       </article>
-                    )) : <p className="form-hint">Belum ada RSVP, check-in, atau ucapan untuk undangan ini.</p>}
+                    )) : <p className="form-hint">Belum ada RSVP atau ucapan untuk undangan ini.</p>}
                   </div>
                 </>
               ) : user.role === 'user' ? (

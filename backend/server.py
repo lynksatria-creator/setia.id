@@ -1988,6 +1988,22 @@ async def create_invitation_tickets(
     return {"tickets": tickets}
 
 
+@api_router.get("/invitations/{invitation_id}/tickets")
+async def list_invitation_tickets(invitation_id: str, current_user=Depends(get_current_user)):
+    await get_dashboard_invitation(invitation_id, current_user)
+    tickets = await db.invitation_tickets.find(
+        {"invitation_id": invitation_id},
+        {"_id": 0, "id": 1, "name": 1, "phone": 1, "checked_in_at": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(length=5000)
+    return {"tickets": [{
+        "id": ticket["id"],
+        "name": ticket["name"],
+        "phone": ticket["phone"],
+        "checked_in_at": ticket.get("checked_in_at"),
+        "created_at": ticket.get("created_at"),
+    } for ticket in tickets]}
+
+
 async def ensure_ticket_guestbook_entry(ticket, invitation_id: str, owner_id: str):
     entry = await db.guestbook_entries.find_one({"ticket_id": ticket["id"]}, {"_id": 0})
     if entry is not None:

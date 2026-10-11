@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ExcelJS from 'exceljs';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
@@ -186,6 +186,7 @@ test('renders a unique QR ticket page for a guest', async () => {
   expect(await screen.findByText('Nadia Putri')).toBeDefined();
   expect(screen.getByText('Tunjukkan barcode unik ini kepada panitia saat tiba.')).toBeDefined();
   expect(container.querySelector('.guest-ticket-qr svg')).not.toBeNull();
+  expect(container.querySelector('.guest-ticket-qr svg').getAttribute('width')).toBe('320');
   vi.unstubAllGlobals();
 });
 
@@ -540,11 +541,13 @@ const mountPublishedInvitationDashboard = (planId, settings = {}) => {
             ? { eligible: true, program: null, combinations: [], affiliates: [] }
         : path.endsWith('/guestbook')
               ? settings.guestbookEntries || []
-        : path.endsWith('/tickets')
+        : path.endsWith('/tickets') && options.method === 'POST'
           ? { tickets: JSON.parse(options.body).recipients.map((recipient, index) => ({
             ...recipient,
             token: `${String(index + 1).padStart(2, '0')}${'t'.repeat(41)}`,
           })) }
+          : path.endsWith('/tickets')
+            ? { tickets: settings.invitationTickets || [] }
           : path.endsWith('/payments')
             ? { id: 'payment-1', amount: 249000, manual_details: { bank_name: 'Bank' } }
           : [invitation];
@@ -609,6 +612,45 @@ test('buyer dashboard shows guests, attendance responses, and greetings', async 
   });
   expect(managementRequests).toHaveLength(2);
   expect(managementRequests.every(([, options]) => options.headers.get('Authorization') === 'Bearer test-token')).toBe(true);
+});
+
+test('guestbook separates RSVP responses from the full ticket recipient list', async () => {
+  mountPublishedInvitationDashboard('business', {
+    guestbookEntries: [
+      {
+        id: 'guest-rsvp',
+        name: 'Alya',
+        attendance: 'attending',
+        guests: 2,
+        message: 'Sampai bertemu.',
+        created_at: '2026-10-01T09:00:00+00:00',
+      },
+      {
+        id: 'guest-checkin',
+        ticket_id: 'ticket-scanned',
+        source: 'barcode_check_in',
+        name: 'Alya',
+        attendance: 'attending',
+        guests: 1,
+        message: 'Check-in kehadiran melalui barcode undangan.',
+        checked_in_at: '2026-10-11T16:00:00+00:00',
+      },
+    ],
+    invitationTickets: [
+      { id: 'ticket-scanned', name: 'Alya', phone: '6281234567890', checked_in_at: '2026-10-11T16:00:00+00:00' },
+      { id: 'ticket-not-scanned', name: 'Bima', phone: '6289876543210', checked_in_at: null },
+    ],
+  });
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: /rsvp & buku tamu/i }));
+
+  expect(await screen.findByRole('table')).toBeDefined();
+  expect(screen.getByText('Daftar tamu undangan')).toBeDefined();
+  expect(screen.getByText('Check-in kehadiran melalui barcode undangan.')).toBeDefined();
+  expect(screen.getByText('Bima')).toBeDefined();
+  expect(screen.getByText('Hadir')).toBeDefined();
+  expect(screen.getAllByText('Sampai bertemu.').length).toBeGreaterThan(0);
 });
 
 test('owner can copy the generated RSVP link and edit a premium invitation slug', async () => {
@@ -708,24 +750,66 @@ test('buyer can independently configure digital envelope methods for an invitati
 });
 
 test('Basic package sends to one WhatsApp recipient at a time', async () => {
+  const whatsappWindow = { location: { href: '' }, opener: null, close: vi.fn() };
+  const openSpy = vi.spyOn(window, 'open').mockReturnValue(whatsappWindow);
   mountPublishedInvitationDashboard('basic');
 
   fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
   fireEvent.click(await screen.findByRole('button', { name: /kirim via whatsapp/i }));
+  expect(screen.getByRole('dialog', { name: /pilih cara mengirim undangan/i })).toBeDefined();
   expect(screen.getByRole('button', { name: /1\. kirim ke satu orang/i })).toBeDefined();
   expect(screen.queryByRole('button', { name: /2\. kirim bulk/i })).toBeNull();
   expect(screen.queryByLabelText(/nama penerima undangan/i)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: /1\. kirim ke satu orang/i }));
   expect(screen.getByLabelText(/nama penerima undangan/i)).toBeDefined();
   expect(screen.getByLabelText(/nomor whatsapp penerima/i)).toBeDefined();
+  expect(screen.getByText('Yth. {{nama}},')).toBeDefined();
+  fireEvent.change(screen.getByLabelText('Isi pesan undangan'), {
+    target: { value: 'Sampai bertemu di hari bahagia kami.' },
+  });
+  expect(screen.getByText('Yth. {{nama}},')).toBeDefined();
   expect(screen.queryByRole('button', { name: /download template/i })).toBeNull();
   expect(screen.queryByLabelText(/daftar nomor penerima/i)).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Kirim WhatsApp' })).toBeNull();
   fireEvent.change(screen.getByLabelText(/nama penerima undangan/i), { target: { value: 'Dewi Lestari' } });
   fireEvent.change(screen.getByLabelText(/nomor whatsapp penerima/i), { target: { value: '081234567890' } });
-  fireEvent.click(screen.getByRole('button', { name: /buat tiket barcode/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Kirim WhatsApp' }));
   const whatsappLink = await screen.findByRole('link', { name: /buka whatsapp/i });
-  expect(decodeURIComponent(new URL(whatsappLink.href).searchParams.get('text'))).toContain('Yth. Dewi Lestari,');
-  expect(decodeURIComponent(new URL(whatsappLink.href).searchParams.get('text'))).toContain('/undangan-ticket/');
+  await waitFor(() => expect(whatsappWindow.location.href).toBe(whatsappLink.href));
+  expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank');
+  const whatsappMessage = decodeURIComponent(new URL(whatsappLink.href).searchParams.get('text'));
+  expect(whatsappMessage).toContain('Yth. Dewi Lestari,');
+  expect(whatsappMessage).toContain('Sampai bertemu di hari bahagia kami.');
+  expect(whatsappMessage).toContain('/i/hari-bahagia?ticket=');
+  expect(whatsappMessage).not.toContain('/undangan-ticket/');
+  expect(whatsappMessage.match(/https?:\/\//g)).toHaveLength(1);
+  openSpy.mockRestore();
+});
+
+test('Premium single-recipient mode shows the WhatsApp action after recipient details are entered', async () => {
+  const whatsappWindow = { location: { href: '' }, opener: null, close: vi.fn() };
+  const openSpy = vi.spyOn(window, 'open').mockReturnValue(whatsappWindow);
+  mountPublishedInvitationDashboard('premium');
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: /kirim via whatsapp/i }));
+  fireEvent.click(screen.getByRole('button', { name: /1\. kirim ke satu orang/i }));
+
+  expect(screen.queryByRole('button', { name: 'Kirim WhatsApp' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /buat tiket & siapkan antrean/i })).toBeNull();
+  fireEvent.change(screen.getByLabelText(/nama penerima undangan/i), { target: { value: 'Ana' } });
+  fireEvent.change(screen.getByLabelText(/nomor whatsapp penerima/i), { target: { value: '087728438477' } });
+
+  const prepareButton = screen.getByRole('button', { name: 'Kirim WhatsApp' });
+  expect(prepareButton).toBeDefined();
+  fireEvent.click(prepareButton);
+  const whatsappLink = await screen.findByRole('link', { name: 'Buka WhatsApp' });
+  await waitFor(() => expect(whatsappWindow.location.href).toBe(whatsappLink.href));
+  expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank');
+  expect(screen.getByText('Tiket unik untuk Ana')).toBeDefined();
+  openSpy.mockRestore();
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 
 test('configured package entitlements control bulk upload and recipient caps for Premium', async () => {
@@ -753,6 +837,9 @@ test('personalized invitation sharing creates a unique guestbook QR before Whats
   mountPublishedInvitationDashboard('basic');
 
   fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
+  expect(screen.queryByLabelText(/nama calon tamu/i)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Bagikan undangan' }));
+  expect(screen.getByRole('dialog', { name: 'Bagikan undangan' })).toBeDefined();
   fireEvent.change(screen.getByLabelText(/nama calon tamu/i), { target: { value: 'Dewi Lestari' } });
   fireEvent.change(screen.getByLabelText(/nomor whatsapp calon tamu/i), { target: { value: '081234567890' } });
   fireEvent.click(screen.getByRole('button', { name: /buat qr & siapkan whatsapp/i }));
@@ -765,7 +852,8 @@ test('personalized invitation sharing creates a unique guestbook QR before Whats
   const whatsappMessage = decodeURIComponent(whatsappUrl.searchParams.get('text'));
   expect(whatsappUrl.pathname).toBe('/6281234567890');
   expect(whatsappMessage).toContain('/i/hari-bahagia?ticket=');
-  expect(whatsappMessage).toContain(ticketLink.href);
+  expect(whatsappMessage).not.toContain(ticketLink.href);
+  expect(whatsappMessage.match(/https?:\/\//g)).toHaveLength(1);
   const ticketRequest = globalThis.fetch.mock.calls.find(([url]) => new URL(url, window.location.origin).pathname.endsWith('/invitations/invitation-1/tickets'));
   expect(JSON.parse(ticketRequest[1].body).recipients).toEqual([{ name: 'Dewi Lestari', phone: '6281234567890' }]);
   vi.unstubAllGlobals();
@@ -799,8 +887,11 @@ test('Premium package imports an XLSX recipient list and advances after manual c
   expect(screen.getByText(/Penerima 1 dari 2/)).toBeDefined();
   const firstRecipientUrl = new URL(screen.getByRole('link', { name: /buka chat whatsapp/i }).href);
   expect(firstRecipientUrl.pathname).toBe('/6281234567890');
-  expect(decodeURIComponent(firstRecipientUrl.searchParams.get('text'))).toContain('Yth. Tamu 1,');
-  expect(decodeURIComponent(firstRecipientUrl.searchParams.get('text'))).toContain('/undangan-ticket/');
+  const firstRecipientMessage = decodeURIComponent(firstRecipientUrl.searchParams.get('text'));
+  expect(firstRecipientMessage).toContain('Yth. Tamu 1,');
+  expect(firstRecipientMessage).toContain('/i/hari-bahagia?ticket=');
+  expect(firstRecipientMessage).not.toContain('/undangan-ticket/');
+  expect(firstRecipientMessage.match(/https?:\/\//g)).toHaveLength(1);
   fireEvent.click(screen.getByRole('button', { name: /sudah terkirim, lanjut/i }));
   const secondRecipientUrl = new URL(screen.getByRole('link', { name: /buka chat whatsapp/i }).href);
   expect(secondRecipientUrl.pathname).toBe('/6281298765432');

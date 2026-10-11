@@ -87,6 +87,12 @@ class FakeTicketCollection:
                 return copy.deepcopy(document)
         return None
 
+    def find(self, query, _projection=None):
+        return FakeTestimonialCursor([
+            document for document in self.documents
+            if all(document.get(key) == value for key, value in query.items())
+        ])
+
     async def insert_one(self, document):
         identity_keys = ("invitation_id", "phone", "name")
         if any(all(existing.get(key) == document.get(key) for key in identity_keys) for existing in self.documents):
@@ -707,6 +713,16 @@ def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(mon
     assert len(ticket["token"]) >= 32
     assert issued_again.json()["tickets"][0]["token"] == ticket["token"]
 
+    recipients = client.get("/api/invitations/invitation-1/tickets", headers=headers)
+    assert recipients.status_code == 200
+    assert recipients.json()["tickets"] == [{
+        "id": ticket["id"],
+        "name": "Alya",
+        "phone": "6281234567890",
+        "checked_in_at": None,
+        "created_at": tickets.documents[0]["created_at"],
+    }]
+
     public_ticket = client.get(f"/api/public/invitation-tickets/{ticket['token']}")
     assert public_ticket.status_code == 200
     assert public_ticket.json()["name"] == "Alya"
@@ -728,6 +744,9 @@ def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(mon
     assert check_in.json()["entry"]["status"] == "hidden"
     assert duplicate_check_in.json()["already_checked_in"] is True
     assert len(guestbook.documents) == 1
+    checked_in_recipients = client.get("/api/invitations/invitation-1/tickets", headers=headers)
+    assert checked_in_recipients.status_code == 200
+    assert checked_in_recipients.json()["tickets"][0]["checked_in_at"] == check_in.json()["entry"]["checked_in_at"]
 
 
 @pytest.mark.parametrize(

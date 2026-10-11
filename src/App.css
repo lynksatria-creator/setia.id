@@ -3343,14 +3343,75 @@ input {
 
 .invitation-whatsapp-form {
   display: grid;
-  grid-column: 1 / -1;
   gap: 12px;
   padding: 18px;
   border: 1px solid rgba(32, 53, 46, 0.12);
   background: #fbfaf7;
 }
 
-.invitation-whatsapp-form h4 {
+.invitation-share-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 24px;
+  background: rgba(19, 30, 25, 0.56);
+}
+
+.invitation-share-modal {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  width: min(100%, 680px);
+  max-height: min(90vh, 900px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(15, 25, 20, 0.25);
+}
+
+.invitation-share-modal > h3 {
+  margin: 0;
+  color: #29473a;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.35rem;
+}
+
+.invitation-share-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(32, 53, 46, 0.16);
+  border-radius: 50%;
+  background: #fff;
+  color: #29473a;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.invitation-share-modal .invitation-whatsapp-form {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.invitation-share-modal .personalized-invitation-share {
+  display: grid;
+  gap: 12px;
+}
+
+.invitation-share-modal .personalized-invitation-share > h3 {
+  margin: 0;
+  padding-right: 44px;
+}
+
+.invitation-whatsapp-form h3 {
   margin: 0;
   color: #29473a;
   font-family: 'Cormorant Garamond', Georgia, serif;
@@ -3379,6 +3440,27 @@ input {
   color: #263b31;
   font: inherit;
   resize: vertical;
+}
+
+.whatsapp-message-editor {
+  overflow: hidden;
+  border: 1px solid rgba(32, 53, 46, 0.16);
+  border-radius: 3px;
+  background: #fff;
+}
+
+.whatsapp-message-greeting {
+  padding: 10px 12px 0;
+  color: #263b31;
+  white-space: pre-wrap;
+}
+
+.invitation-whatsapp-form .whatsapp-message-editor textarea {
+  display: block;
+  min-height: 74px;
+  border: 0;
+  border-radius: 0;
+  padding-top: 0;
 }
 
 .invitation-whatsapp-form > div {
@@ -3478,6 +3560,10 @@ input {
   margin: 0;
 }
 
+.guestbook-checkin .guestbook-scan-result {
+  font-weight: 700;
+}
+
 .guestbook-checkin h3 {
   color: #29473a;
   font-family: 'Cormorant Garamond', Georgia, serif;
@@ -3570,6 +3656,12 @@ input {
   padding: 12px;
   border: 1px solid rgba(32, 53, 46, 0.12);
   background: #fff;
+}
+
+.guest-ticket-qr svg {
+  display: block;
+  width: min(320px, calc(100vw - 112px));
+  height: auto;
 }
 
 .guest-ticket-checked {
@@ -5290,6 +5382,47 @@ input {
 .guestbook-summary span {
   margin-right: 18px;
   font-size: 0.75rem;
+}
+
+.invitation-recipient-roster {
+  display: grid;
+  gap: 8px;
+}
+
+.invitation-recipient-roster h3 {
+  margin: 0;
+  color: #294b3e;
+}
+
+.invitation-recipient-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  background: #fff;
+}
+
+.invitation-recipient-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.76rem;
+}
+
+.invitation-recipient-table th,
+.invitation-recipient-table td {
+  min-width: 120px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(32, 53, 46, 0.1);
+  vertical-align: top;
+}
+
+.invitation-recipient-table th {
+  background: #f6f6f1;
+  color: #40534a;
+  font-weight: 700;
+}
+
+.invitation-recipient-table tr:last-child td {
+  border-bottom: 0;
 }
 
 .owner-guestbook-list {

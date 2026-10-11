@@ -96,6 +96,7 @@ export const guestbookApi = {
     method: 'POST',
     body: JSON.stringify({ recipients }),
   }),
+  listTickets: (token, invitationId) => apiRequest(`/invitations/${invitationId}/tickets`, { token }),
   checkInTicket: (token, invitationId, ticketToken) => apiRequest(`/invitations/${invitationId}/check-in`, {
     token,
     method: 'POST',

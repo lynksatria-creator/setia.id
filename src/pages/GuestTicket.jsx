@@ -27,7 +27,7 @@ export default function GuestTicket({ ticketToken }) {
         <p className="guest-ticket-recipient">Untuk <strong>{ticket.name}</strong></p>
         {ticket.event_date ? <p>{new Date(`${ticket.event_date}T00:00:00`).toLocaleDateString('id-ID', { dateStyle: 'full' })}{ticket.event_time ? ` · ${ticket.event_time}` : ''}</p> : null}
         {ticket.venue ? <p>{ticket.venue}</p> : null}
-        <div className="guest-ticket-qr"><QRCodeSVG value={ticketUrl} size={240} level="H" includeMargin /></div>
+        <div className="guest-ticket-qr"><QRCodeSVG value={ticketUrl} size={320} level="M" includeMargin /></div>
         {ticket.checked_in_at
           ? <p className="guest-ticket-checked" role="status">Tiket ini sudah digunakan untuk check-in.</p>
           : <p>Tunjukkan barcode unik ini kepada panitia saat tiba.</p>}

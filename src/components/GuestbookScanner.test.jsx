@@ -4,6 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import GuestbookScanner from './GuestbookScanner';
 
 const scannerMocks = vi.hoisted(() => ({
+  readerOptions: null,
   decodeFromConstraints: vi.fn(),
   onDecode: null,
   controls: { stop: vi.fn() },
@@ -11,10 +12,18 @@ const scannerMocks = vi.hoisted(() => ({
 
 vi.mock('@zxing/browser', () => ({
   BrowserQRCodeReader: class {
+    constructor(hints, options) {
+      scannerMocks.readerOptions = { hints, options };
+    }
+
     decodeFromConstraints(...args) {
       return scannerMocks.decodeFromConstraints(...args);
     }
   },
+}));
+
+vi.mock('@zxing/library', () => ({
+  DecodeHintType: { TRY_HARDER: 'try-harder' },
 }));
 
 const setMediaDevices = (mediaDevices) => {
@@ -22,6 +31,7 @@ const setMediaDevices = (mediaDevices) => {
 };
 
 beforeEach(() => {
+  scannerMocks.readerOptions = null;
   scannerMocks.decodeFromConstraints.mockReset();
   scannerMocks.controls.stop.mockReset();
   scannerMocks.decodeFromConstraints.mockImplementation(async (_constraints, _video, callback) => {
@@ -49,13 +59,15 @@ test('starts the rear-facing camera with higher resolution and forwards a decode
       audio: false,
       video: {
         facingMode: { ideal: 'environment' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
       },
     },
     expect.any(HTMLVideoElement),
     expect.any(Function),
   );
+  expect(scannerMocks.readerOptions.hints.get('try-harder')).toBe(true);
+  expect(scannerMocks.readerOptions.options.delayBetweenScanAttempts).toBe(150);
   expect(await screen.findByText(/kamera aktif/i)).toBeDefined();
   fireEvent.change(screen.getByLabelText('Pilih kamera'), { target: { value: 'front-camera' } });
   await waitFor(() => expect(scannerMocks.decodeFromConstraints).toHaveBeenCalledTimes(2));

@@ -49,12 +49,18 @@ export default function GuestbookScanner({ onScan, autoStart = false }) {
     setIsScanning(true);
     setIsCameraReady(false);
     try {
-      const { BrowserQRCodeReader } = await import('@zxing/browser');
-      const reader = new BrowserQRCodeReader();
+      const [{ BrowserQRCodeReader }, { DecodeHintType }] = await Promise.all([
+        import('@zxing/browser'),
+        import('@zxing/library'),
+      ]);
+      const reader = new BrowserQRCodeReader(
+        new Map([[DecodeHintType.TRY_HARDER, true]]),
+        { delayBetweenScanAttempts: 150, delayBetweenScanSuccess: 250 },
+      );
       let controls;
       const video = cameraId
-        ? { deviceId: { exact: cameraId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
+        ? { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        : { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } };
       controls = await reader.decodeFromConstraints({ audio: false, video }, videoRef.current, (result, decodeError) => {
         if (!result) {
           if (decodeError && Date.now() - lastDecodedAtRef.current > 1200) {
