@@ -15,7 +15,7 @@ export async function apiRequest(path, { token, ...options } = {}) {
     });
   } catch (error) {
     if (error instanceof TypeError) {
-      throw new Error('Tidak dapat terhubung ke API Undangan.id. Pastikan backend berjalan di port 8000 dan MongoDB tersedia.');
+      throw new Error('Tidak dapat terhubung ke API Nuansa Invite. Pastikan backend berjalan di port 8000 dan MongoDB tersedia.');
     }
     throw error;
   }
@@ -25,14 +25,14 @@ export async function apiRequest(path, { token, ...options } = {}) {
     try {
       payload = await response.json();
     } catch {
-      if (response.ok) throw new Error('API Undangan.id mengirim respons JSON yang tidak valid.');
+      if (response.ok) throw new Error('API Nuansa Invite mengirim respons JSON yang tidak valid.');
     }
   }
 
   if (!response.ok) {
     if (typeof payload?.detail === 'string' && payload.detail) throw new Error(payload.detail);
     if (response.status >= 500) {
-      throw new Error(`API Undangan.id mengalami gangguan (HTTP ${response.status}). Pastikan backend dan MongoDB aktif.`);
+      throw new Error(`API Nuansa Invite mengalami gangguan (HTTP ${response.status}). Pastikan backend dan MongoDB aktif.`);
     }
     throw new Error(`Permintaan tidak dapat diproses (HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}).`);
   }
@@ -54,6 +54,17 @@ export const advertisementsApi = {
   listPublic: () => apiRequest('/public/advertisements'),
 };
 
+export const testimonialsApi = {
+  listPublic: (site) => apiRequest(`/public/testimonials/${encodeURIComponent(site)}`),
+  createPublic: (data) => apiRequest('/public/testimonials', { method: 'POST', body: JSON.stringify(data) }),
+  listAdmin: (token, site) => apiRequest(`/admin/testimonials${site ? `?site=${encodeURIComponent(site)}` : ''}`, { token }),
+  moderate: (token, id, status) => apiRequest(`/admin/testimonials/${encodeURIComponent(id)}`, {
+    token,
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  }),
+};
+
 export const invitationsApi = {
   list: (token) => apiRequest('/invitations', { token }),
   create: (token, data) => apiRequest('/invitations', { token, method: 'POST', body: JSON.stringify(data) }),
@@ -69,6 +80,11 @@ export const dashboardManagementApi = {
   selectAffiliateCombination: (token, combinationId) => apiRequest('/affiliate-program', { token, method: 'PUT', body: JSON.stringify({ combination_id: combinationId }) }),
   createAffiliate: (token, data) => apiRequest('/affiliates', { token, method: 'POST', body: JSON.stringify(data) }),
   updateAffiliate: (token, id, data) => apiRequest(`/affiliates/${id}`, { token, method: 'PATCH', body: JSON.stringify(data) }),
+};
+
+export const resellerApi = {
+  dashboard: (token) => apiRequest('/reseller/dashboard', { token }),
+  createOrder: (token, data) => apiRequest('/reseller/orders', { token, method: 'POST', body: JSON.stringify(data) }),
 };
 
 export const guestbookApi = {
@@ -112,6 +128,14 @@ export const adminApi = {
   createDemoAccount: (token, data) => apiRequest('/admin/demo-accounts', { token, method: 'POST', body: JSON.stringify(data) }),
   affiliateAccounts: (token) => apiRequest('/admin/affiliate-accounts', { token }),
   updateAffiliateAccount: (token, id, data) => apiRequest(`/admin/affiliate-accounts/${id}`, { token, method: 'PATCH', body: JSON.stringify(data) }),
+  resellerOrders: (token) => apiRequest('/admin/reseller/orders', { token }),
+  resellerCommissions: (token) => apiRequest('/admin/reseller/commissions', { token }),
+  payResellerCommission: (token, id, payoutReference) => apiRequest(`/admin/reseller/commissions/${id}/payout`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ payout_reference: payoutReference }),
+  }),
+  auditLogs: (token) => apiRequest('/admin/audit-logs', { token }),
   invitations: (token) => apiRequest('/admin/invitations', { token }),
   updateInvitation: (token, id, data) => apiRequest(`/admin/invitations/${id}`, { token, method: 'PATCH', body: JSON.stringify(data) }),
   updateActivation: (token, id, data) => apiRequest(`/admin/invitations/${id}/activation`, { token, method: 'PATCH', body: JSON.stringify(data) }),

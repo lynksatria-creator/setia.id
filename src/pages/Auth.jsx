@@ -28,10 +28,10 @@ export default function Auth({ onBack, onSuccess }) {
 
   return (
     <main className="auth-page">
-      <button className="auth-back-link" onClick={onBack}>← Kembali ke Undangan.id</button>
+      <button className="auth-back-link" onClick={onBack}>← Kembali ke Nuansa Invite</button>
       <section className="auth-page-panel">
         <div className="auth-page-art">
-          <span>UNDANGAN.ID</span>
+          <span>NUANSA INVITE</span>
           <p>Rancang momen.<br />Bagikan ceritanya.</p>
         </div>
         <div className="auth-page-form-wrap">

@@ -18,6 +18,9 @@ export default function AdminBilling({ onLogout }) {
   const [payments, setPayments] = useState([]);
   const [demoAccounts, setDemoAccounts] = useState([]);
   const [affiliateAccounts, setAffiliateAccounts] = useState([]);
+  const [resellerOrders, setResellerOrders] = useState([]);
+  const [resellerCommissions, setResellerCommissions] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
   const [createdDemoCredentials, setCreatedDemoCredentials] = useState(null);
   const [demoForm, setDemoForm] = useState({
     full_name: '',
@@ -40,18 +43,24 @@ export default function AdminBilling({ onLogout }) {
     setIsLoading(true);
     setError('');
     try {
-      const [nextConfig, nextInvitations, nextPayments, nextDemoAccounts, nextAffiliateAccounts] = await Promise.all([
+      const [nextConfig, nextInvitations, nextPayments, nextDemoAccounts, nextAffiliateAccounts, nextResellerOrders, nextResellerCommissions, nextAuditLogs] = await Promise.all([
         adminApi.billingConfig(authToken),
         adminApi.invitations(authToken),
         adminApi.payments(authToken),
         adminApi.demoAccounts(authToken),
         adminApi.affiliateAccounts(authToken),
+        adminApi.resellerOrders(authToken),
+        adminApi.resellerCommissions(authToken),
+        adminApi.auditLogs(authToken),
       ]);
       setConfig(nextConfig);
       setInvitations(nextInvitations);
       setPayments(nextPayments);
       setDemoAccounts(nextDemoAccounts);
       setAffiliateAccounts(nextAffiliateAccounts);
+      setResellerOrders(Array.isArray(nextResellerOrders) ? nextResellerOrders : []);
+      setResellerCommissions(Array.isArray(nextResellerCommissions) ? nextResellerCommissions : []);
+      setAuditLogs(Array.isArray(nextAuditLogs) ? nextAuditLogs : []);
       setDemoForm((current) => ({
         ...current,
         combination_id: current.combination_id || nextConfig.affiliate_combinations?.[0]?.id || '',
@@ -152,7 +161,7 @@ export default function AdminBilling({ onLogout }) {
         affiliate_combinations: config.affiliate_combinations,
       });
       setConfig(saved);
-      setMessage('Paket, metode pembayaran, batas admin dashboard, dan kuota affiliate tersimpan.');
+      setMessage('Paket, hak upload massal, reseller, metode pembayaran, dan batas admin tersimpan. Perubahan paket berlaku untuk pembayaran baru.');
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -167,7 +176,7 @@ export default function AdminBilling({ onLogout }) {
         ...demoForm,
         duration_days: Number(demoForm.duration_days),
         duration_hours: Number(demoForm.duration_hours),
-        combination_id: demoForm.plan_id === 'business' ? demoForm.combination_id : null,
+        combination_id: config.plans.find((plan) => plan.id === demoForm.plan_id)?.reseller_enabled ? demoForm.combination_id : null,
       });
       setDemoAccounts((current) => [account, ...current]);
       setCreatedDemoCredentials({ email: account.email, password: demoForm.password });
@@ -238,12 +247,25 @@ export default function AdminBilling({ onLogout }) {
     }
   };
 
+  const payResellerCommission = async (commission) => {
+    const payoutReference = window.prompt(`Masukkan referensi pembayaran komisi untuk ${commission.reseller_name} (${commission.order_id}).`);
+    if (!payoutReference?.trim()) return;
+    setError('');
+    try {
+      await adminApi.payResellerCommission(token, commission.id, payoutReference.trim());
+      await loadDashboard(token);
+      setMessage(`Komisi ${commission.order_id} ditandai dibayar dengan referensi ${payoutReference.trim()}.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
   if (!token) {
     return (
       <main className="billing-admin-login">
         <a className="brand" href="/setia-creative-admin"><span className="logo-mark">S</span>Super Admin</a>
         <form className="billing-admin-login-card" onSubmit={handleLogin}>
-          <p className="eyebrow">Panel khusus</p><h1>Admin Undangan.id</h1>
+          <p className="eyebrow">Panel khusus</p><h1>Admin Nuansa Invite</h1>
           <p>Login menggunakan akun admin yang dikonfigurasi di backend.</p>
           <label>Email admin<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label>Kata sandi<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
@@ -256,12 +278,12 @@ export default function AdminBilling({ onLogout }) {
 
   return (
     <main className="billing-admin-shell">
-      <header className="billing-admin-header"><a className="brand" href="/setia-creative-admin"><span className="logo-mark">S</span>Super Admin <small>UNDANGAN.ID</small></a><div><span>{config?.gateway_ready ? 'Mayar siap' : 'Mayar belum dikonfigurasi'}</span><button onClick={() => loadDashboard(token)}>Muat ulang</button><a className="super-admin-home-link" href="/setia-creative-admin">Semua panel</a><button onClick={logout}>Keluar</button></div></header>
+      <header className="billing-admin-header"><a className="brand" href="/setia-creative-admin"><span className="logo-mark">S</span>Super Admin <small>NUANSA INVITE</small></a><div><span>{config?.gateway_ready ? 'Mayar siap' : 'Mayar belum dikonfigurasi'}</span><button onClick={() => loadDashboard(token)}>Muat ulang</button><a className="super-admin-home-link" href="/setia-creative-admin">Semua panel</a><button onClick={logout}>Keluar</button></div></header>
       <SuperAdminNav />
       <div className="billing-admin-layout">
-        <aside className="billing-admin-sidebar"><p className="eyebrow">Pengelolaan</p><button className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Paket & pembayaran</button><button className={activeTab === 'demo-accounts' ? 'active' : ''} onClick={() => setActiveTab('demo-accounts')}>Akun demo <span>{demoAccounts.length}</span></button><button className={activeTab === 'payments' ? 'active' : ''} onClick={() => setActiveTab('payments')}>Verifikasi pembayaran <span>{payments.filter((payment) => payment.status === 'pending' && payment.provider === 'manual').length}</span></button><button className={activeTab === 'invitations' ? 'active' : ''} onClick={() => setActiveTab('invitations')}>Undangan aktif <span>{invitations.length}</span></button><button className={activeTab === 'affiliates' ? 'active' : ''} onClick={() => setActiveTab('affiliates')}>Affiliate & iklan <span>{affiliateAccounts.length}</span></button></aside>
+        <aside className="billing-admin-sidebar"><p className="eyebrow">Pengelolaan</p><button className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Paket & pembayaran</button><button className={activeTab === 'demo-accounts' ? 'active' : ''} onClick={() => setActiveTab('demo-accounts')}>Akun demo <span>{demoAccounts.length}</span></button><button className={activeTab === 'payments' ? 'active' : ''} onClick={() => setActiveTab('payments')}>Verifikasi pembayaran <span>{payments.filter((payment) => payment.status === 'pending' && payment.provider === 'manual').length}</span></button><button className={activeTab === 'invitations' ? 'active' : ''} onClick={() => setActiveTab('invitations')}>Undangan aktif <span>{invitations.length}</span></button><button className={activeTab === 'affiliates' ? 'active' : ''} onClick={() => setActiveTab('affiliates')}>Reseller & iklan <span>{affiliateAccounts.length}</span></button><button className={activeTab === 'reseller-sales' ? 'active' : ''} onClick={() => setActiveTab('reseller-sales')}>Penjualan & komisi <span>{resellerCommissions.filter((item) => item.status === 'payable').length}</span></button><button className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>Audit log <span>{auditLogs.length}</span></button></aside>
         <section className="billing-admin-content">
-          <div className="billing-admin-title"><div><p className="eyebrow">Admin workspace</p><h1>{activeTab === 'billing' ? 'Paket & metode pembayaran' : activeTab === 'demo-accounts' ? 'Akun demo' : activeTab === 'payments' ? 'Verifikasi pembayaran' : activeTab === 'affiliates' ? 'Affiliate & iklan' : 'Undangan pengguna'}</h1></div></div>
+          <div className="billing-admin-title"><div><p className="eyebrow">Admin workspace</p><h1>{activeTab === 'billing' ? 'Paket & metode pembayaran' : activeTab === 'demo-accounts' ? 'Akun demo' : activeTab === 'payments' ? 'Verifikasi pembayaran' : activeTab === 'affiliates' ? 'Reseller & iklan' : activeTab === 'reseller-sales' ? 'Penjualan & komisi reseller' : activeTab === 'audit' ? 'Audit log aktivitas' : 'Undangan pengguna'}</h1></div></div>
           {message ? <p className="account-message" role="status">{message}</p> : null}
           {error ? <p className="form-error account-error" role="alert">{error}</p> : null}
           {isLoading && !config ? <p>Memuat data admin…</p> : null}
@@ -271,16 +293,25 @@ export default function AdminBilling({ onLogout }) {
               <section className="account-panel admin-config-panel"><div className="account-panel-heading"><div><span className="eyebrow">Hak akses dan waktu tayang</span><h2>Konfigurasi paket</h2></div><span className="gateway-state">{config.gateway_ready ? 'API Key Mayar tersedia' : 'Konfigurasikan API Key Mayar di backend/.env'}</span></div>
                 <div className="billing-plan-list">{config.plans.map((plan) => <article className="billing-plan-editor" key={plan.id}>
                   <div className="billing-plan-heading"><strong>{plan.name}</strong><label className="toggle-label"><input type="checkbox" checked={plan.enabled} onChange={(event) => updatePlan(plan.id, 'enabled', event.target.checked)} />Aktif</label></div>
-                  <div className="billing-plan-fields"><label>Nama<input value={plan.name} onChange={(event) => updatePlan(plan.id, 'name', event.target.value)} /></label><label>Harga (Rp)<input type="number" min="1" value={plan.price} onChange={(event) => updatePlan(plan.id, 'price', Number(event.target.value))} /></label><label>Masa aktif (hari)<input type="number" min="1" max="3650" value={plan.duration_days} onChange={(event) => updatePlan(plan.id, 'duration_days', Number(event.target.value))} /></label><label>Maks. undangan<input type="number" min="1" max="1000" value={plan.max_invitations || 1} onChange={(event) => updatePlan(plan.id, 'max_invitations', Number(event.target.value))} /></label><label>Jenis link<input readOnly value={plan.id === 'basic' ? 'Otomatis' : 'Otomatis + dapat diedit'} /></label></div>
+                  <div className="billing-plan-fields"><label>Nama<input value={plan.name} onChange={(event) => updatePlan(plan.id, 'name', event.target.value)} /></label><label>Harga (Rp)<input type="number" min="1" value={plan.price} onChange={(event) => updatePlan(plan.id, 'price', Number(event.target.value))} /></label><label>Masa aktif (hari)<input type="number" min="1" max="3650" value={plan.duration_days} onChange={(event) => updatePlan(plan.id, 'duration_days', Number(event.target.value))} /></label><label>Maks. undangan aktif bersamaan<input type="number" min="1" max="1000" value={plan.max_invitations || 1} onChange={(event) => updatePlan(plan.id, 'max_invitations', Number(event.target.value))} /></label><label>Jenis link<input readOnly value={plan.id === 'basic' ? 'Otomatis' : 'Otomatis + dapat diedit'} /></label></div>
+                  <div className="billing-plan-fields">
+                    <label className="toggle-label"><input type="checkbox" checked={Boolean(plan.bulk_upload_enabled)} onChange={(event) => updatePlan(plan.id, 'bulk_upload_enabled', event.target.checked)} />Izinkan bulk upload tamu</label>
+                    <label>Maks. penerima per bulk upload<input type="number" min="1" max="1000" value={plan.max_recipients || 1} onChange={(event) => updatePlan(plan.id, 'max_recipients', Number(event.target.value))} disabled={!plan.bulk_upload_enabled} /></label>
+                    <label className="toggle-label"><input type="checkbox" checked={Boolean(plan.reseller_enabled)} onChange={(event) => updatePlan(plan.id, 'reseller_enabled', event.target.checked)} />Izinkan fitur reseller</label>
+                    <label>Maks. akun reseller<input type="number" min="0" max="1000" value={plan.max_resellers || 0} onChange={(event) => updatePlan(plan.id, 'max_resellers', Number(event.target.value))} disabled={!plan.reseller_enabled} /></label>
+                    <label>Maks. pelanggan per reseller<input type="number" min="0" max="10000" value={plan.max_reseller_customers || 0} onChange={(event) => updatePlan(plan.id, 'max_reseller_customers', Number(event.target.value))} disabled={!plan.reseller_enabled} /></label>
+                    <label>Markup jual maksimum (%)<input type="number" min="0" max="500" value={plan.reseller_max_markup_percent || 0} onChange={(event) => updatePlan(plan.id, 'reseller_max_markup_percent', Number(event.target.value))} disabled={!plan.reseller_enabled} /></label>
+                    <label>Komisi dari harga dasar (%)<input type="number" min="0" max="100" value={plan.reseller_commission_percent || 0} onChange={(event) => updatePlan(plan.id, 'reseller_commission_percent', Number(event.target.value))} disabled={!plan.reseller_enabled} /></label>
+                  </div>
                   <label>Fitur paket, satu baris per fitur<textarea rows={3} value={(plan.features || []).join('\n')} onChange={(event) => updatePlan(plan.id, 'features', event.target.value.split('\n').map((item) => item.trim()).filter(Boolean))} /></label>
                 </article>)}</div>
               </section>
               <section className="account-panel admin-config-panel">
-                <div className="account-panel-heading"><div><span className="eyebrow">Akses pemilik & reseller</span><h2>Admin dashboard dan kombinasi affiliate Business</h2></div></div>
+                <div className="account-panel-heading"><div><span className="eyebrow">Akses pemilik & reseller</span><h2>Admin dashboard dan kombinasi kuota reseller</h2></div></div>
                 <label className="billing-policy-limit">Maksimal admin dashboard tambahan per pemilik (maksimum 3)
                   <input type="number" min="0" max="3" value={config.dashboard_admin_limit ?? 3} onChange={(event) => setConfig((current) => ({ ...current, dashboard_admin_limit: Number(event.target.value) }))} />
                 </label>
-                <p className="form-hint">Atur pilihan kombinasi untuk pemilik Business dan akun demo. Setelah pemilik mengonfirmasi satu pilihan, paket tersebut dikunci permanen dan tidak dapat diganti.</p>
+                <p className="form-hint">Atur batas reseller/pelanggan, markup maksimum, dan persentase komisi di konfigurasi tiap paket. Komisi dibuat hanya setelah invoice tervalidasi Mayar; pembayaran komisi tetap dicatat manual oleh admin dengan referensi. Pilihan kombinasi kuota Basic/Premium dikunci setelah dikonfirmasi pemilik.</p>
                 <div className="affiliate-combination-list">
                   {(config.affiliate_combinations || []).map((combination) => (
                     <article className="affiliate-combination-editor" key={combination.id}>
@@ -322,7 +353,7 @@ export default function AdminBilling({ onLogout }) {
                   <label>Email login<input type="email" required value={demoForm.email} onChange={(event) => setDemoForm({ ...demoForm, email: event.target.value })} /></label>
                   <label>Kata sandi awal<input type="password" minLength={8} required value={demoForm.password} onChange={(event) => setDemoForm({ ...demoForm, password: event.target.value })} /></label>
                   <label>Paket demo<select required value={demoForm.plan_id} onChange={(event) => setDemoForm({ ...demoForm, plan_id: event.target.value })}>{config.plans.filter((plan) => plan.enabled).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.duration_days} hari masa paket normal</option>)}</select></label>
-                  {demoForm.plan_id === 'business' ? <label>Kombinasi kuota affiliate<select required value={demoForm.combination_id} onChange={(event) => setDemoForm({ ...demoForm, combination_id: event.target.value })}><option value="">Pilih kombinasi</option>{config.affiliate_combinations.map((combination) => <option key={combination.id} value={combination.id}>{combination.name} · {combination.basic} Basic / {combination.premium} Premium</option>)}</select></label> : null}
+                  {config.plans.find((plan) => plan.id === demoForm.plan_id)?.reseller_enabled ? <label>Kombinasi kuota reseller<select required value={demoForm.combination_id} onChange={(event) => setDemoForm({ ...demoForm, combination_id: event.target.value })}><option value="">Pilih kombinasi</option>{config.affiliate_combinations.map((combination) => <option key={combination.id} value={combination.id}>{combination.name} · {combination.basic} Basic / {combination.premium} Premium</option>)}</select></label> : null}
                   <label>Lama demo (hari)<input type="number" min="0" max="3650" value={demoForm.duration_days} onChange={(event) => setDemoForm({ ...demoForm, duration_days: Number(event.target.value) })} /></label>
                   <label>Lama demo (jam)<input type="number" min="0" max="23" value={demoForm.duration_hours} onChange={(event) => setDemoForm({ ...demoForm, duration_hours: Number(event.target.value) })} /></label>
                   <button className="primary-btn">Buat akun demo</button>
@@ -338,7 +369,23 @@ export default function AdminBilling({ onLogout }) {
 
           {activeTab === 'payments' ? <section className="account-panel"><div className="account-panel-heading"><div><span className="eyebrow">Manual settlement</span><h2>Transfer menunggu verifikasi</h2></div></div><div className="admin-record-list">{payments.filter((payment) => payment.provider === 'manual' && payment.status === 'pending').map((payment) => <article className="admin-record" key={payment.id}><div><strong>{payment.order_id}</strong><p>Nominal Rp {Number(payment.amount).toLocaleString('id-ID')} · {payment.payment_method}</p><p>Referensi: {payment.transfer_reference || 'Belum dikirim'}</p><small>Invitation {payment.invitation_id}</small></div><button className="primary-btn" disabled={!payment.transfer_reference} onClick={() => approvePayment(payment)}>Setujui & aktifkan</button></article>)}{!payments.some((payment) => payment.provider === 'manual' && payment.status === 'pending') ? <p className="form-hint">Tidak ada transfer yang menunggu verifikasi.</p> : null}</div></section> : null}
 
-          {activeTab === 'affiliates' ? <section className="account-panel"><div className="account-panel-heading"><div><span className="eyebrow">Pemantauan dan moderasi</span><h2>Riwayat affiliate & iklan publik</h2></div><strong>{affiliateAccounts.length}</strong></div><p className="form-hint">Akun affiliate tetap dikelola pemilik undangan. Dari sini Super Admin dapat meninjau riwayat, mengatur iklan, dan menonaktifkan akun yang melanggar ketentuan. Menonaktifkan akun tidak menghapus undangan atau atribusi penjualan.</p><div className="admin-record-list">{affiliateAccounts.map((affiliate) => <article className="admin-record admin-affiliate-record" key={affiliate.id}><div><strong>{affiliate.full_name}</strong><p>{affiliate.email} · Pemilik: {affiliate.owner_name} ({affiliate.owner_email || 'email tidak tersedia'})</p><p>{affiliate.invitation_count} undangan · {affiliate.basic_used}/{affiliate.basic_quota} Basic · {affiliate.premium_used}/{affiliate.premium_quota} Premium</p><small>Dibuat {affiliate.created_at ? new Date(affiliate.created_at).toLocaleString('id-ID') : 'tanggal tidak tersedia'}</small></div><div className="admin-invitation-editor affiliate-ad-editor"><label>Judul iklan<input value={affiliate.ad_title || ''} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_title: event.target.value } : item))} /></label><label>Deskripsi iklan<textarea rows={2} value={affiliate.ad_description || ''} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_description: event.target.value } : item))} /></label><label>Link tujuan<input type="url" value={affiliate.ad_url || ''} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_url: event.target.value } : item))} placeholder="https://..." /></label><label>URL gambar<input type="url" value={affiliate.ad_image || ''} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_image: event.target.value } : item))} placeholder="https://..." /></label><label className="toggle-label"><input type="checkbox" checked={affiliate.ad_active} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_active: event.target.checked } : item))} />Tayangkan iklan</label><button className="primary-btn" onClick={() => updateAffiliateAccount(affiliate, { ad_title: affiliate.ad_title || '', ad_description: affiliate.ad_description || '', ad_url: affiliate.ad_url || '', ad_image: affiliate.ad_image || '', ad_active: affiliate.ad_active })}>Simpan iklan</button></div><span className={`status-label ${affiliate.active ? 'status-active' : 'status-expired'}`}>{affiliate.active ? 'Aktif' : 'Nonaktif'}</span><button className="secondary-btn" onClick={() => updateAffiliateAccount(affiliate, { active: !affiliate.active })}>{affiliate.active ? 'Nonaktifkan' : 'Aktifkan kembali'}</button></article>)}{!affiliateAccounts.length ? <p className="form-hint">Belum ada akun affiliate.</p> : null}</div></section> : null}
+          {activeTab === 'affiliates' ? <section className="account-panel"><div className="account-panel-heading"><div><span className="eyebrow">Pemantauan dan moderasi</span><h2>Riwayat reseller & iklan publik</h2></div><strong>{affiliateAccounts.length}</strong></div><p className="form-hint">Tinjau riwayat kuota reseller, iklan publik, serta status akun. Penonaktifan akun tidak menghapus undangan, pelanggan, atau transaksi.</p><div className="admin-record-list">{affiliateAccounts.map((affiliate) => <article className="admin-record admin-affiliate-record" key={affiliate.id}><div><strong>{affiliate.full_name}</strong><p>{affiliate.email} · Pemilik: {affiliate.owner_name} ({affiliate.owner_email || 'email tidak tersedia'})</p><p>{affiliate.invitation_count} undangan · {affiliate.basic_used}/{affiliate.basic_quota} Basic · {affiliate.premium_used}/{affiliate.premium_quota} Premium</p><small>Dibuat {affiliate.created_at ? new Date(affiliate.created_at).toLocaleString('id-ID') : 'tanggal tidak tersedia'}</small></div><div className="admin-invitation-editor affiliate-ad-editor"><label>Judul iklan<input value={affiliate.ad_title || ''} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_title: event.target.value } : item))} /></label><label>Deskripsi iklan<textarea rows={2} value={affiliate.ad_description || ''} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_description: event.target.value } : item))} /></label><label>Link tujuan<input type="url" value={affiliate.ad_url || ''} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_url: event.target.value } : item))} placeholder="https://..." /></label><label>URL gambar<input type="url" value={affiliate.ad_image || ''} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_image: event.target.value } : item))} placeholder="https://..." /></label><label className="toggle-label"><input type="checkbox" checked={affiliate.ad_active} onChange={(event) => setAffiliateAccounts((current) => current.map((item) => item.id === affiliate.id ? { ...item, ad_active: event.target.checked } : item))} />Tayangkan iklan</label><button className="primary-btn" onClick={() => updateAffiliateAccount(affiliate, { ad_title: affiliate.ad_title || '', ad_description: affiliate.ad_description || '', ad_url: affiliate.ad_url || '', ad_image: affiliate.ad_image || '', ad_active: affiliate.ad_active })}>Simpan iklan</button></div><span className={`status-label ${affiliate.active ? 'status-active' : 'status-expired'}`}>{affiliate.active ? 'Aktif' : 'Nonaktif'}</span><button className="secondary-btn" onClick={() => updateAffiliateAccount(affiliate, { active: !affiliate.active })}>{affiliate.active ? 'Nonaktifkan' : 'Aktifkan kembali'}</button></article>)}{!affiliateAccounts.length ? <p className="form-hint">Belum ada akun reseller.</p> : null}</div></section> : null}
+
+          {activeTab === 'reseller-sales' ? (
+            <>
+              <section className="account-panel">
+                <div className="account-panel-heading"><div><span className="eyebrow">Pesanan</span><h2>Transaksi reseller</h2></div><strong>{resellerOrders.length}</strong></div>
+                <div className="admin-record-list">{resellerOrders.map((order) => <article className="admin-record" key={order.id}><div><strong>{order.order_id} · {order.customer_name}</strong><p>{order.plan_name} · Harga dasar Rp {Number(order.base_price).toLocaleString('id-ID')} · Harga jual Rp {Number(order.selling_price).toLocaleString('id-ID')}</p><p>Reseller {affiliateAccounts.find((affiliate) => affiliate.id === order.reseller_id)?.full_name || order.reseller_id}</p><small>{order.status} · {new Date(order.created_at).toLocaleString('id-ID')}</small></div><span className={`status-label ${order.status === 'paid' ? 'status-active' : 'status-pending'}`}>{order.status}</span></article>)}{!resellerOrders.length ? <p className="form-hint">Belum ada penjualan reseller.</p> : null}</div>
+              </section>
+              <section className="account-panel">
+                <div className="account-panel-heading"><div><span className="eyebrow">Penyelesaian komisi</span><h2>Komisi reseller</h2></div><strong>{resellerCommissions.filter((commission) => commission.status === 'payable').length} menunggu</strong></div>
+                <p className="form-hint">Komisi hanya timbul setelah pembayaran tervalidasi melalui Mayar. Tandai dibayar setelah transfer aktual dilakukan dan masukkan referensi pembayaran.</p>
+                <div className="admin-record-list">{resellerCommissions.map((commission) => <article className="admin-record" key={commission.id}><div><strong>{commission.reseller_name} · {commission.order_id}</strong><p>Pelanggan {commission.customer_name} · Harga dasar Rp {Number(commission.base_amount).toLocaleString('id-ID')} · Harga jual Rp {Number(commission.selling_amount).toLocaleString('id-ID')}</p><p>Komisi {commission.commission_percent}% · Rp {Number(commission.amount).toLocaleString('id-ID')}</p><small>{commission.status === 'paid' ? `Referensi: ${commission.payout_reference || '-'} · ${commission.paid_at ? new Date(commission.paid_at).toLocaleString('id-ID') : ''}` : 'Siap dibayar'}</small></div>{commission.status === 'payable' ? <button className="primary-btn" onClick={() => payResellerCommission(commission)}>Catat pembayaran komisi</button> : <span className="status-label status-active">Dibayar</span>}</article>)}{!resellerCommissions.length ? <p className="form-hint">Belum ada komisi.</p> : null}</div>
+              </section>
+            </>
+          ) : null}
+
+          {activeTab === 'audit' ? <section className="account-panel"><div className="account-panel-heading"><div><span className="eyebrow">Jejak perubahan</span><h2>Aktivitas admin dan reseller</h2></div><strong>{auditLogs.length}</strong></div><div className="admin-record-list">{auditLogs.map((log) => <article className="admin-record" key={log.id}><div><strong>{log.action}</strong><p>{log.actor_role} · {log.actor_id} · {log.target_type} {log.target_id}</p><small>{new Date(log.created_at).toLocaleString('id-ID')} · {JSON.stringify(log.details || {})}</small></div></article>)}{!auditLogs.length ? <p className="form-hint">Belum ada catatan audit.</p> : null}</div></section> : null}
 
           {activeTab === 'invitations' ? <section className="account-panel"><div className="account-panel-heading"><div><span className="eyebrow">Konten pengguna</span><h2>Semua undangan dan status aktif</h2></div></div><div className="admin-invitation-layout"><div className="admin-record-list">{invitations.map((invitation) => <button className={`admin-invitation-select ${selectedInvitation?.id === invitation.id ? 'selected' : ''}`} key={invitation.id} onClick={() => reviewInvitation(invitation)}><strong>{invitation.title}</strong><span>{invitation.status} · {invitation.slug}</span><small>Aktif sampai {invitation.active_until ? new Date(invitation.active_until).toLocaleString('id-ID') : 'belum aktif'}</small></button>)}{!invitations.length ? <p className="form-hint">Belum ada undangan.</p> : null}</div>
               {selectedInvitation ? <div className="admin-invitation-editor"><label>Judul<input value={selectedInvitation.title} onChange={(event) => setSelectedInvitation({ ...selectedInvitation, title: event.target.value })} /></label><label>Link publik<input value={selectedInvitation.slug} onChange={(event) => setSelectedInvitation({ ...selectedInvitation, slug: event.target.value })} /></label><label>Status<select value={selectedInvitation.status} onChange={(event) => setSelectedInvitation({ ...selectedInvitation, status: event.target.value })}><option value="draft">Draft</option><option value="active">Aktif</option><option value="published">Published</option><option value="expired">Expired</option></select></label><label>Masa aktif sampai<input type="datetime-local" value={activeUntil} onChange={(event) => setActiveUntil(event.target.value)} /></label><label>Seluruh konten undangan (JSON)<textarea className="admin-content-json" value={contentText} onChange={(event) => setContentText(event.target.value)} rows={18} spellCheck="false" /></label><button className="primary-btn" onClick={saveInvitation}>Simpan edit dan status</button></div> : <p className="form-hint">Pilih undangan untuk mengedit semua konten, link, dan masa aktif.</p>}</div></section> : null}

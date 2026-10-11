@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { apiRequest, guestbookApi } from '../lib/api';
 import { getRegionalInvitationTemplate } from '../lib/regionalInvitationTemplates';
 
@@ -36,12 +37,12 @@ const videoEmbedUrl = (url) => {
   if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
   return url;
 };
-const isDirectVideoUrl = (url) => (
-  /^data:video\/(?:mp4|webm|ogg);base64,/i.test(url)
-  || /\.(mp4|webm|ogg|mov|m4v)(?:[?#].*)?$/i.test(url)
-);
-
-const isDirectVideoUrl = (url) => /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(url || '');
+const isDirectVideoUrl = (url) => {
+  if (!url) return false;
+  return /^data:video\/(?:mp4|webm|ogg);base64,/i.test(url)
+    || /\.(mp4|webm|ogg|mov|m4v)(?:[?#].*)?$/i.test(url)
+    || /^https?:\/\/.*\.(mp4|webm|ogg|mov|m4v)(?:[?#].*)?$/i.test(url);
+};
 
 const templateThemes = {
   'luxury-gold': { primary: '#4b3520', accent: '#b28745', background: '#fbf7ed', font: 'Cormorant Garamond, Georgia, serif', cover: 'linear-gradient(135deg, #241a13, #bb9453 48%, #594126)', ornament: '✦' },
@@ -88,6 +89,16 @@ const templateFrames = {
   'corporate-event': 'geometric', 'custom-premium': 'custom',
   'gen-z-editorial': 'genz',
 };
+const allowedFrameStyles = new Set([
+  'ornate-gold', 'black-corner', 'maroon', 'classic', 'ivory', 'rose', 'emerald', 'navy',
+  'botanical', 'floral', 'minimal', 'modern', 'islamic', 'traditional', 'playful', 'soft',
+  'celebration', 'academic', 'heart', 'geometric', 'custom', 'genz', 'regional',
+]);
+const allowedMotionPresets = new Set(['none', 'subtle', 'romantic', 'festive']);
+const clampPercent = (value, fallback, maximum = 100) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? Math.min(maximum, Math.max(0, numericValue)) : fallback;
+};
 
 const templateCopy = {
   'luxury-gold': { kicker: 'A Golden Beginning', greeting: 'Dengan penuh cinta dan kehangatan, kami mengundang Anda menyaksikan awal perjalanan indah kami.', quote: 'Cinta adalah perhiasan paling indah yang tumbuh dari dua hati yang saling memilih.', source: 'A Golden Beginning', storyTitle: 'The Golden Chapter', storyText: 'Sebuah kisah yang dirangkai dengan doa, kehangatan, dan janji untuk saling menjaga.', closing: 'May our love shine brighter with your blessing.' },
@@ -127,6 +138,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const [invitation, setInvitation] = useState(initialInvitation);
   const [error, setError] = useState('');
   const [inviteeName, setInviteeName] = useState('');
+  const [inviteeTicket, setInviteeTicket] = useState(null);
   const [inviteeLoading, setInviteeLoading] = useState(false);
   const [inviteeError, setInviteeError] = useState('');
   const [isOpened, setIsOpened] = useState(false);
@@ -155,6 +167,12 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   }, [initialInvitation, slug]);
 
   useEffect(() => {
+    if (!invitation) return undefined;
+    document.title = `${invitation.title || 'Undangan Digital'} | Nuansa Invite`;
+    return () => { document.title = 'Nuansa Invite | Undangan Digital'; };
+  }, [invitation]);
+
+  useEffect(() => {
     const musicUrl = invitation?.content?.music_url;
     if (!musicUrl || !musicRef.current) return undefined;
     let active = true;
@@ -175,6 +193,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   useEffect(() => {
     if (!ticketToken) {
       setInviteeName('');
+      setInviteeTicket(null);
       setInviteeError('');
       setInviteeLoading(false);
       return undefined;
@@ -183,10 +202,15 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     setInviteeLoading(true);
     setInviteeError('');
     guestbookApi.getTicket(ticketToken)
-      .then((ticket) => { if (active) setInviteeName(ticket.name); })
+      .then((ticket) => {
+        if (!active) return;
+        setInviteeName(ticket.name);
+        setInviteeTicket(ticket);
+      })
       .catch((requestError) => {
         if (!active) return;
         setInviteeName('');
+        setInviteeTicket(null);
         setInviteeError(requestError.message);
       })
       .finally(() => { if (active) setInviteeLoading(false); });
@@ -219,10 +243,13 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     return undefined;
   }, [initialInvitation, invitation]);
 
-  if (error) return <main className="public-invitation-state"><p className="eyebrow">Undangan tidak tersedia</p><h1>Link ini belum aktif atau sudah berakhir.</h1><a href="/undangan">Kunjungi Undangan.id</a></main>;
+  if (error) return <main className="public-invitation-state"><p className="eyebrow">Undangan tidak tersedia</p><h1>Link ini belum aktif atau sudah berakhir.</h1><a href="/undangan">Kunjungi Nuansa Invite</a></main>;
   if (!invitation) return <main className="public-invitation-state"><p>Memuat undangan…</p></main>;
 
   const content = invitation.content || {};
+  const guestTicketUrl = ticketToken && inviteeTicket
+    ? new URL(`/undangan-ticket/${encodeURIComponent(ticketToken)}`, window.location.origin).toString()
+    : '';
   const digitalEnvelope = content.digital_envelope || {};
   const hasDigitalEnvelope = Boolean(
     (digitalEnvelope.bank?.enabled && digitalEnvelope.bank.name && digitalEnvelope.bank.account_name && digitalEnvelope.bank.account_number)
@@ -298,7 +325,16 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     cover: `linear-gradient(135deg, ${regionTemplate.colors[0]}, ${regionTemplate.colors[0]} 48%, ${regionTemplate.colors[1]})`,
     ornament: regionTemplate.ornament,
   } : templateThemes['luxury-gold']);
-  const frameClass = content.custom_design ? 'custom' : regionTemplate ? 'regional' : templateFrames[templateClass] || 'classic';
+  const frameClass = allowedFrameStyles.has(content.frame_style)
+    ? content.frame_style
+    : content.custom_design ? 'custom' : regionTemplate ? 'regional' : templateFrames[templateClass] || 'classic';
+  const motionPreset = allowedMotionPresets.has(content.animation_preset) ? content.animation_preset : '';
+  const coverPositionX = clampPercent(content.cover_position_x, 50);
+  const coverPositionY = clampPercent(content.cover_position_y, 50);
+  const coverZoom = clampPercent(content.cover_zoom, 100, 160);
+  const galleryPositionX = clampPercent(content.gallery_position_x, 50);
+  const galleryPositionY = clampPercent(content.gallery_position_y, 50);
+  const galleryZoom = clampPercent(content.gallery_zoom, 100, 160);
   const coverVideo = content.video_url && isDirectVideoUrl(content.video_url) ? content.video_url : '';
   const customStyle = {
     '--public-primary': content.custom_design ? content.custom_primary || '#294b3e' : theme.primary,
@@ -363,9 +399,10 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   };
 
   return (
-    <main className={`public-invitation-page public-template-${templateClass} wedding-frame-${frameClass} ${isOpened ? 'is-opened' : ''}`} style={customStyle}>
-      <section className={`wedding-cover${coverVideo ? ' has-cover-video' : ''}`} style={content.cover_image && !coverVideo ? { backgroundImage: `linear-gradient(180deg, rgba(24, 22, 18, 0.08), rgba(24, 22, 18, 0.58)), url("${content.cover_image}")` } : undefined}>
-        {coverVideo ? <video className="wedding-cover-video" src={coverVideo} autoPlay={!prefersReducedMotion} muted loop playsInline aria-label="Video latar undangan" /> : null}
+    <main className={`public-invitation-page public-template-${templateClass} wedding-frame-${frameClass}${motionPreset ? ` wedding-motion-${motionPreset}` : ''} ${isOpened ? 'is-opened' : ''}`} style={customStyle}>
+      <section className={`wedding-cover${coverVideo ? ' has-cover-video' : ''}${content.cover_image && !coverVideo ? ' has-cover-image' : ''}`}>
+        {content.cover_image && !coverVideo ? <img className="wedding-cover-image" src={content.cover_image} alt="" aria-hidden="true" style={{ objectPosition: `${coverPositionX}% ${coverPositionY}%`, transform: `scale(${coverZoom / 100})`, transformOrigin: `${coverPositionX}% ${coverPositionY}%` }} /> : null}
+        {coverVideo ? <video className="wedding-cover-video" src={coverVideo} autoPlay={!prefersReducedMotion} muted loop playsInline aria-label="Video latar undangan" style={{ objectPosition: `${coverPositionX}% ${coverPositionY}%`, transform: `scale(${coverZoom / 100})`, transformOrigin: `${coverPositionX}% ${coverPositionY}%` }} /> : null}
         <div className="wedding-cover-shimmer" aria-hidden="true" />
         <div className="wedding-ornament wedding-ornament-top">{theme.ornament}</div>
         <div className="wedding-cover-inner">
@@ -389,7 +426,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
         {isCoupleEvent ? <section className="wedding-section wedding-quote"><p>“{copy.quote}”</p><strong>{copy.source}</strong></section> : null}
 
-        {isCoupleEvent ? coupleProfileItems.length ? <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid">{coupleProfileItems.map((person, index) => <div className="wedding-person" key={`${person.relationship}-${index}`}>{person.photo ? <img src={person.photo} alt={person.name || person.alt} /> : null}{person.name ? <h3>{person.name}</h3> : null}{person.parents ? <p>{person.relationship} dari<br />{person.parents}</p> : null}{person.instagram ? <a href={`https://instagram.com/${person.instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{person.instagram}</a> : null}</div>)}</div></section> : null : content.honoree_name || content.story ? <section className="wedding-section wedding-honoree"><p className="wedding-eyebrow">ACARA SPESIAL</p>{content.honoree_name ? <h2>{content.honoree_name}</h2> : null}{content.story ? <p>{content.story}</p> : null}</section> : null}
+        {isCoupleEvent ? coupleProfileItems.length ? <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid">{coupleProfileItems.map((person, index) => <div className="wedding-person" key={`${person.relationship}-${index}`}>{person.photo ? <img src={person.photo} alt={person.name || person.alt} style={{ objectPosition: `${galleryPositionX}% ${galleryPositionY}%`, transform: `scale(${galleryZoom / 100})` }} /> : null}{person.name ? <h3>{person.name}</h3> : null}{person.parents ? <p>{person.relationship} dari<br />{person.parents}</p> : null}{person.instagram ? <a href={`https://instagram.com/${person.instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{person.instagram}</a> : null}</div>)}</div></section> : null : content.honoree_name || content.story ? <section className="wedding-section wedding-honoree"><p className="wedding-eyebrow">ACARA SPESIAL</p>{content.honoree_name ? <h2>{content.honoree_name}</h2> : null}{content.story ? <p>{content.story}</p> : null}</section> : null}
 
         {content.event_date ? <section className="wedding-section wedding-countdown"><p className="wedding-eyebrow">{isCoupleEvent ? 'MENUJU HARI BAHAGIA' : 'MENUJU ACARA'}</p><h2>{isCoupleEvent ? 'Our special day' : 'Hitung mundur acara'}</h2><div className="countdown-grid">{Object.entries(countdown).map(([label, value]) => <div key={label}><strong>{String(value).padStart(2, '0')}</strong><span>{label}</span></div>)}</div><a className="wedding-calendar-button" href={calendarUrl(content, invitation)} target="_blank" rel="noreferrer">TAMBAHKAN KE KALENDER</a></section> : null}
 
@@ -403,9 +440,11 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
           {digitalEnvelope.qris?.enabled && digitalEnvelope.qris.image_url ? <article><h3>QRIS</h3><img src={digitalEnvelope.qris.image_url} alt="Kode QRIS untuk hadiah digital" loading="lazy" />{digitalEnvelope.qris.instructions ? <p>{digitalEnvelope.qris.instructions}</p> : null}</article> : null}
         </div></section> : null}
 
+        {guestTicketUrl ? <section className="wedding-section wedding-invite-qr"><p className="wedding-eyebrow">TIKET UNDANGAN PERSONAL</p><h2>QR kehadiran {inviteeName}</h2><p>Tunjukkan QR unik ini kepada panitia saat tiba di acara.</p><div className="wedding-invite-qr-code"><QRCodeSVG value={guestTicketUrl} size={192} level="H" includeMargin title={`QR kehadiran ${inviteeName}`} /></div><a className="wedding-calendar-button" href={guestTicketUrl}>BUKA TIKET QR</a></section> : null}
+
         {schedule.length ? <section className="wedding-section wedding-schedule"><p className="wedding-eyebrow">SUSUNAN ACARA</p><h2>Rangkaian momen</h2><div className="schedule-list">{schedule.map((item, index) => <div key={`${item.time || ''}-${item.title || index}`}>{item.time ? <strong>{item.time}</strong> : null}{item.title ? <span>{item.title}</span> : null}</div>)}</div></section> : null}
 
-        {gallery.length ? <section className="wedding-section wedding-gallery"><p className="wedding-eyebrow">MOMENTS</p><h2>Our beautiful moments</h2><div className="wedding-gallery-grid">{gallery.map((image, index) => <button key={`${image}-${index}`} onClick={() => setSelectedImage(image)}><img src={image} alt={`Momen acara ${index + 1}`} loading="lazy" /></button>)}</div></section> : null}
+        {gallery.length ? <section className="wedding-section wedding-gallery"><p className="wedding-eyebrow">MOMENTS</p><h2>Our beautiful moments</h2><div className="wedding-gallery-grid">{gallery.map((image, index) => <button key={`${image}-${index}`} onClick={() => setSelectedImage(image)}><img src={image} alt={`Momen acara ${index + 1}`} loading="lazy" style={{ objectPosition: `${galleryPositionX}% ${galleryPositionY}%`, '--wedding-gallery-zoom': galleryZoom / 100, '--wedding-gallery-hover-zoom': galleryZoom / 100 * 1.05 }} /></button>)}</div></section> : null}
 
         {content.video_url && !coverVideo ? <section className="wedding-section wedding-video"><p className="wedding-eyebrow">OUR BEAUTIFUL MOMENTS</p><h2>{isCoupleEvent ? 'Film kisah kami' : 'Video acara'}</h2>{isDirectVideoUrl(content.video_url) ? <video src={content.video_url} controls playsInline preload="metadata" /> : <iframe src={videoEmbedUrl(content.video_url)} title="Video undangan" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />}</section> : null}
 

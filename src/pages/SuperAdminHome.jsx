@@ -7,15 +7,15 @@ const adminPanels = [
   { title: 'Portal Admin', description: 'Kelola konten dan pengaturan website utama.', href: '/portal-admin' },
   { title: 'Gibrig Admin', description: 'Kelola konten Gibrig Entertainment.', href: '/gibrig-admin' },
   { title: 'Nunuy Wedding Admin', description: 'Kelola paket dan konten wedding.', href: '/nunuy-admin' },
-  { title: 'Undangan.id Website Admin', description: 'Kelola konten publik, tampilan, dan kontak website Undangan.id.', href: '/undangan-website-admin' },
-  { title: 'Undangan.id Admin', description: 'Kelola paket, pembayaran, dan undangan pengguna.', href: '/undangan-admin' },
+  { title: 'Nuansa Invite Website Admin', description: 'Kelola konten publik, tampilan, dan kontak website Nuansa Invite.', href: '/undangan-website-admin' },
+  { title: 'Nuansa Invite Admin', description: 'Kelola paket, pembayaran, dan undangan pengguna.', href: '/undangan-admin' },
 ];
 
 const websites = [
   { title: 'Portal utama', href: '/' },
   { title: 'Gibrig Entertainment', href: '/gibrig' },
   { title: 'Nunuy Nadhifa Wedding', href: '/nunuy-nadhifa-wedding' },
-  { title: 'Undangan.id', href: '/undangan' },
+  { title: 'Nuansa Invite', href: '/undangan' },
 ];
 
 export default function SuperAdminHome({ onLogin }) {
@@ -59,7 +59,7 @@ export default function SuperAdminHome({ onLogin }) {
           <label>Kata sandi<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           <button className="primary-btn" disabled={isLoading}>{isLoading ? 'Memeriksa…' : 'Masuk ke super admin'}</button>
-          <a className="super-admin-public-link" href="/undangan">Kunjungi website Undangan.id</a>
+          <a className="super-admin-public-link" href="/undangan">Kunjungi website Nuansa Invite</a>
         </form>
       </main>
     );

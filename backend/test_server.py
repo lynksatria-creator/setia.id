@@ -54,6 +54,26 @@ class FakeCollection:
         self.document = copy.deepcopy(document)
 
 
+class FakePackageCapacityLocks:
+    def __init__(self):
+        self.document = None
+
+    async def find_one_and_update(self, query, update, upsert, return_document):
+        now = datetime.now(timezone.utc).isoformat()
+        if self.document and self.document.get("expires_at", "") > now:
+            raise DuplicateKeyError("package capacity lock is held")
+        assert upsert is True
+        assert return_document == server.ReturnDocument.AFTER
+        self.document = {"_id": query["_id"], **copy.deepcopy(update["$set"])}
+        return copy.deepcopy(self.document)
+
+    async def update_one(self, query, update):
+        if self.document and all(self.document.get(key) == value for key, value in query.items()):
+            for key in update["$unset"]:
+                self.document.pop(key, None)
+        return None
+
+
 class FakeTicketCollection:
     def __init__(self):
         self.documents = []
@@ -103,6 +123,49 @@ class FakeGuestbookCollection:
         self.documents.append(copy.deepcopy(document))
 
 
+class FakeTestimonialCursor:
+    def __init__(self, documents):
+        self.documents = copy.deepcopy(documents)
+
+    def sort(self, field, direction):
+        self.documents.sort(key=lambda item: item.get(field, ""), reverse=direction < 0)
+        return self
+
+    async def to_list(self, length):
+        return self.documents[:length]
+
+
+class FakeTestimonialCollection:
+    def __init__(self):
+        self.documents = []
+
+    def find(self, query, _projection=None):
+        documents = []
+        for item in self.documents:
+            if query.get("site") and item.get("site") != query["site"]:
+                continue
+            status_filter = query.get("status")
+            if isinstance(status_filter, dict) and item.get("status") not in status_filter.get("$in", []):
+                continue
+            if isinstance(status_filter, str) and item.get("status") != status_filter:
+                continue
+            documents.append(item)
+        return FakeTestimonialCursor(documents)
+
+    async def insert_one(self, document):
+        self.documents.append(copy.deepcopy(document))
+
+    async def find_one(self, query, _projection=None):
+        return next((copy.deepcopy(item) for item in self.documents if all(item.get(key) == value for key, value in query.items())), None)
+
+    async def update_one(self, query, update):
+        item = next((item for item in self.documents if all(item.get(key) == value for key, value in query.items())), None)
+        if item is None or all(item.get(key) == value for key, value in update["$set"].items()):
+            return SimpleNamespace(modified_count=0)
+        item.update(update["$set"])
+        return SimpleNamespace(modified_count=1)
+
+
 def test_saved_midtrans_checkout_config_migrates_to_mayar(monkeypatch):
     config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
     config["payment_methods"][0] = {
@@ -122,6 +185,47 @@ def test_saved_midtrans_checkout_config_migrates_to_mayar(monkeypatch):
     assert migrated["payment_methods"][0]["name"] == "Mayar checkout"
     assert "payment_code" not in migrated["payment_methods"][0]
     assert migrated["payment_methods"][1]["provider"] == "manual"
+
+
+def test_legacy_billing_config_gets_package_and_reseller_entitlements(monkeypatch):
+    config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    config.pop("schema_version")
+    premium = next(plan for plan in config["plans"] if plan["id"] == "premium")
+    premium["max_invitations"] = 3
+    premium["features"][0] = "3 undangan aktif"
+    for plan in config["plans"]:
+        for field in ("bulk_upload_enabled", "max_recipients", "reseller_enabled", "max_resellers"):
+            plan.pop(field, None)
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=FakeCollection(config)))
+
+    migrated = asyncio.run(server.get_billing_config())
+
+    plans = {plan["id"]: plan for plan in migrated["plans"]}
+    assert migrated["schema_version"] == 3
+    assert plans["basic"]["max_invitations"] == 1
+    assert plans["basic"]["bulk_upload_enabled"] is False
+    assert plans["basic"]["max_recipients"] == 1
+    assert plans["premium"]["max_invitations"] == 5
+    assert plans["premium"]["features"][0] == "5 undangan aktif"
+    assert plans["premium"]["bulk_upload_enabled"] is True
+    assert plans["business"]["reseller_enabled"] is True
+    assert plans["business"]["max_reseller_customers"] == 1000
+    assert plans["business"]["reseller_commission_percent"] == 10
+
+
+def test_package_capacity_lock_serializes_concurrent_order_attempts(monkeypatch):
+    locks = FakePackageCapacityLocks()
+    monkeypatch.setattr(server, "db", SimpleNamespace(package_capacity_locks=locks))
+
+    lock_id, token = asyncio.run(server.acquire_package_capacity_lock("owner-1", "premium"))
+    with pytest.raises(server.HTTPException) as error:
+        asyncio.run(server.acquire_package_capacity_lock("owner-1", "premium"))
+    assert error.value.status_code == 409
+
+    asyncio.run(server.release_package_capacity_lock(lock_id, token))
+    next_lock_id, next_token = asyncio.run(server.acquire_package_capacity_lock("owner-1", "premium"))
+    assert next_lock_id == lock_id
+    assert next_token != token
 
 
 class FakeCursor:
@@ -174,22 +278,30 @@ class FakeInvitationAccessCollection:
     def __init__(self, documents):
         self.documents = copy.deepcopy(documents)
 
+    @staticmethod
+    def _matches(document, query):
+        for key, value in query.items():
+            actual = document.get(key)
+            if isinstance(value, dict) and "$in" in value:
+                if actual not in value["$in"]:
+                    return False
+            elif isinstance(value, dict) and "$gt" in value:
+                if actual is None or actual <= value["$gt"]:
+                    return False
+            elif actual != value:
+                return False
+        return True
+
     async def find_one(self, query, _projection=None):
         for document in self.documents:
-            if all(
-                document.get(key) in value["$in"] if isinstance(value, dict) and "$in" in value else document.get(key) == value
-                for key, value in query.items()
-            ):
+            if self._matches(document, query):
                 return copy.deepcopy(document)
         return None
 
     def find(self, query, _projection=None):
         documents = [
             document for document in self.documents
-            if all(
-                document.get(key) in value["$in"] if isinstance(value, dict) and "$in" in value else document.get(key) == value
-                for key, value in query.items()
-            )
+            if self._matches(document, query)
         ]
         return FakeCursor(documents)
 
@@ -245,6 +357,15 @@ class FakeBusinessInvitations:
     async def find_one(self, _query, _projection=None):
         return self.invitation
 
+    def find(self, query, _projection=None):
+        matches = all(
+            self.invitation.get(key) in value["$in"] if isinstance(value, dict) and "$in" in value
+            else self.invitation.get(key, "") > value["$gt"] if isinstance(value, dict) and "$gt" in value
+            else self.invitation.get(key) == value
+            for key, value in query.items()
+        )
+        return FakeCursor([self.invitation] if matches else [])
+
 
 class FakeEmptySettings:
     async def find_one(self, _query, _projection=None):
@@ -285,7 +406,65 @@ def test_health_endpoint_is_public():
     response = TestClient(server.app).get("/api/")
 
     assert response.status_code == 200
-    assert response.json()["message"] == "Undangan.id API is running"
+    assert response.json()["message"] == "Nuansa Invite API is running"
+
+
+def test_public_testimonial_requires_admin_approval_and_can_be_hidden(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    testimonials = FakeTestimonialCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(testimonials=testimonials))
+    client = TestClient(server.app)
+    payload = {
+        "site": "nunuy",
+        "name": "Alya dan Bima",
+        "event": "Pernikahan · Bandung",
+        "message": "Tim membantu hari pernikahan kami berjalan lancar.",
+        "rating": 5,
+    }
+
+    submitted = client.post("/api/public/testimonials", json=payload)
+    assert submitted.status_code == 200
+    assert submitted.json()["status"] == "pending"
+    assert client.get("/api/public/testimonials/nunuy").json() == []
+
+    assert client.get("/api/admin/testimonials?site=nunuy").status_code == 401
+    admin_token = server.create_access_token("admin@example.com", role="admin")
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    queued = client.get("/api/admin/testimonials?site=nunuy", headers=headers)
+    assert queued.status_code == 200
+    assert len(queued.json()) == 1
+    testimonial_id = queued.json()[0]["id"]
+
+    approved = client.patch(
+        f"/api/admin/testimonials/{testimonial_id}",
+        headers=headers,
+        json={"status": "visible"},
+    )
+    assert approved.status_code == 200
+    public_items = client.get("/api/public/testimonials/nunuy").json()
+    assert len(public_items) == 1
+    assert public_items[0]["name"] == payload["name"]
+
+    hidden = client.patch(
+        f"/api/admin/testimonials/{testimonial_id}",
+        headers=headers,
+        json={"status": "hidden"},
+    )
+    assert hidden.status_code == 200
+    assert client.get("/api/public/testimonials/nunuy").json() == []
+
+
+def test_public_testimonial_validates_site_and_content(monkeypatch):
+    monkeypatch.setattr(server, "db", SimpleNamespace(testimonials=FakeTestimonialCollection()))
+    response = TestClient(server.app).post("/api/public/testimonials", json={
+        "site": "unknown",
+        "name": "A",
+        "event": "x",
+        "message": "short",
+        "rating": 8,
+    })
+
+    assert response.status_code == 422
 
 
 def test_public_invitation_only_exposes_enabled_digital_envelope_methods(monkeypatch):
@@ -402,7 +581,45 @@ def test_mayar_webhook_verifies_invoice_before_activating_invitation(monkeypatch
     })
     assert duplicate.status_code == 200
     assert payment_collection.document["status"] == "paid"
-    assert invitation_collection.document["status"] == "active"
+
+
+def test_payment_activation_copies_the_payment_entitlement_snapshot(monkeypatch):
+    entitlements = {
+        "bulk_upload_enabled": True,
+        "max_recipients": 250,
+        "reseller_enabled": True,
+        "max_resellers": 12,
+        "max_invitations": 5,
+    }
+    invitations = FakeCollection({"id": "invitation-1", "active_until": None})
+    monkeypatch.setattr(server, "db", SimpleNamespace(invitations=invitations))
+    asyncio.run(server.activate_invitation({
+        "id": "payment-1",
+        "invitation_id": "invitation-1",
+        "plan_id": "premium",
+        "duration_days": 30,
+        "package_entitlements": entitlements,
+    }))
+
+    assert invitations.document["package_entitlements"] == entitlements
+    assert invitations.document["status"] == "active"
+
+
+def test_reseller_access_uses_entitlements_on_active_plan_snapshots(monkeypatch):
+    owner = {"id": "owner-1", "role": "user"}
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    invitations = FakeInvitationAccessCollection([{
+        "id": "invitation-1",
+        "owner_id": owner["id"],
+        "plan_id": "premium",
+        "status": "active",
+        "active_until": future,
+        "package_entitlements": {"reseller_enabled": True, "max_resellers": 7},
+    }])
+    monkeypatch.setattr(server, "db", SimpleNamespace(invitations=invitations))
+    result = asyncio.run(server.active_reseller_entitlements(owner))
+
+    assert result == [{"reseller_enabled": True, "max_resellers": 7}]
 
 
 def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(monkeypatch):
@@ -466,6 +683,43 @@ def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(mon
     assert check_in.json()["entry"]["status"] == "hidden"
     assert duplicate_check_in.json()["already_checked_in"] is True
     assert len(guestbook.documents) == 1
+
+
+@pytest.mark.parametrize(
+    ("plan_id", "entitlements", "recipient_count", "expected_status", "message"),
+    [
+        ("basic", {"bulk_upload_enabled": False, "max_recipients": 1}, 2, 403, "upload massal"),
+        ("premium", {"bulk_upload_enabled": True, "max_recipients": 2}, 3, 409, "maksimal 2 penerima"),
+    ],
+)
+def test_ticket_issuance_enforces_configured_bulk_and_recipient_limits(
+    monkeypatch, plan_id, entitlements, recipient_count, expected_status, message,
+):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    owner = {"id": "owner-1", "full_name": "Event Owner", "email": "owner@example.com"}
+    invitation = {
+        "id": "invitation-1",
+        "owner_id": "owner-1",
+        "plan_id": plan_id,
+        "package_entitlements": entitlements,
+        "status": "published",
+        "active_until": "9999-12-31T23:59:59+00:00",
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        users=FakeCollection(owner),
+        invitations=FakeCollection(invitation),
+        invitation_tickets=FakeTicketCollection(),
+    ))
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: owner)
+    recipients = [{"name": f"Tamu {index}", "phone": f"62812345678{index:02d}"} for index in range(recipient_count)]
+
+    response = TestClient(server.app).post(
+        "/api/invitations/invitation-1/tickets",
+        json={"recipients": recipients},
+    )
+
+    assert response.status_code == expected_status
+    assert message in response.json()["detail"]
 
 
 def test_dashboard_admins_can_be_added_for_a_current_active_invitation(monkeypatch):

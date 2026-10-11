@@ -5,34 +5,65 @@ import PublicInvitation from './PublicInvitation';
 export const slugify = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const templateId = (template) => ({ gold: 'luxury-gold', pink: 'rose-gold-romance', emerald: 'emerald-royal', champagne: 'elegant-white-gold', navy: 'navy-royal', lilac: 'custom-premium' }[template.palette] || slugify(template.name));
 
+const previewDetailsByCategory = {
+  pernikahan: { eventType: 'Pernikahan', title: 'Aulia & Farhan', coupleNames: 'Aulia & Farhan' },
+  wedding: { eventType: 'Pernikahan', title: 'Aulia & Farhan', coupleNames: 'Aulia & Farhan' },
+  engagement: { eventType: 'Engagement', title: 'Dina & Reza', coupleNames: 'Dina & Reza' },
+  lamaran: { eventType: 'Lamaran', title: 'Dina & Reza', coupleNames: 'Dina & Reza' },
+  tunangan: { eventType: 'Tunangan', title: 'Dina & Reza', coupleNames: 'Dina & Reza' },
+  anniversary: { eventType: 'Anniversary', title: 'Dina & Reza', honoreeName: 'Dina & Reza' },
+  aqiqah: { eventType: 'Aqiqah', title: 'Aqiqah Naira', honoreeName: 'Naira' },
+  khitanan: { eventType: 'Khitanan', title: 'Khitanan Rafi', honoreeName: 'Rafi' },
+  'ulang tahun': { eventType: 'Ulang Tahun', title: 'Ulang Tahun Naira', honoreeName: 'Naira' },
+  'birthday': { eventType: 'Ulang Tahun', title: 'Ulang Tahun Naira', honoreeName: 'Naira' },
+  tasyakuran: { eventType: 'Tasyakuran', title: 'Tasyakuran Keluarga', honoreeName: 'Keluarga Bahagia' },
+  graduation: { eventType: 'Wisuda', title: 'Wisuda Alya', honoreeName: 'Alya' },
+  wisuda: { eventType: 'Wisuda', title: 'Wisuda Alya', honoreeName: 'Alya' },
+  'corporate event': { eventType: 'Corporate Event', title: 'Peresmian Kantor Baru', honoreeName: 'Peresmian Kantor Baru' },
+  event: { eventType: 'Event', title: 'Acara Komunitas', honoreeName: 'Acara Komunitas' },
+  'custom invitation': { eventType: 'Acara', title: 'Acara Spesial', honoreeName: 'Acara Spesial' },
+};
+const previewDetails = (category) => {
+  const key = String(category || '').trim().toLowerCase();
+  return previewDetailsByCategory[key] || {
+    eventType: category || 'Acara',
+    title: `Acara ${category || 'Spesial'}`,
+    honoreeName: `Acara ${category || 'Spesial'}`,
+  };
+};
+
 const readHashTemplate = (templates) => {
   const hash = window.location.hash.replace('#template-', '');
   return templates.find((template) => slugify(template.name) === hash) || null;
 };
 
-export const createPreviewInvitation = (template) => ({
-  id: `template-demo-${slugify(template.name)}`,
-  title: 'Aulia & Farhan',
-  slug: `demo-${slugify(template.name)}`,
-  content: {
-    demo_template: true,
-    template_id: templateId(template),
-    event_type: template.category || 'Pernikahan',
-    couple_names: 'Aulia & Farhan',
-    event_date: '2026-12-12',
-    event_time: '10:00',
-    venue: 'The Grand Ballroom',
-    address: 'Jakarta Selatan, Indonesia',
-    gallery: [
-      'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1000&q=85',
-      'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1000&q=85',
-    ],
-  },
-});
+export const createPreviewInvitation = (template) => {
+  const details = previewDetails(template.category);
+  return {
+    id: `template-demo-${slugify(template.name)}`,
+    title: details.title,
+    slug: `demo-${slugify(template.name)}`,
+    content: {
+      demo_template: true,
+      template_id: templateId(template),
+      event_type: details.eventType,
+      couple_names: details.coupleNames || '',
+      honoree_name: details.honoreeName || '',
+      event_date: '2026-12-12',
+      event_time: '10:00',
+      venue: details.eventType === 'Corporate Event' ? 'Ruang Acara Perusahaan' : 'Tempat Acara',
+      address: 'Indonesia',
+      gallery: [
+        'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1000&q=85',
+        'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1000&q=85',
+      ],
+    },
+  };
+};
 
 export default function Templates({ templates, demos, categories = [] }) {
   const [qrTemplate, setQrTemplate] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(() => templates.find((template) => template.active !== false)?.category || 'Semua');
+  const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [previewTemplate, setPreviewTemplate] = useState(() => readHashTemplate(templates));
   const availableCategories = [...new Set([
     ...categories,

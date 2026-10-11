@@ -26,8 +26,12 @@ export default function Pricing({ plans, onChoose }) {
             <article key={plan.id || plan.name} className={`price-card ${plan.highlight || plan.id === 'premium' ? 'featured-price' : ''}`}>
               <h3>{plan.name}</h3>
               <strong>{typeof plan.price === 'number' ? `Rp ${plan.price.toLocaleString('id-ID')}` : plan.price}</strong>
-              {plan.duration_days ? <p className="pricing-plan-term">{plan.duration_days} hari aktif · maks. {plan.max_invitations} undangan · link {plan.id === 'basic' ? 'otomatis' : 'otomatis dan dapat diedit'}</p> : null}
+              {plan.duration_days ? <p className="pricing-plan-term">{plan.duration_days} hari aktif · maks. {plan.max_invitations} undangan aktif · link {plan.slug_mode === 'generated' ? 'otomatis' : 'otomatis dan dapat diedit'}</p> : null}
               <ul>{(Array.isArray(plan.features) ? plan.features : []).map((item) => <li key={item}>{item}</li>)}</ul>
+              <ul className="pricing-entitlements">
+                <li>{plan.bulk_upload_enabled ? `Bulk upload tamu · maks. ${plan.max_recipients} penerima` : 'Kirim undangan satu penerima per permintaan'}</li>
+                {plan.reseller_enabled ? <li>Fitur reseller · maks. {plan.max_resellers} akun</li> : <li>Fitur reseller tidak termasuk</li>}
+              </ul>
               <button onClick={onChoose}>Pilih Paket</button>
             </article>
           ))}

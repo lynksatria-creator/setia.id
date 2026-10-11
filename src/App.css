@@ -218,6 +218,191 @@
   box-sizing: border-box;
 }
 
+.public-testimonials {
+  padding: 76px 0;
+  background: var(--surface, #f8fafc);
+}
+
+.public-testimonials-inner {
+  display: grid;
+  gap: 26px;
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.public-testimonials-heading {
+  margin-bottom: 0;
+  text-align: center;
+}
+
+.public-testimonials-heading h2 {
+  margin: 0;
+}
+
+.public-testimonial-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+}
+
+.public-testimonial-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 22px;
+  border: 1px solid var(--line, rgba(17, 24, 39, .08));
+  border-radius: 12px;
+  background: var(--card, #fff);
+}
+
+.public-testimonial-card blockquote {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.public-testimonial-rating {
+  color: #c38a2b;
+  letter-spacing: .12em;
+}
+
+.public-testimonial-card small {
+  color: var(--muted, #5b6475);
+}
+
+.public-testimonial-empty {
+  margin: 0;
+  color: var(--muted, #5b6475);
+  text-align: center;
+}
+
+.public-testimonial-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid var(--line, rgba(17, 24, 39, .08));
+  border-radius: 14px;
+  background: var(--card, #fff);
+}
+
+.public-testimonial-form h3,
+.public-testimonial-form > p,
+.public-testimonial-form label:nth-of-type(4),
+.public-testimonial-form button,
+.public-testimonial-form [role="status"],
+.public-testimonial-form [role="alert"] {
+  grid-column: 1 / -1;
+}
+
+.public-testimonial-form h3,
+.public-testimonial-form > p {
+  margin: 0;
+}
+
+.public-testimonial-form > p,
+.public-testimonial-error {
+  color: var(--muted, #5b6475);
+}
+
+.public-testimonial-form label {
+  display: grid;
+  gap: 6px;
+  font-size: .88rem;
+  font-weight: 600;
+}
+
+.public-testimonial-form input,
+.public-testimonial-form select,
+.public-testimonial-form textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, rgba(17, 24, 39, .15));
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink, #111827);
+  font: inherit;
+}
+
+.public-testimonial-form textarea {
+  resize: vertical;
+}
+
+.public-testimonial-form button,
+.testimonial-moderation > button,
+.testimonial-moderation-list button {
+  width: fit-content;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--primary, #7c3aed);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.public-testimonial-form button:disabled,
+.testimonial-moderation button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.public-testimonial-success {
+  color: #176b43;
+}
+
+.public-testimonial-error {
+  color: #a82424;
+}
+
+.testimonial-moderation-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.testimonial-moderation-list article {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--line, rgba(17, 24, 39, .12));
+  border-radius: 8px;
+  background: #fff;
+}
+
+.testimonial-moderation-list article > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.testimonial-moderation-list article p {
+  margin: 0;
+}
+
+.testimonial-moderation-list article > small {
+  color: var(--muted, #5b6475);
+}
+
+@media (max-width: 600px) {
+  .public-testimonials {
+    padding: 52px 0;
+  }
+
+  .public-testimonial-form {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+
+  .public-testimonial-form label {
+    grid-column: 1;
+  }
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -4149,6 +4334,7 @@ input {
 }
 
 .wedding-cover-video,
+.wedding-cover-image,
 .wedding-cover-shimmer {
   position: absolute;
   inset: 0;
@@ -4159,6 +4345,15 @@ input {
 .wedding-cover-video {
   z-index: 0;
   object-fit: cover;
+}
+
+.wedding-cover-image {
+  z-index: 0;
+  object-fit: cover;
+}
+
+.wedding-cover.has-cover-image {
+  background-image: none;
 }
 
 .wedding-cover-shimmer {
@@ -4618,11 +4813,12 @@ input {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transform: scale(var(--wedding-gallery-zoom, 1));
   transition: transform 0.5s ease;
 }
 
 .wedding-gallery-grid button:hover img {
-  transform: scale(1.05);
+  transform: scale(var(--wedding-gallery-hover-zoom, 1.05));
 }
 
 .wedding-video iframe {
@@ -4638,6 +4834,31 @@ input {
   border-radius: 24px;
   background: #111827;
   object-fit: contain;
+}
+
+.wedding-invite-qr {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  background: #fffaf4;
+}
+
+.wedding-invite-qr > p,
+.wedding-invite-qr > h2 {
+  margin: 0;
+}
+
+.wedding-invite-qr-code {
+  padding: 12px;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.wedding-invite-qr-code svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .wedding-rsvp {
@@ -5160,6 +5381,36 @@ input {
 .wedding-frame-heart .wedding-cover-inner::before { border: 2px solid #e7b18a; border-radius: 45% 45% 10px 10px; }
 .wedding-frame-geometric .wedding-cover-inner::before { inset: -32px -44px; border: 1px solid #e3bd62; transform: rotate(1.5deg); }
 .wedding-frame-custom .wedding-cover-inner::before { border: 2px solid var(--public-accent, #d8b56d); border-radius: 12px; box-shadow: 0 0 0 7px color-mix(in srgb, var(--public-accent), transparent 78%); }
+
+.wedding-motion-none *,
+.wedding-motion-none *::before,
+.wedding-motion-none *::after {
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
+.wedding-motion-none .wedding-cover-shimmer { display: none; }
+
+.wedding-motion-subtle .wedding-ornament {
+  animation-duration: 9s;
+}
+
+.wedding-motion-subtle .wedding-cover-shimmer {
+  opacity: 0.45;
+}
+
+.wedding-motion-festive .wedding-ornament {
+  animation-duration: 3.5s;
+}
+
+.wedding-motion-festive .wedding-cover-shimmer {
+  animation: wedding-festive-glow 5s ease-in-out infinite alternate;
+}
+
+@keyframes wedding-festive-glow {
+  from { opacity: 0.48; }
+  to { opacity: 0.95; }
+}
 
 .public-invitation-state {
   display: grid;
@@ -6720,6 +6971,49 @@ input {
   padding: 8px 12px;
   border-radius: 8px;
   color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.personalized-invitation-share .form-hint {
+  margin: 0;
+  color: #64746a;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.personalized-ticket-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  border-radius: 12px;
+  background: #fff;
+  text-align: center;
+}
+
+.personalized-ticket-card svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.personalized-ticket-card > span {
+  color: #43534a;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.personalized-ticket-card .primary-btn,
+.personalized-ticket-card .secondary-btn {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 8px;
   font-size: 0.75rem;
   font-weight: 700;
   text-align: center;

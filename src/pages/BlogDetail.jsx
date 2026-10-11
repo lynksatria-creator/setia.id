@@ -13,7 +13,7 @@ export default function BlogDetail({ articles, slug, onBack }) {
     return (
       <main className="blog-detail-page container">
         <p className="eyebrow">Artikel tidak ditemukan</p>
-        <button className="secondary-btn" onClick={onBack}>Kembali ke Undangan.id</button>
+        <button className="secondary-btn" onClick={onBack}>Kembali ke Nuansa Invite</button>
       </main>
     );
   }
@@ -27,7 +27,7 @@ export default function BlogDetail({ articles, slug, onBack }) {
         <div className="blog-detail-cover" />
         <p className="blog-detail-lead">{articleCopy[article.category] || 'Rencanakan detail acara dengan tenang dan pilih cara berbagi kabar yang terasa paling sesuai dengan cerita Anda.'}</p>
         <p>Undangan digital membantu semua informasi penting hadir dalam satu tautan yang mudah dibuka dan dibagikan. Pilih desain yang mencerminkan acara, lalu periksa kembali detail waktu, lokasi, serta nama sebelum tautan dikirim kepada keluarga dan sahabat.</p>
-        <button className="primary-btn" onClick={onBack}>Jelajahi Undangan.id</button>
+        <button className="primary-btn" onClick={onBack}>Jelajahi Nuansa Invite</button>
       </article>
     </main>
   );

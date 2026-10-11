@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from urllib.parse import urlparse
 
@@ -37,7 +38,7 @@ async def lifespan(_app: FastAPI):
     client.close()
 
 
-app = FastAPI(title="Undangan.id API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Nuansa Invite API", version="0.1.0", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 
 
@@ -78,6 +79,13 @@ class PlanConfig(BaseModel):
     slug_mode: Literal["generated", "custom"]
     enabled: bool = True
     features: list[str] = Field(default_factory=list, max_length=12)
+    bulk_upload_enabled: bool = False
+    max_recipients: int = Field(default=1, ge=1, le=1000)
+    reseller_enabled: bool = False
+    max_resellers: int = Field(default=0, ge=0, le=1000)
+    max_reseller_customers: int = Field(default=0, ge=0, le=10000)
+    reseller_max_markup_percent: int = Field(default=0, ge=0, le=500)
+    reseller_commission_percent: int = Field(default=0, ge=0, le=100)
 
 
 class PaymentMethodConfig(BaseModel):
@@ -155,6 +163,31 @@ class AffiliateUpdate(BaseModel):
     premium_quota: int | None = Field(default=None, ge=0, le=1000)
 
 
+class ResellerOrderCreate(BaseModel):
+    customer_name: str = Field(min_length=2, max_length=80)
+    customer_email: EmailStr
+    customer_phone: str = Field(pattern=r"^[0-9+()\-\s]{8,24}$")
+    plan_id: Literal["basic", "premium"]
+    selling_price: int = Field(gt=0, le=100_000_000)
+
+    @field_validator("customer_name", "customer_phone")
+    @classmethod
+    def normalize_reseller_customer_fields(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("Data pelanggan tidak boleh kosong.")
+        return value
+
+
+class CommissionPayoutUpdate(BaseModel):
+    payout_reference: str = Field(min_length=3, max_length=120)
+
+    @field_validator("payout_reference")
+    @classmethod
+    def normalize_payout_reference(cls, value):
+        return value.strip()
+
+
 class AffiliateAdUpdate(BaseModel):
     ad_title: str | None = Field(default=None, max_length=100)
     ad_description: str | None = Field(default=None, max_length=300)
@@ -222,6 +255,26 @@ class GuestbookModeration(BaseModel):
     status: Literal["visible", "hidden"]
 
 
+class PublicTestimonialCreate(BaseModel):
+    site: Literal["portal", "gibrig", "nunuy", "invitation"]
+    name: str = Field(min_length=2, max_length=80)
+    event: str = Field(min_length=2, max_length=120)
+    message: str = Field(min_length=10, max_length=1000)
+    rating: int = Field(ge=1, le=5)
+
+    @field_validator("name", "event", "message")
+    @classmethod
+    def normalize_testimonial_text(cls, value: str):
+        value = value.strip()
+        if not value:
+            raise ValueError("Kolom testimoni tidak boleh kosong.")
+        return value
+
+
+class TestimonialModeration(BaseModel):
+    status: Literal["visible", "hidden"]
+
+
 class InvitationTicketRecipient(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     phone: str = Field(pattern=r"^[0-9]{8,15}$")
@@ -256,9 +309,9 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 DEFAULT_BILLING_CONFIG = {
     "plans": [
-        {"id": "basic", "name": "Basic", "price": 99000, "duration_days": 30, "max_invitations": 1, "slug_mode": "generated", "enabled": True, "features": ["1 undangan aktif", "Template dasar", "Link undangan otomatis"]},
-        {"id": "premium", "name": "Premium", "price": 249000, "duration_days": 365, "max_invitations": 3, "slug_mode": "custom", "enabled": True, "features": ["3 undangan aktif", "Link otomatis dan dapat diedit", "RSVP dan buku tamu"]},
-        {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": True, "features": ["100 undangan aktif", "Link otomatis dan dapat diedit", "Statistik lengkap"]},
+        {"id": "basic", "name": "Basic", "price": 99000, "duration_days": 30, "max_invitations": 1, "slug_mode": "generated", "enabled": True, "features": ["1 undangan aktif", "Template dasar", "Link undangan otomatis"], "bulk_upload_enabled": False, "max_recipients": 1, "reseller_enabled": False, "max_resellers": 0, "max_reseller_customers": 0, "reseller_max_markup_percent": 0, "reseller_commission_percent": 0},
+        {"id": "premium", "name": "Premium", "price": 249000, "duration_days": 365, "max_invitations": 5, "slug_mode": "custom", "enabled": True, "features": ["5 undangan aktif", "Link otomatis dan dapat diedit", "RSVP dan buku tamu"], "bulk_upload_enabled": True, "max_recipients": 1000, "reseller_enabled": False, "max_resellers": 0, "max_reseller_customers": 0, "reseller_max_markup_percent": 0, "reseller_commission_percent": 0},
+        {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": True, "features": ["100 undangan aktif", "Link otomatis dan dapat diedit", "Statistik lengkap"], "bulk_upload_enabled": True, "max_recipients": 1000, "reseller_enabled": True, "max_resellers": 100, "max_reseller_customers": 1000, "reseller_max_markup_percent": 100, "reseller_commission_percent": 10},
     ],
     "payment_methods": [
         {"id": "mayar", "name": "Mayar checkout", "provider": "mayar", "enabled": True},
@@ -271,6 +324,7 @@ DEFAULT_BILLING_CONFIG = {
         {"id": "premium-3", "name": "3 Premium", "basic": 0, "premium": 3},
         {"id": "basic-8", "name": "8 Basic", "basic": 8, "premium": 0},
     ],
+    "schema_version": 3,
 }
 
 def get_jwt_secret():
@@ -288,9 +342,28 @@ def create_access_token(user_id: str, role: str = "user"):
 async def get_billing_config():
     saved = await db.platform_settings.find_one({"key": "billing"}, {"_id": 0, "key": 0})
     if saved:
+        previous_schema_version = saved.get("schema_version", 0)
         for plan in saved.get("plans", []):
             default_plan = next((item for item in DEFAULT_BILLING_CONFIG["plans"] if item["id"] == plan["id"]), None)
             plan.setdefault("max_invitations", default_plan["max_invitations"] if default_plan else 1)
+            if default_plan:
+                for field in (
+                    "bulk_upload_enabled",
+                    "max_recipients",
+                    "reseller_enabled",
+                    "max_resellers",
+                    "max_reseller_customers",
+                    "reseller_max_markup_percent",
+                    "reseller_commission_percent",
+                ):
+                    plan.setdefault(field, default_plan[field])
+            if plan["id"] == "premium" and previous_schema_version < 2:
+                if plan["max_invitations"] == 3:
+                    plan["max_invitations"] = 5
+                plan["features"] = [
+                    "5 undangan aktif" if feature == "3 undangan aktif" else feature
+                    for feature in plan.get("features", [])
+                ]
             if plan["id"] in {"premium", "business"}:
                 plan["features"] = [
                     "Link otomatis dan dapat diedit" if feature == "Custom link" else feature
@@ -309,6 +382,7 @@ async def get_billing_config():
                 method.pop("payment_code", None)
         saved.setdefault("dashboard_admin_limit", DEFAULT_BILLING_CONFIG["dashboard_admin_limit"])
         saved.setdefault("affiliate_combinations", DEFAULT_BILLING_CONFIG["affiliate_combinations"])
+        saved["schema_version"] = 3
         return saved
     await db.platform_settings.update_one(
         {"key": "billing"},
@@ -316,6 +390,77 @@ async def get_billing_config():
         upsert=True,
     )
     return DEFAULT_BILLING_CONFIG
+
+
+def package_entitlements(plan: dict):
+    return {
+        "bulk_upload_enabled": bool(plan.get("bulk_upload_enabled", False)),
+        "max_recipients": int(plan.get("max_recipients", 1)),
+        "reseller_enabled": bool(plan.get("reseller_enabled", False)),
+        "max_resellers": int(plan.get("max_resellers", 0)),
+        "max_reseller_customers": int(plan.get("max_reseller_customers", 0)),
+        "reseller_max_markup_percent": int(plan.get("reseller_max_markup_percent", 0)),
+        "reseller_commission_percent": int(plan.get("reseller_commission_percent", 0)),
+        "max_invitations": int(plan.get("max_invitations", 1)),
+    }
+
+
+def invitation_entitlements(invitation: dict):
+    saved = invitation.get("package_entitlements")
+    if isinstance(saved, dict):
+        return saved
+    legacy_plan = next(
+        (plan for plan in DEFAULT_BILLING_CONFIG["plans"] if plan["id"] == invitation.get("plan_id")),
+        None,
+    )
+    return package_entitlements(legacy_plan or {})
+
+
+async def acquire_package_capacity_lock(owner_id: str, plan_id: str):
+    lock_id = f"{owner_id}:{plan_id}"
+    token = secrets.token_urlsafe(24)
+    now = datetime.now(timezone.utc)
+    try:
+        lock = await db.package_capacity_locks.find_one_and_update(
+            {
+                "_id": lock_id,
+                "$or": [
+                    {"expires_at": {"$lte": now.isoformat()}},
+                    {"expires_at": {"$exists": False}},
+                ],
+            },
+            {"$set": {
+                "token": token,
+                "expires_at": (now + timedelta(minutes=2)).isoformat(),
+            }},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Pembuatan pembayaran untuk paket ini sedang berlangsung. Coba kembali sebentar lagi.") from None
+    if lock is None or lock.get("token") != token:
+        raise HTTPException(status_code=409, detail="Pembuatan pembayaran untuk paket ini sedang berlangsung. Coba kembali sebentar lagi.")
+    return lock_id, token
+
+
+async def release_package_capacity_lock(lock_id: str, token: str):
+    await db.package_capacity_locks.update_one(
+        {"_id": lock_id, "token": token},
+        {"$unset": {"token": "", "expires_at": ""}},
+    )
+
+
+async def write_audit_log(actor: dict, action: str, target_type: str, target_id: str, details: dict | None = None):
+    await db.audit_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "actor_id": actor.get("id") or actor.get("email"),
+        "actor_role": actor.get("role", "admin"),
+        "action": action,
+        "target_type": target_type,
+        "target_id": target_id,
+        "details": details or {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
 
 
 async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
@@ -375,18 +520,36 @@ async def get_dashboard_invitation(invitation_id: str, user: dict):
     return await get_owned_invitation(invitation_id, user["id"])
 
 
-async def require_business_owner(user: dict):
+async def active_reseller_entitlements(user: dict):
     await require_dashboard_owner(user)
     now = datetime.now(timezone.utc).isoformat()
-    if user.get("is_demo") and user.get("demo_plan_id") == "business" and user.get("demo_until", "") > now:
-        return True
-    invitation = await db.invitations.find_one({
+    if user.get("is_demo") and user.get("demo_until", "") > now:
+        config = await get_billing_config()
+        demo_plan = next((plan for plan in config["plans"] if plan["id"] == user.get("demo_plan_id")), None)
+        if demo_plan and demo_plan.get("reseller_enabled"):
+            return [package_entitlements(demo_plan)]
+    invitations = await db.invitations.find({
         "owner_id": user["id"],
-        "plan_id": "business",
         "status": {"$in": ["active", "published"]},
         "active_until": {"$gt": now},
-    }, {"_id": 0, "id": 1})
-    return invitation is not None
+    }, {"_id": 0, "plan_id": 1, "package_entitlements": 1}).to_list(length=500)
+    default_entitlements = {
+        plan["id"]: plan for plan in DEFAULT_BILLING_CONFIG["plans"]
+    }
+    return [
+        invitation.get("package_entitlements", package_entitlements(
+            default_entitlements.get(invitation.get("plan_id"), {})
+        ))
+        for invitation in invitations
+        if invitation.get("package_entitlements", {}).get(
+            "reseller_enabled",
+            default_entitlements.get(invitation.get("plan_id"), {}).get("reseller_enabled", False),
+        )
+    ]
+
+
+async def require_business_owner(user: dict):
+    return bool(await active_reseller_entitlements(user))
 
 
 async def has_active_invitation_package(owner_id: str):
@@ -424,6 +587,9 @@ async def activate_invitation(payment):
             "payment_id": payment["id"],
             "activated_at": now.isoformat(),
             "active_until": expires_at.isoformat(),
+            "package_entitlements": payment.get("package_entitlements", package_entitlements(
+                next((plan for plan in DEFAULT_BILLING_CONFIG["plans"] if plan["id"] == payment.get("plan_id")), {})
+            )),
             "updated_at": now.isoformat(),
         }},
     )
@@ -443,6 +609,48 @@ async def set_payment_status(payment, status: str, provider_status: str | None =
     )
     if status == "paid" and not was_paid:
         await activate_invitation(payment)
+        if payment.get("order_type") == "reseller":
+            now = datetime.now(timezone.utc).isoformat()
+            order = await db.reseller_orders.find_one({"payment_id": payment["id"]}, {"_id": 0})
+            if order:
+                await db.reseller_orders.update_one(
+                    {"payment_id": payment["id"]},
+                    {"$set": {"status": "paid", "paid_at": now, "updated_at": now}},
+                )
+                await db.reseller_commissions.create_index("payment_id", unique=True)
+                commission = {
+                    "id": str(uuid.uuid4()),
+                    "payment_id": payment["id"],
+                    "order_id": order["order_id"],
+                    "owner_id": order["owner_id"],
+                    "reseller_id": order["reseller_id"],
+                    "customer_id": order["customer_id"],
+                    "base_amount": order["base_price"],
+                    "selling_amount": order["selling_price"],
+                    "commission_percent": order["commission_percent"],
+                    "amount": order["commission_amount"],
+                    "status": "payable",
+                    "created_at": now,
+                }
+                try:
+                    await db.reseller_commissions.insert_one(commission)
+                except DuplicateKeyError:
+                    pass
+
+
+def public_reseller_commission(commission: dict):
+    return {
+        "id": commission["id"],
+        "order_id": commission["order_id"],
+        "reseller_id": commission["reseller_id"],
+        "reseller_name": commission.get("reseller_name", ""),
+        "customer_name": commission.get("customer_name", ""),
+        "amount": commission["amount"],
+        "commission_percent": commission["commission_percent"],
+        "status": commission["status"],
+        "created_at": commission["created_at"],
+        "paid_at": commission.get("paid_at"),
+    }
 
 
 def public_payment(payment):
@@ -502,12 +710,12 @@ async def create_mayar_invoice(payment, user, mobile):
             "name": user["full_name"],
             "email": user["email"],
             "mobile": mobile,
-            "description": f"Undangan.id {payment['plan_name']} · {payment['order_id']}",
+            "description": f"Nuansa Invite {payment['plan_name']} · {payment['order_id']}",
             "expiredAt": (now + timedelta(hours=24)).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             "items": [{
                 "quantity": 1,
                 "rate": payment["amount"],
-                "description": f"Paket {payment['plan_name']} - Undangan.id",
+                "description": f"Paket {payment['plan_name']} - Nuansa Invite",
             }],
             "extraData": {
                 "noCustomer": payment["id"],
@@ -600,7 +808,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(b
 
 @api_router.get("/")
 async def root():
-    return {"message": "Undangan.id API is running"}
+    return {"message": "Nuansa Invite API is running"}
 
 
 @api_router.post("/admin/login")
@@ -643,6 +851,33 @@ async def get_admin_billing_config(_admin=Depends(require_admin)):
 @api_router.put("/admin/billing/config")
 async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depends(require_admin)):
     config = payload.model_dump()
+    config["schema_version"] = 3
+    previous_config = await get_billing_config()
+    previous_plans = {plan["id"]: plan for plan in previous_config["plans"]}
+    default_plans = {plan["id"]: plan for plan in DEFAULT_BILLING_CONFIG["plans"]}
+    entitlement_fields = (
+        "bulk_upload_enabled",
+        "max_recipients",
+        "reseller_enabled",
+        "max_resellers",
+        "max_reseller_customers",
+        "reseller_max_markup_percent",
+        "reseller_commission_percent",
+    )
+    for incoming_plan, plan in zip(payload.plans, config["plans"]):
+        previous_plan = previous_plans.get(plan["id"])
+        default_plan = default_plans.get(plan["id"], {})
+        for field in entitlement_fields:
+            if field not in incoming_plan.model_fields_set:
+                plan[field] = (previous_plan or {}).get(field, default_plan.get(field, getattr(incoming_plan, field)))
+        if previous_plan is None:
+            continue
+        old_quota_feature = f"{previous_plan['max_invitations']} undangan aktif"
+        if old_quota_feature in plan["features"]:
+            plan["features"] = [
+                f"{plan['max_invitations']} undangan aktif" if feature == old_quota_feature else feature
+                for feature in plan["features"]
+            ]
     plan_ids = [plan["id"] for plan in config["plans"]]
     method_ids = [method["id"] for method in config["payment_methods"]]
     if len(plan_ids) != len(set(plan_ids)) or len(method_ids) != len(set(method_ids)):
@@ -656,6 +891,16 @@ async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depen
         {"$set": config},
         upsert=True,
     )
+    await write_audit_log(_admin, "billing.config.updated", "billing_config", "billing", {
+        "plans": [{
+            "id": plan["id"],
+            "price": plan["price"],
+            "duration_days": plan["duration_days"],
+            "max_invitations": plan["max_invitations"],
+            "reseller_enabled": plan["reseller_enabled"],
+            "reseller_commission_percent": plan["reseller_commission_percent"],
+        } for plan in config["plans"]],
+    })
     return {**config, "gateway_ready": bool(os.environ.get("MAYAR_API_KEY"))}
 
 
@@ -744,15 +989,15 @@ async def create_demo_account(payload: DemoAccountCreate, _admin=Depends(require
     if plan is None:
         raise HTTPException(status_code=422, detail="Paket demo tidak tersedia.")
     selected_combination = None
-    if plan["id"] == "business":
+    if plan.get("reseller_enabled"):
         selected_combination = next(
             (item for item in config["affiliate_combinations"] if item["id"] == payload.combination_id),
             None,
         )
         if selected_combination is None:
-            raise HTTPException(status_code=422, detail="Pilih kombinasi kuota affiliate untuk demo Business.")
+            raise HTTPException(status_code=422, detail="Pilih kombinasi kuota reseller untuk paket demo ini.")
     elif payload.combination_id:
-        raise HTTPException(status_code=422, detail="Kombinasi affiliate hanya tersedia untuk demo Business.")
+        raise HTTPException(status_code=422, detail="Kombinasi reseller hanya tersedia pada paket yang mengaktifkan reseller.")
 
     email = str(payload.email).lower()
     await db.users.create_index("email", unique=True)
@@ -926,7 +1171,8 @@ async def update_dashboard_admin(manager_id: str, payload: AffiliateUpdate, curr
 
 @api_router.get("/affiliate-program")
 async def get_affiliate_program(current_user=Depends(get_current_user)):
-    if not await require_business_owner(current_user):
+    entitlements = await active_reseller_entitlements(current_user)
+    if not entitlements:
         return {"eligible": False, "program": None, "affiliates": []}
     config = await get_billing_config()
     program = await db.affiliate_programs.find_one({"owner_id": current_user["id"]}, {"_id": 0})
@@ -950,13 +1196,19 @@ async def get_affiliate_program(current_user=Depends(get_current_user)):
             "premium_used": await db.invitations.count_documents({"affiliate_id": affiliate["id"], "plan_id": "premium"}),
             "invitation_count": affiliate_invitations,
         })
-    return {"eligible": True, "program": program, "combinations": combinations, "affiliates": affiliates}
+    return {
+        "eligible": True,
+        "max_resellers": max(item.get("max_resellers", 0) for item in entitlements),
+        "program": program,
+        "combinations": combinations,
+        "affiliates": affiliates,
+    }
 
 
 @api_router.put("/affiliate-program")
 async def select_affiliate_combination(payload: AffiliateProgramUpdate, current_user=Depends(get_current_user)):
     if not await require_business_owner(current_user):
-        raise HTTPException(status_code=403, detail="Program affiliate hanya tersedia untuk pemilik paket Business yang aktif.")
+        raise HTTPException(status_code=403, detail="Program reseller tidak tersedia pada paket aktif.")
     config = await get_billing_config()
     combination = next((item for item in config["affiliate_combinations"] if item["id"] == payload.combination_id), None)
     if combination is None:
@@ -1001,8 +1253,12 @@ async def select_affiliate_combination(payload: AffiliateProgramUpdate, current_
 
 @api_router.post("/affiliates")
 async def create_affiliate(payload: AffiliateCreate, current_user=Depends(get_current_user)):
-    if not await require_business_owner(current_user):
-        raise HTTPException(status_code=403, detail="Affiliate hanya tersedia untuk pemilik paket Business yang aktif.")
+    entitlements = await active_reseller_entitlements(current_user)
+    if not entitlements:
+        raise HTTPException(status_code=403, detail="Fitur reseller tidak tersedia pada paket aktif.")
+    max_resellers = max(item.get("max_resellers", 0) for item in entitlements)
+    if max_resellers < 1:
+        raise HTTPException(status_code=409, detail="Batas akun reseller untuk paket aktif adalah nol.")
     config = await get_billing_config()
     program = await db.affiliate_programs.find_one({"owner_id": current_user["id"]}, {"_id": 0})
     combination = (program or {}).get("combination") or next(
@@ -1015,6 +1271,8 @@ async def create_affiliate(payload: AffiliateCreate, current_user=Depends(get_cu
         {"owner_id": current_user["id"], "role": "affiliate"},
         {"_id": 0, "basic_quota": 1, "premium_quota": 1},
     ).to_list(length=500)
+    if len(affiliates) >= max_resellers:
+        raise HTTPException(status_code=409, detail="Batas akun reseller paket aktif sudah tercapai.")
     if sum(item.get("basic_quota", 0) for item in affiliates) + payload.basic_quota > combination["basic"]:
         raise HTTPException(status_code=409, detail="Kuota Basic affiliate melebihi batas kombinasi Business.")
     if sum(item.get("premium_quota", 0) for item in affiliates) + payload.premium_quota > combination["premium"]:
@@ -1054,7 +1312,7 @@ async def create_affiliate(payload: AffiliateCreate, current_user=Depends(get_cu
 @api_router.patch("/affiliates/{affiliate_id}")
 async def update_affiliate(affiliate_id: str, payload: AffiliateUpdate, current_user=Depends(get_current_user)):
     if not await require_business_owner(current_user):
-        raise HTTPException(status_code=403, detail="Hanya pemilik paket Business yang dapat mengelola affiliate.")
+        raise HTTPException(status_code=403, detail="Pengelolaan reseller tidak tersedia pada paket aktif.")
     updates = payload.model_dump(exclude_unset=True)
     affiliate = await db.users.find_one(
         {"id": affiliate_id, "owner_id": current_user["id"], "role": "affiliate"},
@@ -1088,6 +1346,223 @@ async def update_affiliate(affiliate_id: str, payload: AffiliateUpdate, current_
     await db.users.update_one({"id": affiliate_id}, {"$set": updates})
     updated = await db.users.find_one({"id": affiliate_id}, {"_id": 0, "password_hash": 0})
     return dashboard_account_view(updated) | {key: updated.get(key) for key in ("basic_quota", "premium_quota")}
+
+
+async def require_reseller_seller(user: dict):
+    if user.get("role") != "affiliate" or not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Fitur penjualan hanya tersedia untuk akun reseller aktif.")
+    owner = await db.users.find_one({"id": user.get("owner_id")}, {"_id": 0, "password_hash": 0})
+    if owner is None:
+        raise HTTPException(status_code=403, detail="Akun pemilik reseller tidak ditemukan.")
+    entitlements = await active_reseller_entitlements(owner)
+    if not entitlements:
+        raise HTTPException(status_code=403, detail="Hak reseller pemilik tidak aktif.")
+    return owner, entitlements
+
+
+def reseller_order_public(order: dict):
+    return {
+        "id": order["id"],
+        "order_id": order["order_id"],
+        "customer_name": order["customer_name"],
+        "customer_email": order["customer_email"],
+        "customer_phone": order["customer_phone"],
+        "plan_id": order["plan_id"],
+        "plan_name": order["plan_name"],
+        "base_price": order["base_price"],
+        "selling_price": order["selling_price"],
+        "commission_amount": order["commission_amount"],
+        "commission_percent": order["commission_percent"],
+        "status": order["status"],
+        "redirect_url": order.get("redirect_url"),
+        "created_at": order["created_at"],
+        "paid_at": order.get("paid_at"),
+    }
+
+
+@api_router.get("/reseller/dashboard")
+async def get_reseller_dashboard(current_user=Depends(get_current_user)):
+    _, entitlements = await require_reseller_seller(current_user)
+    orders = await db.reseller_orders.find(
+        {"reseller_id": current_user["id"]},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(length=500)
+    customers = await db.reseller_customers.find(
+        {"reseller_id": current_user["id"]},
+        {"_id": 0, "reseller_id": 0},
+    ).sort("created_at", -1).to_list(length=500)
+    commissions = await db.reseller_commissions.find(
+        {"reseller_id": current_user["id"]},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(length=500)
+    return {
+        "customers": customers,
+        "orders": [reseller_order_public(order) for order in orders],
+        "commissions": commissions,
+        "max_customers": max(item.get("max_reseller_customers", 0) for item in entitlements),
+        "max_markup_percent": max(item.get("reseller_max_markup_percent", 0) for item in entitlements),
+        "commission_percent": max(item.get("reseller_commission_percent", 0) for item in entitlements),
+        "sales_enabled": any(item.get("max_reseller_customers", 0) > 0 for item in entitlements),
+    }
+
+
+@api_router.post("/reseller/orders")
+async def create_reseller_order(payload: ResellerOrderCreate, current_user=Depends(get_current_user)):
+    owner, entitlements = await require_reseller_seller(current_user)
+    if not any(item.get("max_reseller_customers", 0) > 0 for item in entitlements):
+        raise HTTPException(status_code=403, detail="Penjualan kepada pelanggan belum diaktifkan pada paket pemilik.")
+    billing = await get_billing_config()
+    plan = next(
+        (item for item in billing["plans"] if item["id"] == payload.plan_id and item.get("enabled", True)),
+        None,
+    )
+    if plan is None:
+        raise HTTPException(status_code=422, detail="Paket yang ditawarkan tidak tersedia.")
+    used_quota = await db.invitations.count_documents({"affiliate_id": current_user["id"], "plan_id": plan["id"]})
+    quota = int(current_user.get(f"{plan['id']}_quota", 0))
+    if used_quota >= quota:
+        raise HTTPException(status_code=409, detail=f"Kuota paket {plan['name']} reseller sudah habis.")
+    max_customers = max(item.get("max_reseller_customers", 0) for item in entitlements)
+    customer_email = str(payload.customer_email).lower()
+    customer = await db.reseller_customers.find_one(
+        {"reseller_id": current_user["id"], "email": customer_email},
+        {"_id": 0},
+    )
+    if customer is None:
+        customer_count = await db.reseller_customers.count_documents({"reseller_id": current_user["id"]})
+        if customer_count >= max_customers:
+            raise HTTPException(status_code=409, detail="Batas pelanggan reseller pada paket aktif sudah tercapai.")
+
+    max_markup_percent = max(item.get("reseller_max_markup_percent", 0) for item in entitlements)
+    commission_percent = max(item.get("reseller_commission_percent", 0) for item in entitlements)
+    max_price = int(plan["price"] * (100 + max_markup_percent) / 100)
+    if not plan["price"] <= payload.selling_price <= max_price:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Harga jual harus di antara Rp {plan['price']:,} dan Rp {max_price:,}.",
+        )
+    if not os.environ.get("MAYAR_API_KEY"):
+        raise HTTPException(status_code=503, detail="Checkout penjualan reseller belum tersedia: konfigurasi Mayar belum lengkap.")
+    if not any(method.get("provider") == "mayar" and method.get("enabled") for method in billing["payment_methods"]):
+        raise HTTPException(status_code=503, detail="Checkout Mayar sedang dinonaktifkan oleh Super Admin.")
+
+    order_id = f"RS-{uuid.uuid4().hex[:18].upper()}"
+    payment_id = str(uuid.uuid4())
+    reseller_order_id = str(uuid.uuid4())
+    invitation_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    phone_digits = re.sub(r"\D", "", payload.customer_phone)
+    if phone_digits.startswith("00"):
+        phone_digits = phone_digits[2:]
+    elif phone_digits.startswith("0"):
+        phone_digits = f"62{phone_digits[1:]}"
+    elif phone_digits.startswith("8"):
+        phone_digits = f"62{phone_digits}"
+    if not 8 <= len(phone_digits) <= 15:
+        raise HTTPException(status_code=422, detail="Nomor WhatsApp pelanggan tidak valid.")
+
+    payment = {
+        "id": payment_id,
+        "order_id": order_id,
+        "owner_id": current_user["id"],
+        "sales_owner_id": owner["id"],
+        "affiliate_id": current_user["id"],
+        "invitation_id": invitation_id,
+        "plan_id": plan["id"],
+        "plan_name": plan["name"],
+        "duration_days": plan["duration_days"],
+        "amount": payload.selling_price,
+        "base_amount": plan["price"],
+        "payment_method": "Mayar checkout reseller",
+        "provider": "mayar",
+        "order_type": "reseller",
+        "reseller_order_id": reseller_order_id,
+        "status": "pending",
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(hours=24)).isoformat(),
+    }
+    invitation = {
+        "id": invitation_id,
+        "owner_id": owner["id"],
+        "sales_owner_id": owner["id"],
+        "created_by": current_user["id"],
+        "affiliate_id": current_user["id"],
+        "customer_email": customer_email,
+        "customer_name": payload.customer_name.strip(),
+        "plan_id": plan["id"],
+        "title": f"Undangan {payload.customer_name.strip()}",
+        "slug": slugify(f"{payload.customer_name}-{uuid.uuid4().hex[:7]}"),
+        "content": {},
+        "status": "draft",
+        "payment_id": payment_id,
+        "pending_payment_id": payment_id,
+        "package_entitlements": package_entitlements(plan),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    redirect_url = await create_mayar_invoice(
+        payment,
+        {"full_name": payload.customer_name.strip(), "email": customer_email},
+        f"+{phone_digits}",
+    )
+    payment["redirect_url"] = redirect_url
+    order = {
+        "id": reseller_order_id,
+        "order_id": order_id,
+        "payment_id": payment_id,
+        "owner_id": owner["id"],
+        "reseller_id": current_user["id"],
+        "customer_id": customer["id"] if customer else str(uuid.uuid4()),
+        "customer_name": payload.customer_name.strip(),
+        "customer_email": customer_email,
+        "customer_phone": f"+{phone_digits}",
+        "invitation_id": invitation_id,
+        "plan_id": plan["id"],
+        "plan_name": plan["name"],
+        "base_price": plan["price"],
+        "selling_price": payload.selling_price,
+        "markup_percent": max_markup_percent,
+        "commission_percent": commission_percent,
+        "commission_amount": int(plan["price"] * commission_percent / 100),
+        "duration_days": plan["duration_days"],
+        "status": "pending",
+        "redirect_url": redirect_url,
+        "created_at": now.isoformat(),
+    }
+    await db.invitations.create_index("slug", unique=True)
+    await db.reseller_customers.create_index([("reseller_id", 1), ("email", 1)], unique=True)
+    await db.reseller_orders.create_index("order_id", unique=True)
+    await db.reseller_commissions.create_index("payment_id", unique=True)
+    if customer is None:
+        customer = {
+            "id": order["customer_id"],
+            "owner_id": owner["id"],
+            "reseller_id": current_user["id"],
+            "full_name": order["customer_name"],
+            "email": customer_email,
+            "phone": order["customer_phone"],
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        try:
+            await db.reseller_customers.insert_one(customer)
+        except DuplicateKeyError:
+            customer = await db.reseller_customers.find_one(
+                {"reseller_id": current_user["id"], "email": customer_email},
+                {"_id": 0},
+            )
+            if customer is None:
+                raise
+            order["customer_id"] = customer["id"]
+    await db.invitations.insert_one(invitation)
+    await db.payment_orders.insert_one(payment)
+    await db.reseller_orders.insert_one(order)
+    await write_audit_log(current_user, "reseller.order.created", "reseller_order", reseller_order_id, {
+        "order_id": order_id,
+        "plan_id": plan["id"],
+        "selling_price": payload.selling_price,
+    })
+    return reseller_order_public(order)
 
 
 @api_router.get("/public/advertisements")
@@ -1138,7 +1613,7 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
         owner_id = current_user.get("owner_id")
         owner = await db.users.find_one({"id": owner_id}, {"_id": 0, "password_hash": 0}) if owner_id else None
         if owner is None or not await require_business_owner(owner):
-            raise HTTPException(status_code=403, detail="Paket Business pemilik affiliate tidak aktif.")
+            raise HTTPException(status_code=403, detail="Paket reseller pemilik akun tidak aktif.")
         if owner.get("is_demo"):
             demo_owner = owner
         if payload.plan_id not in {"basic", "premium"}:
@@ -1175,6 +1650,7 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
         "slug": slug,
         "content": payload.content,
         "status": "active" if has_test_access or demo_owner else "draft",
+        **({"package_entitlements": package_entitlements(plan)} if has_test_access or demo_owner else {}),
         "payment_id": None,
         "active_until": demo_owner.get("demo_until") if demo_owner else current_user.get("test_access_until") if has_test_access else None,
         "is_demo": bool(demo_owner),
@@ -1357,6 +1833,69 @@ async def create_public_guestbook(slug: str, payload: GuestbookEntryCreate):
     return public_guestbook_entry(entry)
 
 
+def public_testimonial_entry(entry):
+    return {
+        "id": entry["id"],
+        "name": entry["name"],
+        "event": entry["event"],
+        "message": entry["message"],
+        "rating": entry["rating"],
+        "created_at": entry["created_at"],
+    }
+
+
+@api_router.get("/public/testimonials/{site}")
+async def list_public_testimonials(site: Literal["portal", "gibrig", "nunuy", "invitation"]):
+    entries = await db.testimonials.find(
+        {"site": site, "status": "visible"},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(length=100)
+    return [public_testimonial_entry(entry) for entry in entries]
+
+
+@api_router.post("/public/testimonials")
+async def create_public_testimonial(payload: PublicTestimonialCreate):
+    entry = {
+        "id": str(uuid.uuid4()),
+        **payload.model_dump(),
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.testimonials.insert_one(entry)
+    return {"id": entry["id"], "status": entry["status"]}
+
+
+@api_router.get("/admin/testimonials")
+async def list_admin_testimonials(
+    site: Literal["portal", "gibrig", "nunuy", "invitation"] | None = None,
+    _admin=Depends(require_admin),
+):
+    query = {"status": {"$in": ["pending", "visible"]}}
+    if site:
+        query["site"] = site
+    entries = await db.testimonials.find(query, {"_id": 0}).sort("created_at", -1).to_list(length=500)
+    return entries
+
+
+@api_router.patch("/admin/testimonials/{testimonial_id}")
+async def moderate_testimonial(
+    testimonial_id: str,
+    payload: TestimonialModeration,
+    _admin=Depends(require_admin),
+):
+    result = await db.testimonials.update_one(
+        {"id": testimonial_id},
+        {"$set": {"status": payload.status}},
+    )
+    if result.modified_count == 0:
+        entry = await db.testimonials.find_one({"id": testimonial_id}, {"_id": 0, "status": 1})
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Testimoni tidak ditemukan.")
+        if entry.get("status") != payload.status:
+            raise HTTPException(status_code=409, detail="Status testimoni tidak dapat diperbarui.")
+    return {"id": testimonial_id, "status": payload.status}
+
+
 def public_invitation_ticket(ticket, invitation):
     content = invitation.get("content", {})
     return {
@@ -1395,8 +1934,14 @@ async def create_invitation_tickets(
     invitation = await get_dashboard_invitation(invitation_id, current_user)
     if invitation.get("status") != "published" or datetime.fromisoformat(invitation["active_until"]) <= datetime.now(timezone.utc):
         raise HTTPException(status_code=409, detail="Publish undangan yang masih aktif sebelum membuat tiket barcode.")
-    if invitation.get("plan_id") == "basic" and len(payload.recipients) > 1:
-        raise HTTPException(status_code=403, detail="Paket Basic hanya dapat membuat satu tiket penerima per permintaan.")
+    entitlements = invitation_entitlements(invitation)
+    if not entitlements["bulk_upload_enabled"] and len(payload.recipients) > 1:
+        raise HTTPException(status_code=403, detail="Paket ini tidak mengaktifkan upload massal; buat satu tiket penerima per permintaan.")
+    if len(payload.recipients) > entitlements["max_recipients"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Paket ini membatasi maksimal {entitlements['max_recipients']} penerima per permintaan.",
+        )
 
     tickets_collection = db.invitation_tickets
     await tickets_collection.create_index([("token", 1)], unique=True)
@@ -1537,6 +2082,14 @@ async def create_invitation_payment(invitation_id: str, payload: PaymentCreate, 
     if current_user.get("is_demo"):
         raise HTTPException(status_code=403, detail="Akun demo tidak dapat membuat pembayaran.")
     invitation = await get_owned_invitation(invitation_id, current_user["id"])
+    lock_id, lock_token = await acquire_package_capacity_lock(current_user["id"], invitation["plan_id"])
+    try:
+        return await create_invitation_payment_locked(invitation_id, payload, current_user, invitation)
+    finally:
+        await release_package_capacity_lock(lock_id, lock_token)
+
+
+async def create_invitation_payment_locked(invitation_id: str, payload: PaymentCreate, current_user: dict, invitation: dict):
     config = await get_billing_config()
     plan = next((item for item in config["plans"] if item["id"] == invitation["plan_id"] and item.get("enabled", True)), None)
     method = next((item for item in config["payment_methods"] if item["id"] == payload.payment_method_id and item.get("enabled", True)), None)
@@ -1587,6 +2140,7 @@ async def create_invitation_payment(invitation_id: str, payload: PaymentCreate, 
         "plan_id": plan["id"],
         "plan_name": plan["name"],
         "duration_days": plan["duration_days"],
+        "package_entitlements": package_entitlements(plan),
         "amount": plan["price"],
         "payment_method": method["name"],
         "provider": method["provider"],
@@ -1737,6 +2291,11 @@ async def admin_update_activation(invitation_id: str, payload: AdminActivationUp
     updates = {"status": payload.status, "updated_at": datetime.now(timezone.utc).isoformat()}
     if active_until is not None:
         updates["active_until"] = active_until.astimezone(timezone.utc).isoformat()
+    if payload.status in {"active", "published"} and not invitation.get("payment_id"):
+        config = await get_billing_config()
+        plan = next((item for item in config["plans"] if item["id"] == invitation.get("plan_id")), None)
+        if plan:
+            updates["package_entitlements"] = package_entitlements(plan)
     await db.invitations.update_one({"id": invitation_id}, {"$set": updates})
     return await db.invitations.find_one({"id": invitation_id}, {"_id": 0})
 
@@ -1753,6 +2312,70 @@ async def list_admin_payments(_admin=Depends(require_admin)):
     } for payment in payments]
 
 
+@api_router.get("/admin/reseller/orders")
+async def list_admin_reseller_orders(_admin=Depends(require_admin)):
+    orders = await db.reseller_orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(length=1000)
+    return orders
+
+
+@api_router.get("/admin/reseller/commissions")
+async def list_admin_reseller_commissions(_admin=Depends(require_admin)):
+    commissions = await db.reseller_commissions.find({}, {"_id": 0}).sort("created_at", -1).to_list(length=1000)
+    results = []
+    for commission in commissions:
+        reseller = await db.users.find_one(
+            {"id": commission["reseller_id"]},
+            {"_id": 0, "full_name": 1, "email": 1},
+        )
+        order = await db.reseller_orders.find_one({"payment_id": commission["payment_id"]}, {"_id": 0})
+        results.append(public_reseller_commission(commission) | {
+            "reseller_name": reseller.get("full_name", "Reseller tidak tersedia") if reseller else "Reseller tidak tersedia",
+            "reseller_email": reseller.get("email", "") if reseller else "",
+            "customer_name": order.get("customer_name", "") if order else "",
+            "selling_amount": commission["selling_amount"],
+            "base_amount": commission["base_amount"],
+            "payout_reference": commission.get("payout_reference"),
+        })
+    return results
+
+
+@api_router.post("/admin/reseller/commissions/{commission_id}/payout")
+async def mark_reseller_commission_paid(
+    commission_id: str,
+    payload: CommissionPayoutUpdate,
+    _admin=Depends(require_admin),
+):
+    now = datetime.now(timezone.utc).isoformat()
+    commission = await db.reseller_commissions.find_one(
+        {"id": commission_id, "status": "payable"},
+        {"_id": 0},
+    )
+    if commission is None:
+        raise HTTPException(status_code=404, detail="Komisi yang belum dibayar tidak ditemukan.")
+    result = await db.reseller_commissions.update_one(
+        {"id": commission_id, "status": "payable"},
+        {"$set": {
+            "status": "paid",
+            "payout_reference": payload.payout_reference,
+            "paid_at": now,
+            "paid_by": _admin["email"],
+        }},
+    )
+    if not result.modified_count:
+        raise HTTPException(status_code=409, detail="Status komisi sudah berubah. Muat ulang daftar komisi.")
+    await write_audit_log(_admin, "reseller.commission.paid", "reseller_commission", commission_id, {
+        "order_id": commission["order_id"],
+        "amount": commission["amount"],
+        "payout_reference": payload.payout_reference,
+    })
+    return {"status": "paid", "payout_reference": payload.payout_reference}
+
+
+@api_router.get("/admin/audit-logs")
+async def list_admin_audit_logs(_admin=Depends(require_admin)):
+    return await db.audit_logs.find({}, {"_id": 0}).sort("created_at", -1).to_list(length=500)
+
+
 @api_router.post("/admin/payments/{payment_id}/approve")
 async def approve_manual_payment(payment_id: str, _admin=Depends(require_admin)):
     payment = await db.payment_orders.find_one({"id": payment_id, "provider": "manual"}, {"_id": 0})
@@ -1764,6 +2387,7 @@ async def approve_manual_payment(payment_id: str, _admin=Depends(require_admin))
     if not payment.get("transfer_reference"):
         raise HTTPException(status_code=422, detail="Minta referensi transfer sebelum menyetujui pembayaran.")
     await set_payment_status(payment, "paid", "admin_approved")
+    await write_audit_log(_admin, "payment.manually_approved", "payment", payment_id, {"order_id": payment["order_id"]})
     return {"status": "paid"}
 
 

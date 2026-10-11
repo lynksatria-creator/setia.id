@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../context/AuthContext';
-import { billingApi, dashboardManagementApi, guestbookApi, invitationsApi, paymentsApi } from '../lib/api';
+import { billingApi, dashboardManagementApi, guestbookApi, invitationsApi, paymentsApi, resellerApi } from '../lib/api';
 import GuestbookScanner from '../components/GuestbookScanner';
 import PublicInvitation from './PublicInvitation';
 import { createOwnerGuestbookUrl } from '../lib/ownerGuestbookUrl';
@@ -18,6 +18,14 @@ const emptyForm = {
   custom_primary: '#294b3e',
   custom_accent: '#995c49',
   custom_background: '#f8f5ee',
+  frame_style: '',
+  animation_preset: '',
+  cover_position_x: 50,
+  cover_position_y: 50,
+  cover_zoom: 100,
+  gallery_position_x: 50,
+  gallery_position_y: 50,
+  gallery_zoom: 100,
   couple_names: '',
   honoree_name: '',
   groom_parents: '',
@@ -164,6 +172,17 @@ const buildWhatsAppUrl = (phone, message, invitationUrl, ticketUrl) => {
   return `https://wa.me/${digits}?text=${encodeURIComponent(`${message.trim()}\n${invitationUrl}\n\nTiket barcode masuk: ${ticketUrl}`)}`;
 };
 const buildTicketUrl = (ticketToken) => `${window.location.origin}/undangan-ticket/${encodeURIComponent(ticketToken)}`;
+const getPackageEntitlements = (invitation, plan) => {
+  const bulkUploadEnabled = invitation.package_entitlements?.bulk_upload_enabled
+    ?? plan?.bulk_upload_enabled
+    ?? ['premium', 'business'].includes(plan?.id);
+  return {
+    bulkUploadEnabled,
+    maxRecipients: invitation.package_entitlements?.max_recipients
+      ?? plan?.max_recipients
+      ?? (bulkUploadEnabled ? 1000 : 1),
+  };
+};
 const personalizeWhatsAppMessage = (message, name) => {
   const recipientName = name.trim();
   if (!recipientName) return '';
@@ -313,6 +332,9 @@ export default function Dashboard({ onSignIn }) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [recipientNames, setRecipientNames] = useState({});
+  const [recipientPhones, setRecipientPhones] = useState({});
+  const [personalizedTickets, setPersonalizedTickets] = useState({});
+  const [preparingPersonalizedTicketId, setPreparingPersonalizedTicketId] = useState('');
   const [qrInvitationId, setQrInvitationId] = useState('');
   const openedGuestbookSlug = useRef('');
   const autoOpenedScanInvitationId = useRef('');
@@ -320,6 +342,13 @@ export default function Dashboard({ onSignIn }) {
   const [affiliateProgram, setAffiliateProgram] = useState({ eligible: false, program: null, combinations: [], affiliates: [] });
   const [selectedAffiliateCombination, setSelectedAffiliateCombination] = useState('');
   const [affiliateQuotaEdits, setAffiliateQuotaEdits] = useState({});
+  const [resellerDashboard, setResellerDashboard] = useState({
+    customers: [], orders: [], commissions: [], max_customers: 0, max_markup_percent: 0, commission_percent: 0,
+  });
+  const [resellerOrderForm, setResellerOrderForm] = useState({
+    customer_name: '', customer_email: '', customer_phone: '', plan_id: 'basic', selling_price: '',
+  });
+  const [resellerCheckout, setResellerCheckout] = useState(null);
   const [dashboardAdminForm, setDashboardAdminForm] = useState({ full_name: '', email: '', password: '' });
   const [affiliateForm, setAffiliateForm] = useState({
     full_name: '', email: '', password: '', basic_quota: 0, premium_quota: 0,
@@ -357,6 +386,11 @@ export default function Dashboard({ onSignIn }) {
           setAffiliateProgram(affiliateResult);
           setSelectedAffiliateCombination(affiliateResult.program?.combination_id || '');
         })
+        .catch((requestError) => { if (active) setError(requestError.message); });
+    }
+    if (user?.role === 'affiliate') {
+      resellerApi.dashboard(token)
+        .then((result) => { if (active) setResellerDashboard(result); })
         .catch((requestError) => { if (active) setError(requestError.message); });
     }
     return () => { active = false; };
@@ -528,6 +562,31 @@ export default function Dashboard({ onSignIn }) {
     }
   };
 
+  const createResellerOrder = async (event) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    setResellerCheckout(null);
+    const selectedPlan = billing.plans.find((plan) => plan.id === resellerOrderForm.plan_id);
+    if (!selectedPlan) {
+      setError('Paket yang ditawarkan tidak tersedia.');
+      return;
+    }
+    try {
+      const order = await resellerApi.createOrder(token, {
+        ...resellerOrderForm,
+        selling_price: Number(resellerOrderForm.selling_price || selectedPlan.price),
+      });
+      setResellerCheckout(order);
+      const refreshed = await resellerApi.dashboard(token);
+      setResellerDashboard(refreshed);
+      setResellerOrderForm({ customer_name: '', customer_email: '', customer_phone: '', plan_id: 'basic', selling_price: '' });
+      setMessage(`Pesanan ${order.order_id} dibuat. Pembeliannya hanya tercatat setelah pembayaran terverifikasi.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
   const resetForm = () => {
     setEditingId(null);
     setSetupComplete(false);
@@ -566,6 +625,14 @@ export default function Dashboard({ onSignIn }) {
       groom_instagram: weddingEventTypes.includes(form.event_type) ? form.groom_instagram : '',
       bride_instagram: weddingEventTypes.includes(form.event_type) ? form.bride_instagram : '',
       cover_image: form.cover_image,
+      frame_style: form.frame_style,
+      animation_preset: form.animation_preset,
+      cover_position_x: form.cover_position_x,
+      cover_position_y: form.cover_position_y,
+      cover_zoom: form.cover_zoom,
+      gallery_position_x: form.gallery_position_x,
+      gallery_position_y: form.gallery_position_y,
+      gallery_zoom: form.gallery_zoom,
       event_date: form.event_date || '2026-12-12',
       event_time: form.event_time || '10:00',
       reception_date: form.reception_date,
@@ -597,7 +664,7 @@ export default function Dashboard({ onSignIn }) {
       return;
     }
     if (user.role === 'affiliate' && availablePlans.length === 0) {
-      setError('Kuota undangan affiliate sudah habis. Hubungi pemilik paket Business.');
+      setError('Kuota undangan reseller sudah habis. Hubungi pemilik paket.');
       return;
     }
     if (!setupGroup || !setupEventType || !setupTemplateId) {
@@ -630,6 +697,14 @@ export default function Dashboard({ onSignIn }) {
       custom_primary: content.custom_primary || '#294b3e',
       custom_accent: content.custom_accent || '#995c49',
       custom_background: content.custom_background || '#f8f5ee',
+      frame_style: content.frame_style || '',
+      animation_preset: content.animation_preset || '',
+      cover_position_x: Number.isFinite(Number(content.cover_position_x)) ? Number(content.cover_position_x) : 50,
+      cover_position_y: Number.isFinite(Number(content.cover_position_y)) ? Number(content.cover_position_y) : 50,
+      cover_zoom: Number.isFinite(Number(content.cover_zoom)) ? Number(content.cover_zoom) : 100,
+      gallery_position_x: Number.isFinite(Number(content.gallery_position_x)) ? Number(content.gallery_position_x) : 50,
+      gallery_position_y: Number.isFinite(Number(content.gallery_position_y)) ? Number(content.gallery_position_y) : 50,
+      gallery_zoom: Number.isFinite(Number(content.gallery_zoom)) ? Number(content.gallery_zoom) : 100,
       couple_names: content.couple_names || '',
       honoree_name: content.honoree_name || '',
       groom_parents: content.groom_parents || '',
@@ -811,6 +886,14 @@ export default function Dashboard({ onSignIn }) {
       groom_instagram: weddingEventTypes.includes(form.event_type) ? form.groom_instagram : '',
       bride_instagram: weddingEventTypes.includes(form.event_type) ? form.bride_instagram : '',
       cover_image: form.cover_image,
+      frame_style: form.frame_style,
+      animation_preset: form.animation_preset,
+      cover_position_x: Number(form.cover_position_x),
+      cover_position_y: Number(form.cover_position_y),
+      cover_zoom: Number(form.cover_zoom),
+      gallery_position_x: Number(form.gallery_position_x),
+      gallery_position_y: Number(form.gallery_position_y),
+      gallery_zoom: Number(form.gallery_zoom),
       couple_names: weddingEventTypes.includes(form.event_type) ? form.couple_names : '',
       event_date: form.event_date,
       event_time: form.event_time,
@@ -988,14 +1071,27 @@ export default function Dashboard({ onSignIn }) {
 
   const issueInvitationTickets = async (invitationId, recipients) => {
     setError('');
+    const invitation = invitations.find((item) => item.id === invitationId);
+    const plan = billing.plans.find((item) => item.id === invitation?.plan_id);
+    const { bulkUploadEnabled, maxRecipients } = getPackageEntitlements(invitation || {}, plan);
+    if (!bulkUploadEnabled && recipients.length > 1) {
+      setError('Paket ini tidak mengaktifkan upload massal dan hanya dapat membuat satu tiket per permintaan.');
+      return;
+    }
+    if (recipients.length > maxRecipients) {
+      setError(`Paket ini membatasi maksimal ${maxRecipients} penerima per bulk upload.`);
+      return;
+    }
     setIsPreparingTickets(true);
     try {
       const result = await guestbookApi.createTickets(token, invitationId, recipients);
       setWhatsAppQueue(result.tickets);
       setWhatsAppQueueIndex(0);
       setMessage(`${result.tickets.length} tiket barcode unik siap dibagikan.`);
+      return result.tickets;
     } catch (requestError) {
       setError(requestError.message);
+      return null;
     } finally {
       setIsPreparingTickets(false);
     }
@@ -1010,6 +1106,29 @@ export default function Dashboard({ onSignIn }) {
     await issueInvitationTickets(invitationId, [{ name: whatsAppName.trim(), phone }]);
   };
 
+  const preparePersonalizedInvitation = async (invitation) => {
+    const recipientName = (recipientNames[invitation.id] || '').trim();
+    const phone = normalizeWhatsAppPhone(recipientPhones[invitation.id] || '');
+    if (!recipientName || !phone) {
+      setError('Isi nama dan nomor WhatsApp tamu yang valid untuk membuat tiket QR unik.');
+      return;
+    }
+    setError('');
+    setMessage('');
+    setPreparingPersonalizedTicketId(invitation.id);
+    try {
+      const { tickets } = await guestbookApi.createTickets(token, invitation.id, [{ name: recipientName, phone }]);
+      const [ticket] = tickets;
+      if (!ticket?.token) throw new Error('Tiket QR tamu tidak berhasil dibuat. Silakan coba kembali.');
+      setPersonalizedTickets((current) => ({ ...current, [invitation.id]: ticket }));
+      setMessage(`Tiket QR unik untuk ${ticket.name} siap dibagikan.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setPreparingPersonalizedTicketId('');
+    }
+  };
+
   const handleTicketScan = async (scannedValue) => {
     setError('');
     setMessage('');
@@ -1022,7 +1141,7 @@ export default function Dashboard({ onSignIn }) {
       const ticketUrl = new URL(scannedValue, window.location.origin);
       const ticketPath = ticketUrl.pathname.match(/^\/undangan-ticket\/([A-Za-z0-9_-]{32,64})$/);
       if (!['http:', 'https:'].includes(ticketUrl.protocol) || !ticketPath) {
-        throw new Error('QR yang dipindai bukan tiket barcode Undangan.id.');
+        throw new Error('QR yang dipindai bukan tiket barcode Nuansa Invite.');
       }
       ticketToken = ticketPath[1];
       const result = await guestbookApi.checkInTicket(token, guestbookInvitation.id, ticketToken);
@@ -1094,24 +1213,22 @@ export default function Dashboard({ onSignIn }) {
         throw new Error(`Nama penerima wajib diisi pada baris ${rowList}${suffix}. Isi kolom nama_penerima lalu unggah kembali.`);
       }
       if (!recipients.length) throw new Error('File belum berisi nomor HP. Isi kolom nomor_hp lalu unggah kembali.');
+      const invitation = invitations.find((item) => item.id === whatsAppInvitationId);
+      const plan = billing.plans.find((item) => item.id === invitation?.plan_id);
+      const { maxRecipients } = getPackageEntitlements(invitation || {}, plan);
+      if (recipients.length > maxRecipients) {
+        throw new Error(`Paket ini membatasi maksimal ${maxRecipients} penerima per bulk upload.`);
+      }
       setWhatsAppRecipients(recipients.map(({ phone, name }) => `${phone} | ${name}`).join('\n'));
       setWhatsAppQueue([]);
       setWhatsAppQueueIndex(0);
-      const result = await guestbookApi.createTickets(token, whatsAppInvitationId, recipients);
-      setWhatsAppQueue(result.tickets);
-      setWhatsAppQueueIndex(0);
-      setMessage(`${result.tickets.length} tiket barcode unik berhasil dibuat dari file.`);
+      const tickets = await issueInvitationTickets(whatsAppInvitationId, recipients);
+      if (tickets) setMessage(`${tickets.length} tiket barcode unik berhasil dibuat dari file.`);
     } catch (requestError) {
       setError(requestError.message || 'File penerima tidak dapat dibaca.');
     } finally {
       setIsImportingRecipients(false);
     }
-  };
-
-  const recipientLink = (invitation, recipientName) => {
-    const url = new URL(`/i/${encodeURIComponent(invitation.slug)}`, window.location.origin);
-    if (recipientName.trim()) url.searchParams.set('to', recipientName.trim());
-    return url.toString();
   };
 
   const openGuestbook = async (invitation) => {
@@ -1201,7 +1318,7 @@ export default function Dashboard({ onSignIn }) {
   if (!user || !token) {
     return (
       <main className="account-page container account-locked">
-        <p className="eyebrow">Dashboard Undangan.id</p>
+        <p className="eyebrow">Dashboard Nuansa Invite</p>
         <h1>Masuk untuk mengelola undangan</h1>
         <button className="primary-btn" onClick={onSignIn}>Masuk / Daftar</button>
       </main>
@@ -1211,7 +1328,7 @@ export default function Dashboard({ onSignIn }) {
   return (
     <main className="account-page">
       <header className="account-topbar">
-        <a className="brand" href="/undangan"><span className="logo-mark">U</span>Undangan.id</a>
+        <a className="brand" href="/undangan"><span className="logo-mark">N</span>Nuansa Invite</a>
         <div><span>{user.full_name}</span><button onClick={() => { logout(); onSignIn(); }}>Keluar</button></div>
       </header>
       <div className={`account-layout container ${user.role !== 'user' ? 'account-layout-restricted' : ''}`}>
@@ -1292,27 +1409,76 @@ export default function Dashboard({ onSignIn }) {
             </section>
           ) : null}
 
+          {user.role === 'affiliate' ? (
+            <section className="account-panel affiliate-management-panel">
+              <div className="account-panel-heading">
+                <div><span className="eyebrow">Portal reseller</span><h2>Pelanggan, pesanan & komisi</h2></div>
+                <span className="status-label status-active">{resellerDashboard.customers.length}/{resellerDashboard.max_customers} pelanggan</span>
+              </div>
+              <p className="form-hint">
+                Harga jual mengikuti batas pemilik paket (maks. markup {resellerDashboard.max_markup_percent}%). Komisi {resellerDashboard.commission_percent}% dari harga dasar paket dicatat setelah pembayaran terverifikasi.
+              </p>
+              {!resellerDashboard.sales_enabled ? <p className="form-hint">Pembuatan pesanan pelanggan belum diaktifkan oleh pemilik paket.</p> : (
+                <form className="affiliate-create-form" onSubmit={createResellerOrder}>
+                  <h3>Buat pesanan pelanggan</h3>
+                  <label>Nama pelanggan<input required minLength={2} value={resellerOrderForm.customer_name} onChange={(event) => setResellerOrderForm({ ...resellerOrderForm, customer_name: event.target.value })} /></label>
+                  <label>Email pelanggan<input type="email" required value={resellerOrderForm.customer_email} onChange={(event) => setResellerOrderForm({ ...resellerOrderForm, customer_email: event.target.value })} /></label>
+                  <label>WhatsApp pelanggan<input type="tel" required value={resellerOrderForm.customer_phone} onChange={(event) => setResellerOrderForm({ ...resellerOrderForm, customer_phone: event.target.value })} /></label>
+                  <label>Paket undangan<select value={resellerOrderForm.plan_id} onChange={(event) => setResellerOrderForm({ ...resellerOrderForm, plan_id: event.target.value, selling_price: '' })}>
+                    {billing.plans.filter((plan) => ['basic', 'premium'].includes(plan.id) && plan.enabled !== false).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · Rp {Number(plan.price).toLocaleString('id-ID')} dasar</option>)}
+                  </select></label>
+                  <label>Harga jual pelanggan (Rp)<input type="number" required min="1" value={resellerOrderForm.selling_price} placeholder={String(billing.plans.find((plan) => plan.id === resellerOrderForm.plan_id)?.price || '')} onChange={(event) => setResellerOrderForm({ ...resellerOrderForm, selling_price: event.target.value })} /></label>
+                  <button className="primary-btn" disabled={!resellerDashboard.sales_enabled}>Buat pesanan & invoice</button>
+                </form>
+              )}
+              {resellerCheckout?.redirect_url ? <p className="account-message" role="status">Invoice pesanan {resellerCheckout.order_id} siap: <a href={resellerCheckout.redirect_url} target="_blank" rel="noreferrer">Buka checkout Mayar</a></p> : null}
+              <div className="affiliate-list">
+                <h3>Pesanan pelanggan</h3>
+                {resellerDashboard.orders.map((order) => <article className="managed-account-row" key={order.id}>
+                  <div><strong>{order.customer_name} · {order.plan_name}</strong><span>{order.order_id} · Rp {Number(order.selling_price).toLocaleString('id-ID')}</span><small>Komisi Rp {Number(order.commission_amount).toLocaleString('id-ID')} · {order.status}</small></div>
+                  {order.status === 'pending' && order.redirect_url ? <a className="secondary-btn" href={order.redirect_url} target="_blank" rel="noreferrer">Buka invoice</a> : null}
+                </article>)}
+                {!resellerDashboard.orders.length ? <p className="form-hint">Belum ada pesanan reseller.</p> : null}
+              </div>
+              <div className="affiliate-list">
+                <h3>Komisi terverifikasi</h3>
+                {resellerDashboard.commissions.map((commission) => <article className="managed-account-row" key={commission.id}>
+                  <div><strong>{commission.order_id}</strong><span>Rp {Number(commission.amount).toLocaleString('id-ID')} · {commission.commission_percent}%</span><small>{commission.status === 'paid' ? `Dibayar · ${commission.payout_reference || ''}` : 'Menunggu pembayaran komisi oleh Super Admin'}</small></div>
+                  <span className={`status-label ${commission.status === 'paid' ? 'status-active' : 'status-pending'}`}>{commission.status}</span>
+                </article>)}
+                {!resellerDashboard.commissions.length ? <p className="form-hint">Komisi muncul setelah pembayaran pelanggan diverifikasi.</p> : null}
+              </div>
+              <div className="affiliate-list">
+                <h3>Pelanggan terdaftar</h3>
+                {resellerDashboard.customers.map((customer) => <article className="managed-account-row" key={customer.id}>
+                  <div><strong>{customer.full_name}</strong><span>{customer.email} · {customer.phone}</span></div>
+                </article>)}
+                {!resellerDashboard.customers.length ? <p className="form-hint">Belum ada pelanggan.</p> : null}
+              </div>
+            </section>
+          ) : null}
+
           {user.role === 'user' && affiliateProgram.eligible ? (
             <section className="account-panel affiliate-management-panel buyer-dashboard-view" hidden={!showBuyerDashboard}>
-              <div className="account-panel-heading"><div><span className="eyebrow">Paket Business</span><h2>Kelola affiliate & iklan</h2></div><span className="status-label status-active">Penjualan milik Anda</span></div>
-              <p className="form-hint">Semua pesanan dari jaringan affiliate tercatat dan dibayar kepada pemilik paket Business. Alokasi paket untuk seluruh affiliate mengikuti satu kombinasi yang diatur Super Admin.</p>
+              <div className="account-panel-heading"><div><span className="eyebrow">Paket dengan fitur reseller</span><h2>Kelola reseller & iklan</h2></div><span className="status-label status-active">Akun {affiliateProgram.affiliates.length}/{affiliateProgram.max_resellers}</span></div>
+              <p className="form-hint">Atur kombinasi kuota undangan untuk jaringan reseller. Batas jumlah akun mengikuti konfigurasi paket dari Super Admin.</p>
               <div className="affiliate-program-controls">
-                <label>Kombinasi kuota affiliate<select value={selectedAffiliateCombination} disabled={Boolean(affiliateProgram.program?.combination_id)} onChange={(event) => setSelectedAffiliateCombination(event.target.value)}><option value="">Pilih kombinasi</option>{affiliateProgram.combinations.map((combination) => <option key={combination.id} value={combination.id}>{combination.name} · {combination.basic} Basic / {combination.premium} Premium</option>)}</select></label>
+                <label>Kombinasi kuota reseller<select value={selectedAffiliateCombination} disabled={Boolean(affiliateProgram.program?.combination_id)} onChange={(event) => setSelectedAffiliateCombination(event.target.value)}><option value="">Pilih kombinasi</option>{affiliateProgram.combinations.map((combination) => <option key={combination.id} value={combination.id}>{combination.name} · {combination.basic} Basic / {combination.premium} Premium</option>)}</select></label>
                 {affiliateProgram.program?.combination_id
                   ? <p className="form-hint affiliate-lock-warning">Kombinasi ini sudah dikunci dan tidak dapat diganti.</p>
-                  : <button className="secondary-btn" type="button" disabled={!selectedAffiliateCombination} onClick={saveAffiliateCombination}>Konfirmasi paket affiliate</button>}
+                  : <button className="secondary-btn" type="button" disabled={!selectedAffiliateCombination} onClick={saveAffiliateCombination}>Konfirmasi kuota reseller</button>}
               </div>
               {selectedAffiliateCombination ? (
                 <>
-                  <form className="affiliate-create-form" onSubmit={createAffiliate}>
-                    <h3>Daftarkan affiliate</h3>
+                  {affiliateProgram.affiliates.length < affiliateProgram.max_resellers ? <form className="affiliate-create-form" onSubmit={createAffiliate}>
+                    <h3>Daftarkan reseller</h3>
                     <label>Nama lengkap<input required minLength={2} value={affiliateForm.full_name} onChange={(event) => setAffiliateForm({ ...affiliateForm, full_name: event.target.value })} /></label>
                     <label>Email login<input type="email" required value={affiliateForm.email} onChange={(event) => setAffiliateForm({ ...affiliateForm, email: event.target.value })} /></label>
                     <label>Kata sandi awal<input type="password" minLength={8} required value={affiliateForm.password} onChange={(event) => setAffiliateForm({ ...affiliateForm, password: event.target.value })} /></label>
                     <label>Kuota Basic<input type="number" min="0" value={affiliateForm.basic_quota} onChange={(event) => setAffiliateForm({ ...affiliateForm, basic_quota: Number(event.target.value) })} /></label>
                     <label>Kuota Premium<input type="number" min="0" value={affiliateForm.premium_quota} onChange={(event) => setAffiliateForm({ ...affiliateForm, premium_quota: Number(event.target.value) })} /></label>
-                    <button className="primary-btn">Daftarkan affiliate</button>
-                  </form>
+                    <button className="primary-btn">Daftarkan reseller</button>
+                  </form> : <p className="form-hint">Batas {affiliateProgram.max_resellers} akun reseller pada paket aktif sudah tercapai.</p>}
                   <div className="affiliate-list">
                     {affiliateProgram.affiliates.map((affiliate) => (
                       <article className="managed-account-row affiliate-account-row" key={affiliate.id}>
@@ -1416,6 +1582,53 @@ export default function Dashboard({ onSignIn }) {
               <label>Alamat<textarea value={form.address} onChange={(event) => updateField('address', event.target.value)} rows={2} /></label>
               <label>Link Google Maps<input type="url" value={form.maps_url} onChange={(event) => updateField('maps_url', event.target.value)} placeholder="https://maps.google.com/..." /></label>
               <div className="media-upload-field"><label>Foto sampul<input type="file" accept="image/*" onChange={handleCoverUpload} /></label><label>Atau paste URL foto sampul<input type="url" value={form.cover_image.startsWith('data:') ? '' : form.cover_image} onChange={(event) => updateField('cover_image', event.target.value)} placeholder="https://..." /></label><small className="form-hint">Maksimal 5 MB untuk upload foto.</small></div>
+              <div className="account-panel template-display-controls">
+                <h3>Atur tampilan template</h3>
+                <div className="account-form-row">
+                  <label>Bingkai undangan
+                    <select value={form.frame_style} onChange={(event) => updateField('frame_style', event.target.value)}>
+                      <option value="">Ikuti bingkai template</option>
+                      <option value="ornate-gold">Ornamen gold</option><option value="black-corner">Sudut hitam gold</option>
+                      <option value="maroon">Maroon</option><option value="classic">Klasik</option><option value="ivory">Ivory</option>
+                      <option value="rose">Rose</option><option value="emerald">Emerald</option><option value="navy">Navy</option>
+                      <option value="botanical">Botanical</option><option value="floral">Floral</option><option value="minimal">Minimal</option>
+                      <option value="modern">Modern</option><option value="islamic">Islami</option><option value="traditional">Nusantara</option>
+                      <option value="playful">Playful</option><option value="soft">Lembut</option><option value="celebration">Perayaan</option>
+                      <option value="academic">Akademik</option><option value="heart">Hati</option><option value="geometric">Geometris</option>
+                      <option value="custom">Custom</option><option value="genz">Editorial</option><option value="regional">Regional</option>
+                    </select>
+                  </label>
+                  <label>Gaya animasi
+                    <select value={form.animation_preset} onChange={(event) => updateField('animation_preset', event.target.value)}>
+                      <option value="">Ikuti template</option><option value="none">Tanpa animasi</option>
+                      <option value="subtle">Lembut</option><option value="romantic">Romantis</option><option value="festive">Meriah</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="account-form-row">
+                  <label>Posisi foto sampul horizontal: {form.cover_position_x}%
+                    <input type="range" min="0" max="100" value={form.cover_position_x} onChange={(event) => updateField('cover_position_x', Number(event.target.value))} />
+                  </label>
+                  <label>Posisi foto sampul vertikal: {form.cover_position_y}%
+                    <input type="range" min="0" max="100" value={form.cover_position_y} onChange={(event) => updateField('cover_position_y', Number(event.target.value))} />
+                  </label>
+                </div>
+                <label>Zoom foto sampul: {form.cover_zoom}%
+                  <input type="range" min="100" max="160" value={form.cover_zoom} onChange={(event) => updateField('cover_zoom', Number(event.target.value))} />
+                </label>
+                <div className="account-form-row">
+                  <label>Posisi foto galeri horizontal: {form.gallery_position_x}%
+                    <input type="range" min="0" max="100" value={form.gallery_position_x} onChange={(event) => updateField('gallery_position_x', Number(event.target.value))} />
+                  </label>
+                  <label>Posisi foto galeri vertikal: {form.gallery_position_y}%
+                    <input type="range" min="0" max="100" value={form.gallery_position_y} onChange={(event) => updateField('gallery_position_y', Number(event.target.value))} />
+                  </label>
+                </div>
+                <label>Zoom foto galeri: {form.gallery_zoom}%
+                  <input type="range" min="100" max="160" value={form.gallery_zoom} onChange={(event) => updateField('gallery_zoom', Number(event.target.value))} />
+                </label>
+                <p className="form-hint">Perubahan langsung terlihat di pratinjau dan tersimpan saat undangan disimpan.</p>
+              </div>
               <label>Salam pembuka<textarea value={form.opening_text} onChange={(event) => updateField('opening_text', event.target.value)} rows={2} placeholder="Dengan penuh sukacita kami mengundang..." /></label>
               <label>{weddingEventTypes.includes(form.event_type) ? 'Cerita pasangan' : `Cerita ${form.event_type.toLowerCase()}`}<textarea value={form.story} onChange={(event) => updateField('story', event.target.value)} rows={4} placeholder={weddingEventTypes.includes(form.event_type) ? 'Tuliskan cerita pasangan...' : `Tuliskan cerita tentang ${form.event_type.toLowerCase()}...`} /></label>
               <div className="music-input-field">
@@ -1511,9 +1724,9 @@ export default function Dashboard({ onSignIn }) {
                   const plan = billing.plans.find((item) => item.id === invitation.plan_id);
                   const active = user.is_test_account || (['active', 'published'].includes(invitation.status) && new Date(invitation.active_until) > new Date());
                   const invitationUrl = `${window.location.origin}/i/${invitation.slug}`;
-                  const isPremiumPlan = plan?.id === 'premium';
-                  const isBusinessPlan = plan?.id === 'business';
-                  const isBasicPlan = plan?.id === 'basic';
+                  const { bulkUploadEnabled } = getPackageEntitlements(invitation, plan);
+                  const isSingleRecipientPlan = !bulkUploadEnabled;
+                  const maxRecipients = getPackageEntitlements(invitation, plan).maxRecipients;
                   const currentTicket = whatsAppQueue[whatsAppQueueIndex];
                   const recipientInvitationUrl = currentTicket
                     ? `${invitationUrl}?ticket=${encodeURIComponent(currentTicket.token)}`
@@ -1524,6 +1737,19 @@ export default function Dashboard({ onSignIn }) {
                     recipientInvitationUrl,
                     currentTicket ? buildTicketUrl(currentTicket.token) : '',
                   );
+                  const personalizedTicket = personalizedTickets[invitation.id];
+                  const personalizedTicketUrl = personalizedTicket ? buildTicketUrl(personalizedTicket.token) : '';
+                  const personalizedInvitationUrl = personalizedTicket
+                    ? `${invitationUrl}?ticket=${encodeURIComponent(personalizedTicket.token)}`
+                    : '';
+                  const personalizedWhatsAppUrl = personalizedTicket
+                    ? buildWhatsAppUrl(
+                      personalizedTicket.phone,
+                      personalizeWhatsAppMessage(`Dengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`, personalizedTicket.name),
+                      personalizedInvitationUrl,
+                      personalizedTicketUrl,
+                    )
+                    : '';
                   return (
                     <article className="account-invitation-card" key={invitation.id}>
                       <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p>{invitation.status === 'published' ? <p className="invitation-link-label">RSVP: {window.location.origin}/i/{invitation.slug}#rsvp</p> : null}</div>
@@ -1532,7 +1758,7 @@ export default function Dashboard({ onSignIn }) {
                         <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
                         {user.role === 'user' ? <button className="secondary-btn" onClick={() => editInvitation(invitation)}>Edit</button> : null}
                         {user.role === 'user' && active && invitation.status !== 'published' ? <button className="primary-btn" onClick={() => publishInvitation(invitation)}>Publish</button> : null}
-                        {user.role === 'user' && active && invitation.status === 'published' && (isBasicPlan || isPremiumPlan || isBusinessPlan) ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
+                        {user.role === 'user' && active && invitation.status === 'published' ? <button className="secondary-btn" onClick={() => { setWhatsAppInvitationId((current) => current === invitation.id ? null : invitation.id); setWhatsAppPhone(''); setWhatsAppName(''); setWhatsAppRecipients(''); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); setWhatsAppMessage(`Yth. {{nama}},\n\nDengan senang hati kami mengundang Anda ke acara ${invitation.title}. Silakan buka undangan kami:`); setError(''); setMessage(''); }}>Kirim via WhatsApp</button> : null}
                         {user.role === 'user' && !active ? <>
                           <label className="payment-method-select">Metode<select value={paymentMethodId} onChange={(event) => setPaymentMethodId(event.target.value)}>{billing.payment_methods.map((method) => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label>
                           {selectedPaymentMethod?.provider === 'mayar' ? <label className="payment-method-select">Nomor ponsel untuk invoice Mayar<input type="tel" inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" value={paymentMobile} onChange={(event) => setPaymentMobile(event.target.value)} /></label> : null}
@@ -1549,18 +1775,58 @@ export default function Dashboard({ onSignIn }) {
                               Nama calon tamu
                               <input
                                 value={recipientNames[invitation.id] || ''}
-                                onChange={(event) => setRecipientNames((current) => ({ ...current, [invitation.id]: event.target.value }))}
+                                onChange={(event) => {
+                                  setRecipientNames((current) => ({ ...current, [invitation.id]: event.target.value }));
+                                  setPersonalizedTickets((current) => {
+                                    const next = { ...current };
+                                    delete next[invitation.id];
+                                    return next;
+                                  });
+                                }}
                                 placeholder="Contoh: Bapak Andi sekeluarga"
                               />
                             </label>
-                            <a
-                              className="primary-btn"
-                              href={`https://wa.me/?text=${encodeURIComponent(`Dengan hormat, kami mengundang ${recipientNames[invitation.id]?.trim() || 'Bapak/Ibu/Saudara/i'} untuk hadir dalam acara kami. Undangan resmi: ${recipientLink(invitation, recipientNames[invitation.id] || '')}`)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              Kirim undangan resmi via WhatsApp
-                            </a>
+                            <label>
+                              Nomor WhatsApp calon tamu
+                              <input
+                                type="tel"
+                                inputMode="tel"
+                                autoComplete="tel"
+                                value={recipientPhones[invitation.id] || ''}
+                                onChange={(event) => {
+                                  setRecipientPhones((current) => ({ ...current, [invitation.id]: event.target.value }));
+                                  setPersonalizedTickets((current) => {
+                                    const next = { ...current };
+                                    delete next[invitation.id];
+                                    return next;
+                                  });
+                                }}
+                                placeholder="08xxxxxxxxxx"
+                              />
+                            </label>
+                            {personalizedTicket ? (
+                              <div className="personalized-ticket-card">
+                                <QRCodeSVG
+                                  value={personalizedTicketUrl}
+                                  size={156}
+                                  level="H"
+                                  title={`Tiket QR buku tamu untuk ${personalizedTicket.name}`}
+                                />
+                                <span>QR unik untuk {personalizedTicket.name}</span>
+                                <a className="secondary-btn" href={personalizedTicketUrl} target="_blank" rel="noopener noreferrer">Lihat / cetak QR tamu</a>
+                                <a className="primary-btn" href={personalizedWhatsAppUrl || undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!personalizedWhatsAppUrl}>Buka WhatsApp berisi undangan + QR</a>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className="primary-btn"
+                                disabled={preparingPersonalizedTicketId === invitation.id}
+                                onClick={() => preparePersonalizedInvitation(invitation)}
+                              >
+                                {preparingPersonalizedTicketId === invitation.id ? 'Membuat tiket QR…' : 'Buat QR & siapkan WhatsApp'}
+                              </button>
+                            )}
+                            <p className="form-hint">Tiket QR dibuat khusus untuk nama dan nomor ini. Link undangan dan barcode unik langsung disertakan dalam pesan WhatsApp.</p>
                           </div>
                         ) : null}
                         <div className="invitation-owner-qr">
@@ -1587,18 +1853,18 @@ export default function Dashboard({ onSignIn }) {
                         </div>
                       </div>
                       {whatsAppInvitationId === invitation.id ? <div className="invitation-whatsapp-form">
-                        <h4>{isBasicPlan ? 'Kirim WhatsApp ke satu penerima' : 'Kirim undangan ke daftar penerima'}</h4>
-                        {isBasicPlan ? <><label>Nama penerima undangan<input type="text" autoComplete="name" value={whatsAppName} onChange={(event) => { setWhatsAppName(event.target.value); setWhatsAppQueue([]); }} placeholder="Nama penerima" /></label><label>Nomor WhatsApp penerima <span>Gunakan nomor Indonesia seperti 081234567890.</span><input type="tel" inputMode="tel" autoComplete="tel" value={whatsAppPhone} onChange={(event) => { setWhatsAppPhone(event.target.value); setWhatsAppQueue([]); }} placeholder="08xxxxxxxxxx" /></label></> : <div className="whatsapp-recipient-import">
+                        <h4>{isSingleRecipientPlan ? 'Kirim WhatsApp ke satu penerima' : 'Kirim undangan ke daftar penerima'}</h4>
+                        {isSingleRecipientPlan ? <><label>Nama penerima undangan<input type="text" autoComplete="name" value={whatsAppName} onChange={(event) => { setWhatsAppName(event.target.value); setWhatsAppQueue([]); }} placeholder="Nama penerima" /></label><label>Nomor WhatsApp penerima <span>Gunakan nomor Indonesia seperti 081234567890.</span><input type="tel" inputMode="tel" autoComplete="tel" value={whatsAppPhone} onChange={(event) => { setWhatsAppPhone(event.target.value); setWhatsAppQueue([]); }} placeholder="08xxxxxxxxxx" /></label></> : <div className="whatsapp-recipient-import">
                           <div><button type="button" className="whatsapp-template-download" onClick={downloadRecipientTemplate}>Download template .xlsx</button><span>Isi kolom nomor_hp dan nama_penerima untuk tiap tamu.</span></div>
                           <label>Upload daftar nomor (.xlsx)<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={importWhatsAppRecipients} disabled={isImportingRecipients} /></label>
                           {isImportingRecipients ? <span className="form-hint">Memproses file…</span> : null}
-                          <label>Daftar penerima <span>Satu penerima per baris dengan format nomor_hp | nama_penerima.</span><textarea rows={4} value={whatsAppRecipients} onChange={(event) => { setWhatsAppRecipients(event.target.value); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); }} placeholder={'081234567890 | Andi\n081298765432 | Siti'} /></label>
+                          <label>Daftar penerima <span>Maks. {maxRecipients} penerima per permintaan. Satu penerima per baris dengan format nomor_hp | nama_penerima.</span><textarea rows={4} value={whatsAppRecipients} onChange={(event) => { setWhatsAppRecipients(event.target.value); setWhatsAppQueue([]); setWhatsAppQueueIndex(0); }} placeholder={'081234567890 | Andi\n081298765432 | Siti'} /></label>
                           {whatsAppQueue.length ? <p className="form-hint">{whatsAppQueue.length} nomor siap di antrean.</p> : null}
                         </div>}
                         <label>Pesan <span>Gunakan {'{{nama}}'} untuk menyisipkan nama penerima; jika dihapus, sapaan nama ditambahkan otomatis.</span><textarea rows={3} maxLength={1000} value={whatsAppMessage} onChange={(event) => setWhatsAppMessage(event.target.value)} /></label>
                         <p className="form-hint">Setiap penerima mendapatkan tautan undangan dan tiket barcode unik. Panitia dapat memindai tiket untuk mencatat kehadiran. Setelah mengirim pesan di WhatsApp, kembali ke dashboard dan konfirmasi untuk membuka chat berikutnya.</p>
                         <div className="whatsapp-bulk-actions">
-                          {isPremiumPlan || isBusinessPlan ? <>
+                          {bulkUploadEnabled ? <>
                             {whatsAppRecipients.trim() && !whatsAppQueue.length ? <button type="button" className="secondary-btn" disabled={isPreparingTickets} onClick={() => prepareWhatsAppQueue(invitation.id)}>{isPreparingTickets ? 'Membuat tiket…' : 'Buat tiket & siapkan antrean'}</button> : null}
                             {whatsAppQueue.length ? <><span>Penerima {whatsAppQueueIndex + 1} dari {whatsAppQueue.length} · {whatsAppQueue[whatsAppQueueIndex]?.name}</span><a className={`primary-btn ${!whatsAppUrl ? 'is-disabled' : ''}`} href={whatsAppUrl || undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!whatsAppUrl}>Buka chat WhatsApp</a>{whatsAppQueueIndex < whatsAppQueue.length - 1 ? <button type="button" className="secondary-btn" onClick={() => setWhatsAppQueueIndex((index) => index + 1)}>Sudah terkirim, lanjut</button> : <span>Antrean selesai. Pastikan pesan untuk penerima terakhir sudah dikirim.</span>}</> : null}
                           </> : <>

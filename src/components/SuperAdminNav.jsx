@@ -2,15 +2,15 @@ const adminLinks = [
   { label: 'Portal', href: '/portal-admin' },
   { label: 'Gibrig', href: '/gibrig-admin' },
   { label: 'Nunuy Wedding', href: '/nunuy-admin' },
-  { label: 'Undangan.id Website', href: '/undangan-website-admin' },
-  { label: 'Undangan.id', href: '/undangan-admin' },
+  { label: 'Nuansa Invite Website', href: '/undangan-website-admin' },
+  { label: 'Nuansa Invite', href: '/undangan-admin' },
 ];
 
 const websiteLinks = [
   { label: 'Portal', href: '/' },
   { label: 'Gibrig', href: '/gibrig' },
   { label: 'Nunuy Wedding', href: '/nunuy-nadhifa-wedding' },
-  { label: 'Undangan.id', href: '/undangan' },
+  { label: 'Nuansa Invite', href: '/undangan' },
 ];
 
 export default function SuperAdminNav() {

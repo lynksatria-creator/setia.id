@@ -12,6 +12,8 @@ import AdminBilling from './pages/AdminBilling';
 import SuperAdminHome from './pages/SuperAdminHome';
 import PublicInvitation from './pages/PublicInvitation';
 import GuestTicket from './pages/GuestTicket';
+import NunuyWedding from './pages/NunuyWedding';
+import { PublicTestimonials, TestimonialModeration } from './components/PublicTestimonials';
 import SuperAdminNav from './components/SuperAdminNav';
 import StructuredEditor from './components/StructuredEditor';
 import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
@@ -64,6 +66,21 @@ const mergeDataDefaults = (defaults, saved) => {
   ]));
 };
 
+const normalizeInvitationBrand = (value) => {
+  if (typeof value === 'string') {
+    if (/(?:https?:\/\/|[\w.+-]+@)/i.test(value)) return value;
+    return value.replace(/\bundangan\.id\b/gi, 'Nuansa Invite');
+  }
+  if (Array.isArray(value)) return value.map(normalizeInvitationBrand);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      normalizeInvitationBrand(nestedValue),
+    ]));
+  }
+  return value;
+};
+
 const optimizeImageFile = async (file) => {
   if (!file.type.startsWith('image/')) throw new Error('Pilih file gambar.');
   if (file.size > 12 * 1024 * 1024) throw new Error('Ukuran gambar maksimum 12 MB.');
@@ -100,7 +117,7 @@ const defaultPortalData = {
     cta: 'Jelajahi pilihan kami',
     imageAlt: 'Dekorasi pernikahan outdoor yang hangat dan elegan',
     tertiary: 'Hiburan bersama Gibrig Entertainment',
-    secondary: 'Buat Undangan dengan Undangan.id',
+    secondary: 'Buat Undangan dengan Nuansa Invite',
   },
   services: [
     {
@@ -124,9 +141,9 @@ const defaultPortalData = {
       bodyFont: 'DM Sans',
     },
     {
-      name: 'Undangan.id',
+      name: 'Nuansa Invite',
       description: 'Undangan online minimalis dan mudah dibagikan, lengkap dengan RSVP, peta lokasi, galeri, dan musik.',
-      button: 'Lihat Undangan.id',
+      button: 'Lihat Nuansa Invite',
       href: '/undangan',
       image: 'https://images.unsplash.com/photo-1523438885200-e635ba2c371e?auto=format&fit=crop&w=1200&q=85',
       accent: '#10b981',
@@ -150,10 +167,7 @@ const defaultPortalData = {
     { name: 'Wedding Luxury', price: 'Mulai Rp 32 Juta', features: ['Styling venue premium', 'Fotografi dan live music', 'Perencanaan menyeluruh'], href: '/nunuy-nadhifa-wedding' },
     { name: 'Undangan Premium', price: 'Mulai Rp 99 Ribu', features: ['Template eksklusif', 'RSVP dan buku tamu', 'Link personal siap dibagikan'], href: '/undangan' },
   ],
-  testimonials: [
-    { name: 'Ayu & Rafi', text: 'Proses cepat, hasil premium, dan struktur website yang sangat rapi.' },
-    { name: 'Mitra Event', text: 'Kolaborasi dengan admin panel membuat kami mudah update konten sendiri.' },
-  ],
+  testimonials: [],
   faqs: [
     { q: 'Apakah bisa dibuat banyak website?', a: 'Ya, platform dirancang agar beberapa brand dapat berdiri sendiri.' },
     { q: 'Apakah admin bisa mengubah semua teks?', a: 'Ya, seluruh konten dapat diatur dari panel admin terpisah.' },
@@ -235,11 +249,7 @@ const defaultGibrigData = {
       items: ['Kendang', 'Melodi', 'Keyboard', 'Kentrung', 'Terompet', 'Neng Syelfi Oktora', 'Singer 2 Orang', 'Soundsistem'],
     },
   ],
-  testimonials: [
-    { name: 'Ibu Ratna', event: 'Pernikahan · Garut', text: 'Suara Neng Syelfi merdu sekali, tamu undangan ikut joget semua. Tim sangat profesional dari awal sampai selesai.' },
-    { name: 'Pak Asep', event: 'Khitanan · Cigedug', text: 'Sound system jernih, MC ramah, dan Paket 2 sangat cocok untuk acara khitanan anak saya. Recommended!' },
-    { name: 'Teh Dewi', event: 'Hajatan · Sukahurip', text: 'Booking via WhatsApp gampang banget, hari H tampil tepat waktu, formasi lengkap. Pasti pakai lagi.' },
-  ],
+  testimonials: [],
   gallery: [
     { src: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?crop=entropy&cs=srgb&fm=jpg&w=900&q=80', caption: 'Pertunjukan live di panggung' },
     { src: 'https://images.pexels.com/photos/15865403/pexels-photo-15865403.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940', caption: 'Resepsi pernikahan elegan' },
@@ -264,30 +274,208 @@ const defaultGibrigData = {
 
 const defaultNunuyData = {
   siteName: 'Nunuy Nadhifa Wedding',
-  logo: 'N',
+  logo: 'NN',
   logoImage: '',
-  hero: {
-    title: 'Wedding Experience That Feels Like A Fairytale',
-    subtitle: 'Luxury wedding planner, dekorasi, dan organizer yang memadukan elegansi dengan detail romantis.',
-    cta: 'Book Consultation',
-    image: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1500&q=85',
-    eyebrow: 'Wedding Planner',
+  uiLabels: {
+    brandHomeLabel: 'Nunuy Nadhifa Wedding, beranda',
+    primaryNavigationLabel: 'Navigasi utama',
+    navigationCta: 'Konsultasi',
+    scrollCue: 'SCROLL TO DISCOVER',
+    scrollLabel: 'Gulir ke bagian tentang kami',
+    visionLabel: 'OUR VISION',
+    missionLabel: 'OUR MISSION',
+    teamLabel: 'OUR TEAM',
+    packageCardLabel: 'WEDDING COLLECTION',
+    galleryFilterLabel: 'Filter kategori galeri',
+    galleryImageAlt: 'inspirasi visual',
+    journalLabel: 'WEDDING NOTES',
+    whatsappLabel: 'Konsultasi Nunuy Nadhifa Wedding melalui WhatsApp',
+    whatsappTitle: 'Konsultasi melalui WhatsApp',
+    closeImageLabel: 'Tutup gambar',
   },
-  theme: createDefaultTheme('nunuy'),
-  about: 'Kita membantu pasangan merancang momen pernikahan, dari konsep, dekorasi, hingga pengelolaan sesi acara.',
-  packages: [
-    { name: 'Classic Romance', price: 'Rp 18 Juta', description: 'Dekorasi, planner, dan koord event lengkap.', facilities: ['Dekorasi', 'MC', 'Koordinator'], duration: '1 hari', guests: '200 orang', status: 'Aktif' },
-    { name: 'Luxury Garden', price: 'Rp 32 Juta', description: 'Tema outdoor premium dengan detail mewah.', facilities: ['Venue styling', 'Fotografi', 'Live music'], duration: '2 hari', guests: '300 orang', status: 'Aktif' },
+  hero: {
+    eyebrow: 'Your Dream Wedding, Our Beautiful Creation.',
+    title: 'Make Your Wedding Unforgettable',
+    subtitle: 'Kami hadir untuk mewujudkan pernikahan impian Anda dengan sentuhan kreativitas, keindahan, dan cinta.',
+    cta: 'Jelajahi Layanan Kami',
+    secondaryCta: 'Konsultasi Gratis',
+    note: 'Every love story deserves a beautiful beginning',
+    image: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1500&q=85',
+  },
+  navigation: [
+    { label: 'Beranda', href: '/' },
+    { label: 'Tentang', href: '#about' },
+    { label: 'Layanan', href: '#services' },
+    { label: 'Paket', href: '#packages' },
+    { label: 'Galeri', href: '#gallery' },
+    { label: 'Inspirasi', href: '#journal' },
+    { label: 'FAQ', href: '#faq' },
   ],
-  testimonials: [
-    { name: 'Nadia & Reza', text: 'Acara kami terasa sangat elegan dan tertata dengan sempurna.' },
+  theme: createDefaultTheme('nunuy'),
+  brandColors: { purple: '#542783', pink: '#d62983', gold: '#d3a654', peach: '#fff1ec', paper: '#fffdfb', ink: '#291a39' },
+  about: {
+    label: 'A LITTLE ABOUT US',
+    title: 'Hari istimewa Anda, cerita indah kami.',
+    tagline: 'Your Dream Wedding, Our Beautiful Creation.',
+    description: 'Nunuy Nadhifa Wedding hadir untuk membantu pasangan merencanakan perayaan yang terasa personal. Kami percaya keindahan tercipta dari ide yang dipahami, detail yang diperhatikan, dan komunikasi yang hangat.',
+    linkText: 'Ceritakan rencana Anda',
+    visionTitle: 'Perayaan yang terasa seperti cerita Anda sendiri.',
+    visionDescription: 'Mendampingi pasangan mewujudkan hari pernikahan yang personal, indah, dan penuh makna.',
+    missionTitle: 'Rencana yang jelas, perhatian yang tulus.',
+    missionDescription: 'Mendengarkan kebutuhan, menyelaraskan detail, dan menjaga komunikasi sepanjang persiapan sesuai ruang lingkup layanan.',
+    teamTitle: 'Kolaborasi untuk hari istimewa.',
+    teamDescription: 'Komposisi tim dan dokumentasi personel akan dikonfirmasi saat konsultasi sesuai kebutuhan serta ketersediaan tanggal.',
+    values: [
+      { title: 'Kreativitas', description: 'Ide dan konsep yang tumbuh dari cerita Anda.' },
+      { title: 'Ketelitian', description: 'Perhatian pada detail dan alur acara.' },
+      { title: 'Kehangatan', description: 'Komunikasi yang terbuka dan penuh empati.' },
+      { title: 'Kepercayaan', description: 'Ruang lingkup dan kesepakatan yang jelas.' },
+    ],
+  },
+  serviceSection: {
+    label: 'MADE FOR YOUR MOMENT',
+    title: 'Beautifully planned.',
+    emphasis: 'Uniquely yours.',
+    description: 'Dari ide pertama hingga hari perayaan, mari bicarakan layanan yang paling sesuai dengan kebutuhan Anda.',
+    cardCta: 'Tanya Paket',
+    items: [
+      { title: 'Wedding Organizer', description: 'Pengelolaan acara dari persiapan hingga hari pernikahan agar setiap momen terasa lebih tertata.', image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Wedding Planner', description: 'Rancang konsep, susun prioritas, dan koordinasikan jadwal serta vendor sesuai kebutuhan Anda.', image: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Dekorasi Pernikahan', description: 'Eksplorasi dekorasi modern, klasik, tradisional, garden, atau luxury yang disesuaikan dengan cerita Anda.', image: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Wedding Makeup & Attire', description: 'Pilihan tata rias dan busana dapat dikonsultasikan sesuai konsep acara dan ketersediaan layanan.', image: 'https://images.unsplash.com/photo-1529636798458-92182e662485?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Akad & Resepsi', description: 'Bantuan menyusun alur acara untuk akad dan resepsi dengan koordinasi yang jelas.', image: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Engagement & Lamaran', description: 'Rayakan langkah istimewa dengan acara lamaran yang hangat, personal, dan berkesan.', image: 'https://images.unsplash.com/photo-1523438885200-e635ba2c371e?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Intimate Wedding', description: 'Ciptakan perayaan dekat dan bermakna bersama keluarga serta sahabat terdekat.', image: 'https://images.unsplash.com/photo-1465495976277-4387d4b0e4a6?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Traditional Wedding', description: 'Padukan detail adat dan sentuhan personal sesuai tradisi serta harapan keluarga.', image: 'https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Entertainment & Music', description: 'Diskusikan pilihan hiburan dan musik yang sesuai dengan suasana perayaan Anda.', image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=900&q=85', active: true },
+      { title: 'Dokumentasi Wedding', description: 'Tanyakan opsi fotografi dan videografi yang tersedia untuk mengabadikan hari istimewa.', image: 'https://images.unsplash.com/photo-1537633552985-df8429e8048b?auto=format&fit=crop&w=900&q=85', active: true },
+    ],
+  },
+  packageSection: {
+    label: 'A CELEBRATION, YOUR WAY',
+    title: 'Choose your kind',
+    emphasis: 'of forever.',
+    description: 'Setiap perayaan punya cerita dan kebutuhan berbeda. Paket dan penawaran harga dibicarakan saat konsultasi.',
+    priceLabel: 'Hubungi Kami untuk Penawaran Harga',
+    cta: 'Konsultasikan paket',
+    items: [
+      { name: 'Intimate Package', mood: 'A celebration close to the heart', description: 'Untuk pasangan yang menginginkan perayaan sederhana, hangat, dan personal.', features: ['Konsultasi kebutuhan acara', 'Rancangan alur acara', 'Koordinasi sesuai kesepakatan'], active: true },
+      { name: 'Elegant Package', mood: 'Thoughtful details, graceful moments', description: 'Untuk pernikahan modern dengan detail elegan dan alur acara yang tertata.', features: ['Diskusi konsep dan prioritas', 'Koordinasi persiapan acara', 'Pendampingan hari pernikahan'], active: true },
+      { name: 'Royal Celebration Package', mood: 'A statement made of beautiful moments', description: 'Untuk perayaan megah dengan kebutuhan yang dibicarakan secara personal.', features: ['Konsultasi konsep menyeluruh', 'Koordinasi kebutuhan vendor', 'Rundown dan pengelolaan acara'], active: true },
+    ],
+  },
+  gallery: {
+    label: 'A MOODBOARD OF MOMENTS',
+    title: 'Love in every',
+    emphasis: 'little detail.',
+    description: 'Galeri inspirasi visual. Gambar berikut bukan dokumentasi atau portofolio acara klien Nunuy Nadhifa Wedding.',
+    disclaimer: 'Gambar galeri adalah inspirasi visual dan bukan klaim hasil pekerjaan atau portofolio klien.',
+    items: [
+      { title: 'Romantic Reception', category: 'Wedding Reception', image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=1000&q=85', active: true },
+      { title: 'Garden Ceremony', category: 'Wedding Ceremony', image: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=1000&q=85', active: true },
+      { title: 'Floral Table Setting', category: 'Wedding Decoration', image: 'https://images.unsplash.com/photo-1507504031003-b417219a0r6?auto=format&fit=crop&w=1000&q=85', active: true },
+      { title: 'Modern Wedding', category: 'Modern Wedding', image: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=1000&q=85', active: true },
+      { title: 'Traditional Details', category: 'Traditional Wedding', image: 'https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&w=1000&q=85', active: true },
+      { title: 'Engagement Moments', category: 'Engagement', image: 'https://images.unsplash.com/photo-1523438885200-e635ba2c371e?auto=format&fit=crop&w=1000&q=85', active: true },
+      { title: 'Bridal Portrait', category: 'Bridal Makeup', image: 'https://images.unsplash.com/photo-1529636798458-92182e662485?auto=format&fit=crop&w=1000&q=85', active: true },
+      { title: 'A Day to Remember', category: 'Wedding Moments', image: 'https://images.unsplash.com/photo-1537633552985-df8429e8048b?auto=format&fit=crop&w=1000&q=85', active: true },
+    ],
+  },
+  portfolio: {
+    label: 'OUR PORTFOLIO',
+    title: 'Every story starts',
+    emphasis: 'with a conversation.',
+    description: 'Portofolio acara akan ditampilkan setelah dokumentasi dan izin publikasi tersedia. Sampaikan konsep impian Anda, dan mari mulai merencanakannya bersama.',
+    image: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=1200&q=85',
+    imageAlt: 'Inspirasi suasana pernikahan romantis',
+    caption: 'AN IDEA FOR YOUR DAY',
+    cta: 'Mulai konsultasi',
+    projects: [{ active: false, name: '', theme: '', location: '', description: '', image: '' }],
+  },
+  testimonials: {
+    label: 'KIND WORDS',
+    title: 'Cerita dari keluarga dan klien',
+    emphasis: '',
+    description: 'Testimoni pelanggan asli akan ditampilkan di sini setelah tersedia dan mendapat persetujuan untuk dipublikasikan.',
+    items: [{ active: false, name: '', text: '', image: '' }],
+  },
+  journal: {
+    label: 'THE WEDDING JOURNAL',
+    title: 'Little notes for',
+    emphasis: 'your big day.',
+    description: 'Catatan praktis untuk menemani langkah awal merencanakan perayaan Anda.',
+    readMore: 'Baca selengkapnya',
+    items: [
+      { title: 'Tips Memilih Wedding Organizer yang Tepat', summary: 'Mulai dari memahami kebutuhan, cara berkomunikasi, hingga menyepakati ruang lingkup layanan.', image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=900&q=85', body: 'Tuliskan kebutuhan utama dan hal yang paling penting bagi Anda. Saat berkonsultasi, tanyakan ruang lingkup layanan, alur komunikasi, jadwal persiapan, serta hal-hal yang belum termasuk dalam kesepakatan. Pastikan semua detail yang disetujui tercatat dengan jelas.', active: true },
+      { title: 'Menyusun Anggaran Pernikahan dengan Tenang', summary: 'Kenali prioritas bersama sebelum menentukan alokasi untuk setiap kebutuhan acara.', image: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=900&q=85', body: 'Mulailah dengan menetapkan kisaran anggaran dan daftar prioritas bersama. Sisihkan ruang untuk kebutuhan yang berubah, bandingkan penawaran dengan ruang lingkup yang sama, dan pastikan biaya tambahan dibicarakan sebelum mengambil keputusan.', active: true },
+      { title: 'Menemukan Tema Dekorasi yang Mencerminkan Anda', summary: 'Satukan inspirasi warna, suasana, dan kebutuhan venue menjadi konsep yang terasa personal.', image: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=900&q=85', body: 'Kumpulkan beberapa referensi yang benar-benar Anda sukai, lalu cari benang merah dari warna, bunga, pencahayaan, dan suasananya. Sesuaikan inspirasi dengan venue, waktu acara, dan kenyamanan tamu agar hasil akhirnya tetap terasa harmonis.', active: true },
+    ],
+  },
+  faq: {
+    label: 'GOOD TO KNOW',
+    title: 'A few things',
+    emphasis: 'you may wonder.',
+    description: 'Belum menemukan jawaban? Tanyakan langsung kepada kami.',
+    consultationCta: 'Tanya melalui konsultasi',
+    items: [
+      { question: 'Bagaimana cara booking Nunuy Nadhifa Wedding?', answer: 'Kirim formulir konsultasi atau hubungi kami melalui WhatsApp. Kebutuhan, ketersediaan tanggal, dan ruang lingkup layanan akan dibicarakan terlebih dahulu.', active: true },
+      { question: 'Apakah tersedia konsultasi sebelum memilih paket?', answer: 'Silakan ajukan konsultasi agar kebutuhan acara dapat dibahas sebelum menentukan layanan yang sesuai.', active: true },
+      { question: 'Apakah harga paket bisa disesuaikan?', answer: 'Harga belum dicantumkan di website. Hubungi kami untuk mendapatkan penawaran berdasarkan kebutuhan dan ruang lingkup acara.', active: true },
+      { question: 'Apakah layanan tersedia untuk konsep adat atau intimate wedding?', answer: 'Konsep adat dan intimate wedding dapat dibicarakan saat konsultasi, termasuk penyesuaian dengan tradisi dan kebutuhan keluarga.', active: true },
+      { question: 'Bagaimana cara mengetahui ketersediaan tanggal?', answer: 'Sampaikan tanggal rencana pernikahan melalui formulir konsultasi WhatsApp. Ketersediaan akan dikonfirmasi saat komunikasi dengan tim.', active: true },
+    ],
+  },
+  consultation: {
+    label: 'LET’S MAKE IT BEAUTIFUL',
+    title: 'Your day.',
+    emphasis: 'Your story.',
+    description: 'Ceritakan rencana pernikahan Anda. Kami akan membantu membuka percakapan tentang kebutuhan, layanan, dan penawaran yang sesuai.',
+    directLinkLabel: 'Tanya langsung melalui WhatsApp',
+    formLabel: 'CONSULTATION FORM',
+    formDescription: 'Bagikan detail awal rencana hari bahagia Anda.',
+    confirmation: 'Detail konsultasi akan dibuka di WhatsApp. Lanjutkan?',
+    successMessage: 'WhatsApp terbuka dengan detail konsultasi Anda.',
+    submitLabel: 'Kirim konsultasi via WhatsApp',
+    privacyNote: 'Informasi Anda akan disusun sebagai pesan dan dibuka di WhatsApp untuk dikirim.',
+    serviceLabel: 'Layanan yang diinginkan',
+    packageLabel: 'Pilihan paket',
+    budgetLabel: 'Kisaran anggaran',
+    budgetPlaceholder: 'Pilih kisaran (opsional)',
+    budgetOptions: ['Belum menentukan', 'Di bawah Rp 50 juta', 'Rp 50–100 juta', 'Rp 100–250 juta', 'Di atas Rp 250 juta'],
+    missingWhatsApp: 'Nomor WhatsApp belum diatur. Silakan hubungi admin website.',
+    fields: {
+      couple: 'Nama calon pengantin',
+      couplePlaceholder: 'Nama Anda dan pasangan',
+      phone: 'Nomor WhatsApp',
+      phonePlaceholder: '08xxxxxxxxxx',
+      date: 'Tanggal pernikahan',
+      guests: 'Perkiraan jumlah tamu',
+      guestsPlaceholder: 'Contoh: 150',
+      location: 'Lokasi acara',
+      locationPlaceholder: 'Kota atau venue pilihan',
+      notes: 'Catatan tambahan',
+      notesPlaceholder: 'Ceritakan konsep atau hal yang ingin didiskusikan',
+      servicePlaceholder: 'Pilih layanan',
+      packagePlaceholder: 'Belum menentukan',
+    },
+  },
+  footer: {
+    tagline: 'Your Dream Wedding, Our Beautiful Creation.',
+    backToTop: 'Kembali ke atas',
+  },
+  packages: [
+    { name: 'Intimate Package', price: 'Hubungi Kami untuk Penawaran Harga', description: 'Untuk pasangan yang menginginkan perayaan sederhana, hangat, dan personal.', facilities: ['Konsultasi kebutuhan acara', 'Rancangan alur acara', 'Koordinasi sesuai kesepakatan'], duration: 'Diskusikan saat konsultasi', guests: 'Sesuai kebutuhan' },
+    { name: 'Elegant Package', price: 'Hubungi Kami untuk Penawaran Harga', description: 'Untuk pernikahan modern dengan detail elegan dan alur acara yang tertata.', facilities: ['Diskusi konsep dan prioritas', 'Koordinasi persiapan acara', 'Pendampingan hari pernikahan'], duration: 'Diskusikan saat konsultasi', guests: 'Sesuai kebutuhan' },
   ],
   contact: { phone: '+62 812-7788-1122', email: 'hello@nunuywedding.com' },
-  whatsapp: { number: '+6281277881122', message: 'Halo, saya ingin konsultasi wedding.' },
+  whatsapp: {
+    number: '+6281277881122',
+    message: 'Halo Nunuy Nadhifa Wedding, saya ingin berkonsultasi mengenai paket dan layanan pernikahan. Mohon informasi lebih lanjut.',
+  },
 };
 
 const defaultInvitationData = {
-  siteName: 'Undangan.id',
+  siteName: 'Nuansa Invite',
   logo: 'U',
   logoImage: '',
   hero: {
@@ -325,13 +513,9 @@ const defaultInvitationData = {
     { name: 'Premium', price: 'Rp 249.000', features: ['Semua fitur Basic', 'Template premium', 'Custom nama tamu', 'Statistik', 'QR code', 'Custom domain'], highlight: true },
     { name: 'Business', price: 'Rp 599.000', features: ['Bulk undangan', 'Bulk tamu', 'Bulk template', 'Statistik lengkap', 'Branding & API'], highlight: false },
   ],
-  testimonials: [
-    { name: 'Nadia & Farel', event: 'Pernikahan', rating: 5, quote: 'Undangannya sangat cantik dan mudah dibagikan ke keluarga. Fitur yang dibutuhkan semua ada.' },
-    { name: 'Ayu', event: 'Khitanan', rating: 5, quote: 'Prosesnya gampang dan hasilnya premium. Sangat cocok untuk acara keluarga.' },
-    { name: 'Rizky', event: 'Wisuda', rating: 5, quote: 'Saya suka karena semua fitur seperti RSVP, musik, sampai live location sudah terintegrasi.' },
-  ],
+  testimonials: [],
   contact: { phone: '+62 812-3456-7890', email: 'hello@undangan.id' },
-  whatsapp: { number: '+6281234567890', message: 'Halo, saya ingin bertanya tentang Undangan.id.' },
+  whatsapp: { number: '+6281234567890', message: 'Halo, saya ingin bertanya tentang Nuansa Invite.' },
   articles: [
     { title: 'Tips memilih template undangan digital yang sesuai tema acara', category: 'Design' },
     { title: 'Cara menambahkan musik dan gallery di undangan online', category: 'Feature' },
@@ -516,8 +700,8 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
   const [credentials, setCredentials] = useState({ username: defaultAdmins[site].username, passwordHash: '' });
   const [loggedIn, setLoggedIn] = useState(superAdminAuthenticated);
   const [formData, setFormData] = useState(() => site === 'admin'
-    ? normalizePortalData(loadData(dataKey, defaultData))
-    : mergeDataDefaults(defaultData, loadData(dataKey, defaultData)));
+    ? normalizeInvitationBrand(normalizePortalData(loadData(dataKey, defaultData)))
+    : normalizeInvitationBrand(mergeDataDefaults(defaultData, loadData(dataKey, defaultData))));
   const [themeName, setThemeName] = useState('Luxury Gold');
   const [configMessage, setConfigMessage] = useState('');
   const [customThemes, setCustomThemes] = useState(() => {
@@ -861,6 +1045,9 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             </div>
           </section>
         ) : null}
+        {superAdminAuthenticated ? (
+          <TestimonialModeration site={site === 'admin' ? 'portal' : site} token={sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY)} />
+        ) : null}
         <section className="admin-panel-block">
           <h3>Pengaturan semua konten</h3>
           <p className="muted">Edit teks, data kontak, daftar layanan, paket, FAQ, tema, ukuran, dan seluruh data website.</p>
@@ -896,7 +1083,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
 };
 
 const LegacyPortalHome = () => {
-  const portalData = useMemo(() => mergeDataDefaults(defaultPortalData, loadData(storage.portal, defaultPortalData)), []);
+  const portalData = useMemo(() => normalizeInvitationBrand(mergeDataDefaults(defaultPortalData, loadData(storage.portal, defaultPortalData))), []);
 
   return (
     <div className={`site-shell theme-portal theme-layout-${portalData.theme?.layout || 'editorial'} theme-preset-${portalData.theme?.preset || 'default'}`} style={themeStyle(portalData.theme)}>
@@ -930,7 +1117,7 @@ const LegacyPortalHome = () => {
               <div className="portal-hero-image-shade" />
               <div className="portal-photo-caption"><span>THE ART OF CELEBRATING</span><strong>Every detail, thoughtfully yours.</strong></div>
               <div className="portal-floating-note portal-note-top"><span>WEDDING PLANNER</span><strong>Nunuy Nadhifa</strong></div>
-              <div className="portal-floating-note portal-note-bottom"><span>YOUR STORY, BEAUTIFULLY TOLD</span><strong>Undangan.id</strong></div>
+              <div className="portal-floating-note portal-note-bottom"><span>YOUR STORY, BEAUTIFULLY TOLD</span><strong>Nuansa Invite</strong></div>
               <span className="portal-image-index">01 <i /> 02</span>
             </div>
           </div>
@@ -1015,26 +1202,11 @@ const LegacyPortalHome = () => {
           <div className="container portal-quote-inner">
             <span className="portal-quote-mark">“</span>
             <p>Some days deserve to be remembered beautifully.</p>
-            <span>— NUNUY NADHIFA WEDDING × UNDANGAN.ID</span>
+            <span>— NUNUY NADHIFA WEDDING × NUANSA INVITE</span>
           </div>
         </section>
 
-        <section className="section-wrap muted-bg">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Testimoni</p>
-              <h2>Klien yang puas</h2>
-            </div>
-            <div className="testimonial-grid">
-              {portalData.testimonials.map((item) => (
-                <blockquote key={item.name}>
-                  “{item.text}”
-                  <span>{item.name}</span>
-                </blockquote>
-              ))}
-            </div>
-          </div>
-        </section>
+        <PublicTestimonials site="portal" initialItems={portalData.testimonials} />
 
         <section className="section-wrap faq-section">
           <div className="container faq-grid">
@@ -1213,6 +1385,8 @@ const PortalHome = () => {
 
         {renderAd('midFeed', 'portal-ad-mid')}
 
+        <PublicTestimonials site="portal" initialItems={portalData.testimonials} />
+
         <section id="advertise" className="portal-advertise-section">
           <div className="container portal-advertise-layout">
             <div>
@@ -1345,24 +1519,7 @@ const GibrigHome = () => {
           </div>
         </section>
 
-        <section id="testimonials" className="section-wrap">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Testimoni</p>
-              <h2>Cerita dari keluarga dan klien</h2>
-            </div>
-            <div className="artist-grid">
-              {data.testimonials.map((testimonial) => (
-                <article key={testimonial.name} className="artist-card">
-                  <strong>★★★★★</strong>
-                  <h3>{testimonial.name}</h3>
-                  <small>{testimonial.event}</small>
-                  <p>{testimonial.text}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
+        <PublicTestimonials site="gibrig" initialItems={data.testimonials} sectionId="testimonials" />
 
         <section id="contact" className="section-wrap">
           <div className="container contact-panel">
@@ -1388,94 +1545,26 @@ const GibrigHome = () => {
 
 const NunuyHome = () => {
   const data = useMemo(() => mergeDataDefaults(defaultNunuyData, loadData(storage.nunuy, defaultNunuyData)), []);
-
   return (
-    <div className={`site-shell nunuy-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
-      <header className="topbar nunuy-topbar">
-        <div className="container nav-wrap">
-          <div className="brand">{data.logoImage ? <img className="site-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="logo-mark">{data.logo || 'N'}</span>}{data.siteName}</div>
-          <nav className="nav-links">
-            <a href="/">Beranda</a>
-            <a href="#about">About</a>
-            <a href="#packages">Packages</a>
-            <a href="#gallery">Gallery</a>
-            <a href="#faq">FAQ</a>
-            <a href="#contact">Contact</a>
-          </nav>
-        </div>
-      </header>
-
-      <main>
-        <section className="hero-section wedding-hero">
-          <div className="container hero-grid">
-            <div>
-              <p className="eyebrow">{data.hero.eyebrow}</p>
-              <h1>{data.hero.title}</h1>
-              <p>{data.hero.subtitle}</p>
-              <button className="primary-btn" onClick={() => openWhatsApp(data.whatsapp.number, data.whatsapp.message)}>{data.hero.cta}</button>
-            </div>
-            <div className="hero-visual wedding-visual">
-              <img className="site-hero-image" src={data.hero.image} alt={`${data.siteName} wedding`} />
-            </div>
-          </div>
-        </section>
-
-        <section id="about" className="section-wrap">
-          <div className="container two-column">
-            <div>
-              <p className="eyebrow">About</p>
-              <h2>Elegant wedding moments designed specially for you</h2>
-            </div>
-            <p>{data.about}</p>
-          </div>
-        </section>
-
-        <section id="packages" className="section-wrap muted-bg">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Wedding Packages</p>
-              <h2>Choose your dream celebration</h2>
-            </div>
-            <div className="pricing-grid">
-              {data.packages.map((pkg) => (
-                <div key={pkg.name} className="price-card wedding-card">
-                  <h3>{pkg.name}</h3>
-                  <strong>{pkg.price}</strong>
-                  <p>{pkg.description}</p>
-                  <ul>
-                    {pkg.facilities.map((facility) => <li key={facility}>{facility}</li>)}
-                  </ul>
-                  <button onClick={() => openWhatsApp(data.whatsapp.number, `${data.whatsapp.message} Saya tertarik dengan paket ${pkg.name}.`)}>WhatsApp</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="contact" className="section-wrap">
-          <div className="container contact-panel">
-            <div>
-              <p className="eyebrow">Contact</p>
-              <h2>Let’s plan your romantic day</h2>
-            </div>
-            <div>
-              <p><a href={`tel:${String(data.contact.phone || '').replace(/[^\d+]/g, '')}`}>{data.contact.phone}</a></p>
-              <p>{data.contact.email}</p>
-              <a href={`https://wa.me/${data.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(data.whatsapp.message)}`} target="_blank" rel="noopener noreferrer">Chat WhatsApp</a>
-            </div>
-          </div>
-        </section>
-      </main>
-      <WhatsAppContact siteName={data.siteName} number={data.whatsapp.number} message={data.whatsapp.message} />
-    </div>
+    <NunuyWedding
+      data={data}
+      whatsappNumber={data.whatsapp?.number}
+      whatsappMessage={data.whatsapp?.message}
+      phoneNumber={data.contact?.phone}
+    />
   );
 };
 
 const InvitationHome = () => {
-  const data = useMemo(() => mergeDataDefaults(defaultInvitationData, loadData(storage.invitation, defaultInvitationData)), []);
+  const data = useMemo(() => normalizeInvitationBrand(mergeDataDefaults(defaultInvitationData, loadData(storage.invitation, defaultInvitationData))), []);
   const [advertisements, setAdvertisements] = useState([]);
   const [advertisementsError, setAdvertisementsError] = useState('');
   const openAuth = (mode) => navigate(`/undangan-auth?mode=${mode}`);
+
+  useEffect(() => {
+    document.title = `${data.siteName} | Undangan Digital`;
+    return () => { document.title = 'Nuansa Invite | Undangan Digital'; };
+  }, [data.siteName]);
 
   useEffect(() => {
     let active = true;
@@ -1529,7 +1618,7 @@ const InvitationHome = () => {
             <div className="container">
               <div className="section-head">
                 <p className="eyebrow">Rekomendasi partner</p>
-                <h2 id="affiliate-advertisements-title">Pilihan dari mitra Undangan.id</h2>
+                <h2 id="affiliate-advertisements-title">Pilihan dari mitra Nuansa Invite</h2>
               </div>
               {advertisementsError ? <p className="form-error" role="alert">Iklan mitra belum dapat dimuat: {advertisementsError}</p> : null}
               <div className="affiliate-advertisement-grid">
@@ -1565,7 +1654,7 @@ const InvitationHome = () => {
         <section className="section-wrap">
           <div className="container invite-why-grid">
             <div>
-              <p className="eyebrow">Kenapa undangan.id</p>
+              <p className="eyebrow">Kenapa Nuansa Invite</p>
               <h2>Semua kebutuhan undangan digital dalam satu platform</h2>
               <p>Mulai dari desain elegant, fitur RSVP, gallery, musik, countdown, hingga share ke WhatsApp dan Google Maps. Semua bisa dikelola dengan mudah.</p>
             </div>
@@ -1599,23 +1688,12 @@ const InvitationHome = () => {
 
         <Pricing plans={data.pricingPlans} onChoose={() => openAuth('register')} />
 
-        <section className="section-wrap">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Apa kata mereka?</p>
-              <h2>Testimonial pelanggan</h2>
-            </div>
-            <div className="testimonial-grid">
-              {data.testimonials.map((item) => (
-                <blockquote key={item.name} className="quote-card">
-                  <div className="rating">{'★'.repeat(item.rating)}</div>
-                  <p>“{item.quote}”</p>
-                  <span>{item.name} · {item.event}</span>
-                </blockquote>
-              ))}
-            </div>
-          </div>
-        </section>
+        <PublicTestimonials
+          site="invitation"
+          initialItems={data.testimonials}
+          eyebrow="Apa kata mereka?"
+          title="Cerita dari keluarga dan klien"
+        />
 
         <section className="section-wrap muted-bg">
           <div className="container auth-panel">
@@ -1690,10 +1768,10 @@ function App() {
     return (
       <AdminPanel
         site="invitation"
-        label="Undangan.id Website Admin"
+        label="Nuansa Invite Website Admin"
         dataKey={storage.invitation}
         defaultData={defaultInvitationData}
-        description="Kelola konten website publik Undangan.id, nomor kontak, logo, hero, tema, template, dan media."
+        description="Kelola konten website publik Nuansa Invite, nomor kontak, logo, hero, tema, template, dan media."
         superAdminAuthenticated
         onSuperAdminLogout={logoutSuperAdmin}
       />
@@ -1713,7 +1791,7 @@ function App() {
   }
 
   if (path.startsWith('/undangan-preview/')) {
-    const templateSlug = path.slice('/undangan-preview/'.length);
+    const templateSlug = path.slice('/undangan-preview/'.length).split('/')[0];
     const template = defaultInvitationData.templates.find((item) => slugify(item.name) === templateSlug);
     if (template) return <PublicInvitation invitation={createPreviewInvitation(template)} slug={`demo-${templateSlug}`} />;
   }

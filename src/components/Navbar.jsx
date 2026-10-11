@@ -3,7 +3,7 @@ export default function Navbar({ siteName, logo = 'U', logoImage, onLogin, onReg
     <header className="topbar invitation-topbar">
       <div className="container nav-wrap invitation-nav-wrap">
         <a className="brand" href="/undangan">{logoImage ? <img className="site-logo-image" src={logoImage} alt={`${siteName} logo`} /> : <span className="logo-mark">{logo}</span>}{siteName}</a>
-        <nav className="nav-links" aria-label="Navigasi Undangan.id">
+        <nav className="nav-links" aria-label="Navigasi Nuansa Invite">
           <a href="/">Beranda</a>
           <a href="#templates">Template</a>
           <a href="#categories">Kategori</a>
