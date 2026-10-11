@@ -216,10 +216,31 @@ test('shows the formal invitation cover, named guest, regional design, and cover
   expect(screen.getAllByText('UNDANGAN RESMI')).toHaveLength(2);
   expect(screen.getByText('Keluarga Bapak Andi')).toBeDefined();
   expect(screen.getAllByRole('heading', { name: 'Nara' }).length).toBeGreaterThan(0);
-  expect(screen.getByText(/Bali · Inspirasi Endek Bali/)).toBeDefined();
+  expect(screen.getByText('Template · Bali · Endek Bali')).toBeDefined();
   expect(container.querySelector('.wedding-cover-video').getAttribute('src')).toBe('https://example.com/party.mp4');
   expect(container.querySelector('.wedding-couple')).toBeNull();
   expect(container.querySelector('.wedding-honoree')).not.toBeNull();
+});
+
+test('opens the invitation and scrolls to RSVP when the link includes the RSVP fragment', async () => {
+  window.history.pushState({}, '', '/i/aulia-farhan-6bcd575#rsvp');
+  const scrollIntoView = vi.fn();
+  const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+  const invitation = {
+    id: 'aulia-farhan',
+    title: 'Aulia & Farhan',
+    slug: 'aulia-farhan-6bcd575',
+    content: { event_type: 'Pernikahan', couple_names: 'Aulia & Farhan' },
+  };
+  const { container } = render(<PublicInvitation invitation={invitation} />);
+
+  expect(await screen.findByRole('heading', { name: 'Konfirmasi kehadiran' })).toBeDefined();
+  expect(container.querySelector('.wedding-content').getAttribute('aria-hidden')).toBe('false');
+  await new Promise((resolve) => window.setTimeout(resolve, 120));
+  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+  if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView);
+  else delete HTMLElement.prototype.scrollIntoView;
 });
 
 test('renders saved template frame, motion, and photo crop settings', () => {
@@ -277,6 +298,7 @@ test('public invitation hides empty event details and shows the Google Maps link
 
   expect(screen.getByText('Gedung Melati')).toBeDefined();
   expect(container.querySelector('.wedding-events a').getAttribute('href')).toBe('https://maps.google.com/?q=gedung-melati');
+  expect(container.querySelector('.wedding-events iframe').getAttribute('src')).toContain('output=embed');
   expect(container.querySelector('.wedding-events h3')).toBeNull();
   expect(screen.queryByText(/Nama tempat|Alamat lengkap|Waktu acara|Tanggal acara/)).toBeNull();
 });
@@ -596,15 +618,29 @@ test('owner can copy the generated RSVP link and edit a premium invitation slug'
   mountPublishedInvitationDashboard('premium');
 
   fireEvent.click(await screen.findByRole('button', { name: 'Undangan', exact: true }));
-  expect(screen.getByText(`RSVP: ${window.location.origin}/i/hari-bahagia#rsvp`)).toBeDefined();
-  fireEvent.click(screen.getByRole('button', { name: 'Salin link RSVP' }));
-  expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/i/hari-bahagia#rsvp`);
+  const ownerGuestbookUrl = createOwnerGuestbookUrl('hari-bahagia');
+  expect(screen.getByText(`Dashboard RSVP: ${ownerGuestbookUrl}`)).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Salin link dashboard RSVP' }));
+  expect(writeText).toHaveBeenCalledWith(ownerGuestbookUrl);
 
   fireEvent.click(screen.getByRole('button', { name: 'Edit', exact: true }));
-  expect(screen.getByLabelText('Link undangan (opsional, dapat diedit)')).toBeDefined();
-  expect(screen.getByLabelText('Link RSVP otomatis').value).toBe(`${window.location.origin}/i/hari-bahagia#rsvp`);
+  expect(screen.getByLabelText('Link dashboard RSVP otomatis').value).toBe(ownerGuestbookUrl);
   if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
   else delete navigator.clipboard;
+  sessionStorage.clear();
+});
+
+test('routes an RSVP fragment to the owner dashboard and preserves its guestbook through login', async () => {
+  sessionStorage.clear();
+  window.history.pushState({}, '', '/i/aulia-farhan-6bcd575#rsvp');
+  renderApp();
+
+  expect(await screen.findByRole('heading', { name: 'Masuk untuk mengelola undangan' })).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Masuk / Daftar' }));
+
+  const nextPath = new URLSearchParams(window.location.search).get('next');
+  expect(window.location.pathname).toBe('/undangan-auth');
+  expect(nextPath).toBe(createOwnerGuestbookUrl('aulia-farhan-6bcd575'));
   sessionStorage.clear();
 });
 

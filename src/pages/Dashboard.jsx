@@ -6,6 +6,7 @@ import GuestbookScanner from '../components/GuestbookScanner';
 import PublicInvitation from './PublicInvitation';
 import { createOwnerGuestbookUrl } from '../lib/ownerGuestbookUrl';
 import { regionalInvitationTemplates } from '../lib/regionalInvitationTemplates';
+import { createTicketCheckInMessage } from '../lib/ticketCheckInMessage';
 
 const emptyForm = {
   title: '',
@@ -296,7 +297,7 @@ const downloadGuestbookSpreadsheet = async (entries, filename) => {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 };
 
-export default function Dashboard({ onSignIn }) {
+export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const { user, token, isChecking, logout } = useAuth();
   const [billing, setBilling] = useState({ plans: [], payment_methods: [] });
   const [invitations, setInvitations] = useState([]);
@@ -304,6 +305,7 @@ export default function Dashboard({ onSignIn }) {
   const [previewInvitation, setPreviewInvitation] = useState(null);
   const [guestbookInvitation, setGuestbookInvitation] = useState(null);
   const [ownerGuestbook, setOwnerGuestbook] = useState([]);
+  const [ticketScanStatus, setTicketScanStatus] = useState('');
   const [dashboardGuestbook, setDashboardGuestbook] = useState([]);
   const [isLoadingDashboardGuestbook, setIsLoadingDashboardGuestbook] = useState(false);
   const [demoTemplate, setDemoTemplate] = useState(null);
@@ -620,6 +622,7 @@ export default function Dashboard({ onSignIn }) {
       province: demoTemplate.province || '',
       demo_template: true,
       template_id: demoTemplate.id,
+      template_name: demoTemplate.name,
       couple_names: weddingEventTypes.includes(form.event_type) ? form.couple_names || 'Aulia & Farhan' : '',
       honoree_name: weddingEventTypes.includes(form.event_type) ? '' : form.honoree_name || form.title || form.event_type,
       groom_parents: weddingEventTypes.includes(form.event_type) ? form.groom_parents : '',
@@ -878,6 +881,7 @@ export default function Dashboard({ onSignIn }) {
       event_type: form.event_type,
       province: form.province,
       template_id: form.template_id,
+      template_name: editorTemplates.find((template) => template.id === form.template_id)?.name || form.template_id,
       custom_design: form.custom_design,
       custom_primary: form.custom_primary,
       custom_accent: form.custom_accent,
@@ -980,10 +984,12 @@ export default function Dashboard({ onSignIn }) {
   };
 
   const copyInvitationLink = async (invitation, section = '') => {
-    const link = `${window.location.origin}/i/${encodeURIComponent(invitation.slug)}${section}`;
+    const link = section === '#rsvp'
+      ? createOwnerGuestbookUrl(invitation.slug)
+      : `${window.location.origin}/i/${encodeURIComponent(invitation.slug)}${section}`;
     try {
       await copyTextToClipboard(link);
-      setMessage(section ? 'Link RSVP berhasil disalin.' : 'Link undangan berhasil disalin.');
+      setMessage(section === '#rsvp' ? 'Link dashboard RSVP berhasil disalin.' : 'Link undangan berhasil disalin.');
       setError('');
     } catch (requestError) {
       setError(requestError.message);
@@ -1136,8 +1142,11 @@ export default function Dashboard({ onSignIn }) {
   const handleTicketScan = async (scannedValue) => {
     setError('');
     setMessage('');
+    setTicketScanStatus('QR terbaca, sedang mencatat check-in…');
     if (!guestbookInvitation) {
-      setError('Pilih undangan terlebih dahulu sebelum memindai tiket.');
+      const selectionError = 'Pilih undangan terlebih dahulu sebelum memindai tiket.';
+      setError(selectionError);
+      setTicketScanStatus(selectionError);
       return;
     }
     let ticketToken = '';
@@ -1149,14 +1158,15 @@ export default function Dashboard({ onSignIn }) {
       }
       ticketToken = ticketPath[1];
       const result = await guestbookApi.checkInTicket(token, guestbookInvitation.id, ticketToken);
-      if (result.already_checked_in) {
-        setMessage(`${result.entry?.name || 'Tamu'} sudah tercatat check-in sebelumnya.`);
-        return;
+      if (result.entry) {
+        setOwnerGuestbook((current) => [result.entry, ...current.filter((entry) => entry.id !== result.entry.id)]);
       }
-      setOwnerGuestbook((current) => [result.entry, ...current.filter((entry) => entry.id !== result.entry.id)]);
-      setMessage(`Check-in berhasil: ${result.entry.name}. Tamu masuk ke buku tamu acara.`);
+      const resultMessage = createTicketCheckInMessage(result);
+      setMessage(resultMessage);
+      setTicketScanStatus(resultMessage);
     } catch (requestError) {
       setError(requestError.message);
+      setTicketScanStatus(requestError.message);
     }
   };
 
@@ -1238,6 +1248,7 @@ export default function Dashboard({ onSignIn }) {
   const openGuestbook = async (invitation) => {
     setGuestbookInvitation(invitation);
     setOwnerGuestbook([]);
+    setTicketScanStatus('');
     if (user?.role === 'user') setBuyerMenu('scan');
     try {
       setOwnerGuestbook(await guestbookApi.listOwner(token, invitation.id));
@@ -1248,13 +1259,13 @@ export default function Dashboard({ onSignIn }) {
 
   useEffect(() => {
     if (!token || !invitations.length) return;
-    const requestedSlug = new URLSearchParams(window.location.search).get('guestbook');
+    const requestedSlug = requestedGuestbookSlug || new URLSearchParams(window.location.search).get('guestbook');
     if (!requestedSlug || openedGuestbookSlug.current === requestedSlug) return;
     const requestedInvitation = invitations.find((invitation) => invitation.slug === requestedSlug);
     if (!requestedInvitation) return;
     openedGuestbookSlug.current = requestedSlug;
     openGuestbook(requestedInvitation);
-  }, [invitations, token]);
+  }, [invitations, requestedGuestbookSlug, token]);
 
   useEffect(() => {
     if (user?.role !== 'user' || buyerMenu !== 'scan') {
@@ -1523,9 +1534,9 @@ export default function Dashboard({ onSignIn }) {
               {user.role === 'affiliate' ? <label>Paket kuota<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId)} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · kuota tersisa {(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}</option>)}</select></label> : null}
               {selectedPlan?.id !== 'basic' ? <label>Link undangan (opsional, dapat diedit)<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} minLength={3} maxLength={64} placeholder={form.title ? form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : 'nama-acara'} /><small>Kosongkan untuk membuat link otomatis saat disimpan. Anda tetap dapat mengubah link ini nanti.</small></label> : <p className="form-hint">Paket Basic menggunakan link otomatis yang dibuat sistem.</p>}
               <div className="generated-rsvp-link">
-                <label>Link RSVP otomatis<input readOnly value={editingInvitation ? `${window.location.origin}/i/${editingInvitation.slug}#rsvp` : 'Link RSVP dibuat setelah draft disimpan'} /></label>
-                {editingInvitation ? <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(editingInvitation, '#rsvp')}>Salin link RSVP</button> : null}
-                <small className="form-hint">Tamu mengisi konfirmasi kehadiran langsung di halaman undangan. Link RSVP mengikuti slug undangan Anda.</small>
+                <label>Link dashboard RSVP otomatis<input readOnly value={editingInvitation ? createOwnerGuestbookUrl(editingInvitation.slug) : 'Link dashboard RSVP dibuat setelah draft disimpan'} /></label>
+                {editingInvitation ? <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(editingInvitation, '#rsvp')}>Salin link dashboard RSVP</button> : null}
+                <small className="form-hint">Tautan ini membuka pengelolaan RSVP dan buku tamu di dashboard pemilik. Tamu mengisi RSVP melalui link undangan.</small>
               </div>
               <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; const recommendedTemplate = getTemplatesForEvent(invitationTemplates, eventType)[0]; setSetupGroup(group); setForm((current) => ({ ...current, event_type: eventType, province: '', template_id: recommendedTemplate?.id || current.template_id, custom_design: false })); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
               <label>Inspirasi daerah<select value={form.province} onChange={(event) => { const province = event.target.value; const regionalTemplate = regionalInvitationTemplates.find((template) => template.province === province); const recommendedTemplate = getTemplatesForEvent(invitationTemplates, form.event_type)[0]; setForm((current) => ({ ...current, province, template_id: regionalTemplate?.id || recommendedTemplate?.id || current.template_id, custom_design: false })); }}><option value="">Tidak memakai gaya daerah khusus</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province} · {template.inspiration}</option>)}</optgroup>)}</select></label>
@@ -1573,18 +1584,22 @@ export default function Dashboard({ onSignIn }) {
                 </label>
               )}
               <div className="account-form-row"><label>Tanggal acara<input type="date" value={form.event_date} onChange={(event) => updateField('event_date', event.target.value)} /></label><label>Waktu acara<input type="time" value={form.event_time} onChange={(event) => updateField('event_time', event.target.value)} /></label></div>
-              {form.event_type === 'Akad & Resepsi' ? (
-                <div className="account-panel event-secondary-details">
-                  <h3>Detail resepsi</h3>
-                  <div className="account-form-row"><label>Tanggal resepsi<input type="date" value={form.reception_date} onChange={(event) => updateField('reception_date', event.target.value)} /></label><label>Waktu resepsi<input type="time" value={form.reception_time} onChange={(event) => updateField('reception_time', event.target.value)} /></label></div>
-                  <label>Nama venue resepsi<input value={form.reception_venue} onChange={(event) => updateField('reception_venue', event.target.value)} placeholder="Nama tempat resepsi" /></label>
-                  <label>Alamat resepsi<textarea value={form.reception_address} onChange={(event) => updateField('reception_address', event.target.value)} rows={2} /></label>
-                  <label>Link Google Maps resepsi<input type="url" value={form.reception_maps_url} onChange={(event) => updateField('reception_maps_url', event.target.value)} placeholder="https://maps.google.com/..." /></label>
-                </div>
-              ) : null}
-              <label>Nama venue<input value={form.venue} onChange={(event) => updateField('venue', event.target.value)} placeholder="The Glass House" /></label>
-              <label>Alamat<textarea value={form.address} onChange={(event) => updateField('address', event.target.value)} rows={2} /></label>
-              <label>Link Google Maps<input type="url" value={form.maps_url} onChange={(event) => updateField('maps_url', event.target.value)} placeholder="https://maps.google.com/..." /></label>
+              <div className="account-panel event-location-fields">
+                <h3>Lokasi acara & Google Maps</h3>
+                <p className="form-hint">Isi lokasi agar tamu dapat melihat peta dan petunjuk arah di undangan. Peta dibuat otomatis dari venue/alamat; Anda juga dapat menempel link Google Maps.</p>
+                <label>Nama venue<input value={form.venue} onChange={(event) => updateField('venue', event.target.value)} placeholder="The Glass House" /></label>
+                <label>Alamat lengkap<textarea value={form.address} onChange={(event) => updateField('address', event.target.value)} rows={2} placeholder="Jalan, nomor, kelurahan, kota" /></label>
+                <label>Link Google Maps (opsional)<input type="url" value={form.maps_url} onChange={(event) => updateField('maps_url', event.target.value)} placeholder="Tempel link berbagi dari Google Maps" /></label>
+                {form.event_type === 'Akad & Resepsi' ? (
+                  <div className="account-panel event-secondary-details">
+                    <h3>Lokasi resepsi</h3>
+                    <div className="account-form-row"><label>Tanggal resepsi<input type="date" value={form.reception_date} onChange={(event) => updateField('reception_date', event.target.value)} /></label><label>Waktu resepsi<input type="time" value={form.reception_time} onChange={(event) => updateField('reception_time', event.target.value)} /></label></div>
+                    <label>Nama venue resepsi<input value={form.reception_venue} onChange={(event) => updateField('reception_venue', event.target.value)} placeholder="Nama tempat resepsi" /></label>
+                    <label>Alamat resepsi<textarea value={form.reception_address} onChange={(event) => updateField('reception_address', event.target.value)} rows={2} placeholder="Alamat lengkap lokasi resepsi" /></label>
+                    <label>Link Google Maps resepsi (opsional)<input type="url" value={form.reception_maps_url} onChange={(event) => updateField('reception_maps_url', event.target.value)} placeholder="Tempel link berbagi dari Google Maps" /></label>
+                  </div>
+                ) : null}
+              </div>
               <div className="media-upload-field"><label>Foto sampul<input type="file" accept="image/*" onChange={handleCoverUpload} /></label><label>Atau paste URL foto sampul<input type="url" value={form.cover_image.startsWith('data:') ? '' : form.cover_image} onChange={(event) => updateField('cover_image', event.target.value)} placeholder="https://..." /></label><small className="form-hint">Maksimal 5 MB untuk upload foto.</small></div>
               <div className="account-panel template-display-controls">
                 <h3>Atur tampilan template</h3>
@@ -1759,7 +1774,7 @@ export default function Dashboard({ onSignIn }) {
                     : '';
                   return (
                     <article className="account-invitation-card" key={invitation.id}>
-                      <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p>{invitation.status === 'published' ? <p className="invitation-link-label">RSVP: {window.location.origin}/i/{invitation.slug}#rsvp</p> : null}</div>
+                      <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? `${window.location.origin}/i/${invitation.slug}` : 'Link share terbuka setelah pembayaran dan publish.'}</p>{invitation.status === 'published' ? <p className="invitation-link-label">Dashboard RSVP: {createOwnerGuestbookUrl(invitation.slug)}</p> : null}</div>
                       <div className="account-card-actions">
                         <button className="secondary-btn" onClick={() => setPreviewInvitation(invitation)}>Preview</button>
                         <button className="secondary-btn" onClick={() => openGuestbook(invitation)}>RSVP & Buku Tamu</button>
@@ -1774,7 +1789,7 @@ export default function Dashboard({ onSignIn }) {
                         </> : null}
                         {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/i/${invitation.slug}`} target="_blank" rel="noreferrer">Buka link ↗</a> : null}
                         {user.role === 'user' && invitation.status === 'published' ? <>
-                          <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(invitation, '#rsvp')}>Salin link RSVP</button>
+                          <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(invitation, '#rsvp')}>Salin link dashboard RSVP</button>
                           <button className="secondary-btn" type="button" onClick={() => shareInvitation(invitation)}>Bagikan undangan</button>
                         </> : null}
                         {user.role === 'user' && invitation.status === 'published' ? (
@@ -1934,6 +1949,7 @@ export default function Dashboard({ onSignIn }) {
                       else {
                         setGuestbookInvitation(null);
                         setOwnerGuestbook([]);
+                        setTicketScanStatus('');
                       }
                     }}
                   >
@@ -1948,7 +1964,7 @@ export default function Dashboard({ onSignIn }) {
               {guestbookInvitation ? (
                 <>
                 <div className="account-card-actions guestbook-export-actions">
-                  <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(guestbookInvitation, '#rsvp')}>Salin link RSVP</button>
+                  <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(guestbookInvitation, '#rsvp')}>Salin link dashboard RSVP</button>
                   <button className="secondary-btn" type="button" onClick={() => exportGuestbook(ownerGuestbook, `rsvp-${guestbookInvitation.slug}.xlsx`)} disabled={!ownerGuestbook.length}>Unduh RSVP .xlsx</button>
                 </div>
                 <div className="guestbook-summary">
@@ -1959,6 +1975,7 @@ export default function Dashboard({ onSignIn }) {
                   <div className="guestbook-checkin">
                     <h3>Scan tiket QR tamu</h3>
                     <p>Pilih undangan di atas, lalu arahkan kamera ke QR tiket tamu untuk mencatat check-in. Tiket terhubung langsung ke buku tamu undangan ini dan tidak dapat digunakan dua kali.</p>
+                    {ticketScanStatus ? <p className="guestbook-scan-result" role="status">{ticketScanStatus}</p> : null}
                     <GuestbookScanner onScan={handleTicketScan} autoStart={user.role === 'user' && checkInInvitations.length === 1} />
                   </div>
                   <div className="owner-guestbook-list">

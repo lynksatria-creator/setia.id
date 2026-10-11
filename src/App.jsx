@@ -18,6 +18,7 @@ import SuperAdminNav from './components/SuperAdminNav';
 import StructuredEditor from './components/StructuredEditor';
 import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
 import { advertisementsApi } from './lib/api';
+import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
 import { createDefaultTheme, getThemeCatalog, themeStyle } from './lib/themeCatalog';
 
 const storage = {
@@ -1760,6 +1761,16 @@ function App() {
   if (path === '/undangan-dashboard') {
     const requestedPath = `${window.location.pathname}${window.location.search}`;
     return <Dashboard onSignIn={() => navigate(`/undangan-auth?mode=login&next=${encodeURIComponent(requestedPath)}`)} />;
+  }
+  if (path.startsWith('/i/') && window.location.hash === '#rsvp') {
+    const invitationSlug = path.slice(3);
+    const guestbookUrl = createOwnerGuestbookUrl(invitationSlug);
+    return (
+      <Dashboard
+        requestedGuestbookSlug={invitationSlug}
+        onSignIn={() => navigate(`/undangan-auth?mode=login&next=${encodeURIComponent(guestbookUrl)}`)}
+      />
+    );
   }
   if (path.startsWith('/undangan-ticket/')) return <GuestTicket ticketToken={path.slice('/undangan-ticket/'.length)} />;
   if (path === '/setia-creative-admin') return <SuperAdminHome />;

@@ -44,6 +44,40 @@ const isDirectVideoUrl = (url) => {
     || /^https?:\/\/.*\.(mp4|webm|ogg|mov|m4v)(?:[?#].*)?$/i.test(url);
 };
 
+const templateNames = {
+  'luxury-gold': 'Royal Gold',
+  'royal-black-gold': 'Royal Black Gold',
+  'luxury-maroon': 'Luxury Maroon',
+  'classic-wedding': 'Classic Wedding',
+  'elegant-white-gold': 'Elegant White Gold',
+  'rose-gold-romance': 'Rose Gold Romance',
+  'emerald-royal': 'Emerald Royal',
+  'navy-royal': 'Navy Royal',
+  'garden-luxury': 'Garden Luxury',
+  'floral-elegant': 'Floral Elegant',
+  'minimalist-luxury': 'Minimalist Luxury',
+  'modern-black': 'Modern Black',
+  'islamic-gold': 'Islamic Gold',
+  'islamic-emerald': 'Islamic Emerald',
+  'islamic-white': 'Islamic White',
+  'islamic-maroon': 'Islamic Maroon',
+  'traditional-sunda': 'Traditional Sunda',
+  'traditional-jawa': 'Traditional Jawa',
+  'traditional-nusantara': 'Traditional Nusantara',
+  'khitanan-royal': 'Khitanan Royal',
+  'aqiqah-elegant': 'Aqiqah Elegant',
+  'birthday-luxury': 'Birthday Luxury',
+  'birthday-kids': 'Birthday Kids',
+  'graduation-gold': 'Graduation Gold',
+  anniversary: 'Anniversary',
+  engagement: 'Engagement',
+  'baby-shower': 'Baby Shower',
+  tasyakuran: 'Tasyakuran',
+  'corporate-event': 'Corporate / Event',
+  'custom-premium': 'Custom Premium',
+  'gen-z-editorial': 'Gen Z Editorial',
+};
+
 const templateThemes = {
   'luxury-gold': { primary: '#4b3520', accent: '#b28745', background: '#fbf7ed', font: 'Cormorant Garamond, Georgia, serif', cover: 'linear-gradient(135deg, #241a13, #bb9453 48%, #594126)', ornament: '✦' },
   'royal-black-gold': { primary: '#f5dfaa', accent: '#d9ae55', background: '#171411', font: 'Georgia, serif', cover: 'linear-gradient(135deg, #050505, #282116 58%, #a8792d)', ornament: '◆' },
@@ -228,11 +262,22 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   }, [invitation]);
 
   useEffect(() => {
-    if (!invitation || window.location.hash !== '#rsvp') return undefined;
-    const timer = window.setTimeout(() => {
-      document.getElementById('rsvp')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 0);
-    return () => window.clearTimeout(timer);
+    if (!invitation) return undefined;
+    let timer;
+    const openRsvp = () => {
+      if (window.location.hash !== '#rsvp') return;
+      setIsOpened(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        document.getElementById('rsvp')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    };
+    openRsvp();
+    window.addEventListener('hashchange', openRsvp);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('hashchange', openRsvp);
+    };
   }, [invitation]);
 
   useEffect(() => {
@@ -280,6 +325,10 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const templateClass = content.custom_design ? 'custom' : content.template_id || 'luxury-gold';
   const isTemplateDemo = Boolean(content.demo_template);
   const regionTemplate = getRegionalInvitationTemplate(templateClass);
+  const templateName = content.template_name || regionTemplate?.name || templateNames[templateClass] || templateClass
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
   const copy = templateCopy[templateClass] || (regionTemplate ? {
     kicker: `Nusantara · ${regionTemplate.province}`,
     greeting: `Dengan hormat dan penuh kebahagiaan, kami mengundang Bapak/Ibu/Saudara/i untuk hadir di acara ${content.event_type || 'istimewa'} kami.`,
@@ -412,7 +461,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
           <p className="wedding-event-label">{copy.kicker}</p>
           <h1>{isCoupleEvent ? coupleNames ? <>{groomName || coupleNames}{brideName ? <><span>&amp;</span>{brideName}</> : null}</> : invitation.title : honoreeName}</h1>
           <p className="wedding-cover-date">{content.event_date ? new Date(content.event_date).toLocaleDateString('id-ID', { dateStyle: 'full' }) : 'Save the date'}{content.event_time ? ` · ${content.event_time}` : ''}</p>
-          {regionTemplate ? <p className="wedding-region-label">{regionTemplate.province} · Inspirasi {regionTemplate.inspiration}</p> : null}
+          <p className="wedding-region-label">Template · {templateName}</p>
           <button className="wedding-open-button" disabled={inviteeLoading || Boolean(ticketToken && inviteeError)} onClick={openInvitation}>{inviteeLoading ? 'MEMUAT NAMA TAMU…' : 'BUKA UNDANGAN'}</button>
         </div>
         <div className="wedding-ornament wedding-ornament-bottom">{theme.ornament}</div>
@@ -432,7 +481,19 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
         {storyItems.length ? <section className="wedding-section wedding-story"><p className="wedding-eyebrow">{storySectionTitle}</p><h2>{storySectionTitle}</h2><div className="love-story-timeline">{storyItems.map((item, index) => <article key={`${item.title}-${index}`}>{item.date ? <span>{item.date}</span> : null}<div>{item.title ? <h3>{item.title}</h3> : null}{item.text ? <p>{item.text}</p> : null}{item.image ? <img src={item.image} alt={item.title || 'Cerita acara'} loading="lazy" /> : null}</div></article>)}</div></section> : null}
 
-        {eventItems.length ? <section className="wedding-section wedding-events"><p className="wedding-eyebrow">SAVE THE DATE</p><h2>Detail acara</h2><div className="wedding-event-grid">{eventItems.map((event, index) => <article className="wedding-event-card" key={`${event.title || 'acara'}-${index}`}>{event.title ? <p className="wedding-eyebrow">{event.title}</p> : null}{event.date ? <h3>{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</h3> : null}{event.time ? <strong>{event.time} WIB</strong> : null}{event.venue || event.address ? <p>{event.venue ? <>{event.venue}<br /></> : null}{event.address || null}</p> : null}{event.maps_url ? <a href={event.maps_url} target="_blank" rel="noreferrer">LIHAT LOKASI ↗</a> : null}</article>)}</div></section> : null}
+        {eventItems.length ? <section className="wedding-section wedding-events"><p className="wedding-eyebrow">SAVE THE DATE</p><h2>Detail acara</h2><div className="wedding-event-grid">{eventItems.map((event, index) => {
+          const location = [event.venue, event.address].filter((value) => typeof value === 'string' && value.trim()).join(', ');
+          const mapsUrl = event.maps_url || (location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}` : '');
+          const mapEmbedUrl = location ? `https://www.google.com/maps?q=${encodeURIComponent(location)}&output=embed` : '';
+          return <article className="wedding-event-card" key={`${event.title || 'acara'}-${index}`}>
+            {event.title ? <p className="wedding-eyebrow">{event.title}</p> : null}
+            {event.date ? <h3>{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</h3> : null}
+            {event.time ? <strong>{event.time} WIB</strong> : null}
+            {location ? <p>{event.venue ? <>{event.venue}<br /></> : null}{event.address || null}</p> : null}
+            {mapEmbedUrl ? <iframe className="wedding-map-embed" src={mapEmbedUrl} title={`Peta Google Maps ${event.venue || event.title || 'lokasi acara'}`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" /> : null}
+            {mapsUrl ? <a href={mapsUrl} target="_blank" rel="noreferrer">BUKA GOOGLE MAPS ↗</a> : null}
+          </article>;
+        })}</div></section> : null}
 
         {hasDigitalEnvelope ? <section className="wedding-section wedding-digital-envelope"><p className="wedding-eyebrow">HADIAH DIGITAL</p><h2>Kirim tanda kasih</h2><p>Doa dan kehadiran Anda adalah hadiah terindah. Jika berkenan, Anda dapat mengirim tanda kasih melalui pilihan berikut.</p><div className="wedding-envelope-options">
           {digitalEnvelope.bank?.enabled && digitalEnvelope.bank.name && digitalEnvelope.bank.account_name && digitalEnvelope.bank.account_number ? <article><h3>Transfer bank · {digitalEnvelope.bank.name}</h3><p>Atas nama <strong>{digitalEnvelope.bank.account_name}</strong></p><p>Nomor rekening <strong>{digitalEnvelope.bank.account_number}</strong></p></article> : null}

@@ -3501,17 +3501,33 @@ input {
   font-size: 0.72rem;
 }
 
+.guestbook-camera-select {
+  display: grid;
+  gap: 4px;
+  color: #52635a;
+  font-size: 0.75rem;
+}
+
+.guestbook-camera-select select {
+  min-width: 190px;
+}
+
 .guestbook-scanner-video {
   display: none;
   width: min(100%, 520px);
   max-height: 360px;
   border-radius: 6px;
   background: #17231d;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .guestbook-scanner-video.is-active {
   display: block;
+}
+
+.guestbook-scanner-status {
+  color: #52635a;
+  font-size: 0.8rem;
 }
 
 .guest-ticket-page {

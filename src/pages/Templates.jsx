@@ -46,6 +46,7 @@ export const createPreviewInvitation = (template) => {
     content: {
       demo_template: true,
       template_id: templateId(template),
+      template_name: template.name,
       event_type: details.eventType,
       couple_names: details.coupleNames || '',
       honoree_name: details.honoreeName || '',
