@@ -113,9 +113,9 @@ const optimizeImageFile = async (file) => {
 };
 
 const defaultPortalData = {
-  siteName: 'Portal.id',
-  logo: 'P',
-  logoImage: '',
+  siteName: 'Aurora Media',
+  logo: 'AM',
+  logoImage: '/aurora-media-logo.svg',
   hero: {
     eyebrow: 'CREATIVE BRANDS · ONE PORTAL',
     title: 'Temukan partner terbaik untuk momen istimewa Anda.',
@@ -193,9 +193,9 @@ const defaultPortalData = {
   socialLinks: { instagram: '', tiktok: '', youtube: '' },
   footer: 'Bersama, wujudkan momen terbaik Anda.',
   promotion: {
-    eyebrow: 'GROW WITH PORTAL.ID',
+    eyebrow: 'GROW WITH AURORA MEDIA',
     title: 'Brand Anda Layak Dikenal Lebih Luas.',
-    description: 'Jadikan Portal.id sebagai ruang untuk memperkenalkan brand, memperluas jangkauan, dan membangun kolaborasi kreatif.',
+    description: 'Jadikan Aurora Media sebagai ruang untuk memperkenalkan brand, memperluas jangkauan, dan membangun kolaborasi kreatif.',
     button: 'Mulai Kerja Sama',
   },
   seo: SEO_DEFAULTS.portal,
@@ -512,7 +512,7 @@ const defaultNunuyData = {
 const defaultInvitationData = {
   siteName: 'Nuansa Invite',
   logo: 'U',
-  logoImage: '',
+  logoImage: '/undangan-logo.svg',
   hero: {
     title: 'Ciptakan Momen Istimewa Berkelas & Elegan.',
     subtitle: 'Rancang undangan digital personal yang elegan dan mudah dibagikan. Kelola RSVP, daftar tamu, musik, lokasi, dan cerita acara dalam satu dashboard praktis.',
@@ -645,6 +645,8 @@ const normalizePortalData = (data) => {
   return {
     ...defaultPortalData,
     ...saved,
+    siteName: saved.siteName === 'Portal.id' ? defaultPortalData.siteName : saved.siteName || defaultPortalData.siteName,
+    logoImage: saved.logoImage || defaultPortalData.logoImage,
     hero: { ...defaultPortalData.hero, ...(saved.hero || {}) },
     services,
     ads: Object.fromEntries(Object.entries(defaultPortalData.ads).map(([key, value]) => [
@@ -1018,7 +1020,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             <section className="admin-panel-block portal-cms-block">
               <div className="portal-admin-section-heading">
                 <div>
-                  <h3>Portal.id · Content Studio</h3>
+                  <h3>Aurora Media · Content Studio</h3>
                   <p className="muted">Kelola hero, tiga brand utama, materi visual, dan area iklan portal.</p>
                 </div>
                 <div className="portal-config-actions">
@@ -1097,7 +1099,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             </section>
 
             <section className="admin-panel-block">
-              <h3>Social media Portal.id</h3>
+              <h3>Social media Aurora Media</h3>
               <div className="form-grid">
                 <label>Instagram<input value={formData.socialLinks?.instagram || ''} onChange={(event) => updateField('socialLinks.instagram', event.target.value)} placeholder="https://instagram.com/..." /></label>
                 <label>TikTok<input value={formData.socialLinks?.tiktok || ''} onChange={(event) => updateField('socialLinks.tiktok', event.target.value)} placeholder="https://tiktok.com/@..." /></label>
@@ -1523,7 +1525,7 @@ const PortalHome = () => {
             </div>
             <div className="portal-home-hero-image" data-portal-reveal>
               <img src={portalData.hero.image} alt={portalData.hero.imageAlt || 'Momen perayaan yang dirancang dengan indah'} loading="eager" />
-              <span>PORTAL.ID <i /> CURATED FOR YOUR MOMENTS</span>
+              <span>AURORA MEDIA <i /> CURATED FOR YOUR MOMENTS</span>
             </div>
           </div>
         </section>
@@ -1579,44 +1581,44 @@ const PortalHome = () => {
 
 const portalFaqSections = [
   {
-    title: 'A. Tentang Portal.id',
+    title: 'A. Tentang Aurora Media',
     questions: [
-      ['Apa itu Portal.id?', 'Portal.id adalah platform creative collective yang menghubungkan berbagai brand dan layanan kreatif dalam satu portal. Kami menghadirkan pilihan partner di bidang wedding, musik, hiburan, dan undangan digital untuk membantu Anda menemukan layanan yang sesuai dengan kebutuhan.'],
-      ['Apa tujuan Portal.id?', 'Portal.id hadir untuk mempermudah masyarakat menemukan partner kreatif terpercaya sekaligus membantu brand memperluas jangkauan dan memperkenalkan layanan mereka kepada audiens yang lebih luas.'],
-      ['Apakah Portal.id menyediakan layanan secara langsung?', 'Portal.id berperan sebagai platform informasi, promosi, dan penghubung antara pengunjung dengan brand partner. Pemesanan dan transaksi layanan dilakukan langsung melalui masing-masing partner, sesuai ketentuan mereka.'],
+      ['Apa itu Aurora Media?', 'Aurora Media adalah platform creative collective yang menghubungkan berbagai brand dan layanan kreatif dalam satu portal. Kami menghadirkan pilihan partner di bidang wedding, musik, hiburan, dan undangan digital untuk membantu Anda menemukan layanan yang sesuai dengan kebutuhan.'],
+      ['Apa tujuan Aurora Media?', 'Aurora Media hadir untuk mempermudah masyarakat menemukan partner kreatif terpercaya sekaligus membantu brand memperluas jangkauan dan memperkenalkan layanan mereka kepada audiens yang lebih luas.'],
+      ['Apakah Aurora Media menyediakan layanan secara langsung?', 'Aurora Media berperan sebagai platform informasi, promosi, dan penghubung antara pengunjung dengan brand partner. Pemesanan dan transaksi layanan dilakukan langsung melalui masing-masing partner, sesuai ketentuan mereka.'],
     ],
   },
   {
-    title: 'B. Partner Portal.id',
+    title: 'B. Partner Aurora Media',
     questions: [
-      ['Brand apa saja yang tersedia di Portal.id?', 'Saat ini Portal.id menghadirkan beberapa partner pilihan, antara lain Nunuy Nadhifa Wedding – Wedding Organizer dan layanan pernikahan; Musik.id – musik, hiburan, dan kebutuhan entertainment; serta Undangan Digital – layanan undangan digital modern. Daftar partner dapat berkembang sesuai kolaborasi terbaru.'],
+      ['Brand apa saja yang tersedia di Aurora Media?', 'Saat ini Aurora Media menghadirkan beberapa partner pilihan, antara lain Nunuy Nadhifa Wedding – Wedding Organizer dan layanan pernikahan; Musik.id – musik, hiburan, dan kebutuhan entertainment; serta Undangan Digital – layanan undangan digital modern. Daftar partner dapat berkembang sesuai kolaborasi terbaru.'],
       ['Bagaimana cara mengunjungi website partner?', 'Anda cukup memilih kartu brand yang tersedia, kemudian klik tombol "Kunjungi Website". Anda akan diarahkan ke website resmi partner yang bersangkutan.'],
       ['Apakah saya bisa menghubungi partner secara langsung?', 'Ya. Setiap partner memiliki informasi kontak atau kanal komunikasi masing-masing. Anda dapat menghubungi mereka untuk mendapatkan informasi layanan, harga, dan pemesanan.'],
-      ['Apakah harga layanan partner ditentukan oleh Portal.id?', 'Tidak. Harga, paket layanan, promo, dan ketentuan pemesanan ditentukan langsung oleh masing-masing partner.'],
+      ['Apakah harga layanan partner ditentukan oleh Aurora Media?', 'Tidak. Harga, paket layanan, promo, dan ketentuan pemesanan ditentukan langsung oleh masing-masing partner.'],
     ],
   },
   {
     title: 'C. Promosi dan Kerja Sama',
     questions: [
-      ['Apakah brand saya bisa bergabung dengan Portal.id?', 'Tentu. Portal.id terbuka untuk kolaborasi dengan brand, bisnis, penyedia jasa, dan pelaku industri kreatif yang ingin memperluas jangkauan melalui platform kami.'],
-      ['Bagaimana cara mendaftarkan brand untuk menjadi partner?', 'Anda dapat menghubungi tim Portal.id melalui halaman Kontak atau WhatsApp. Sampaikan nama brand, kategori bisnis, deskripsi layanan, dan alamat website atau media sosial.'],
-      ['Apakah Portal.id menyediakan layanan iklan dan promosi?', 'Ya. Portal.id membuka peluang promosi brand melalui penempatan banner, spotlight partner, dan bentuk kolaborasi promosi lainnya sesuai paket kerja sama yang tersedia.'],
-      ['Apakah promosi di Portal.id berbayar?', 'Biaya promosi bergantung pada jenis penempatan, durasi, dan kesepakatan kerja sama. Silakan hubungi tim kami untuk mendapatkan informasi paket promosi.'],
+      ['Apakah brand saya bisa bergabung dengan Aurora Media?', 'Tentu. Aurora Media terbuka untuk kolaborasi dengan brand, bisnis, penyedia jasa, dan pelaku industri kreatif yang ingin memperluas jangkauan melalui platform kami.'],
+      ['Bagaimana cara mendaftarkan brand untuk menjadi partner?', 'Anda dapat menghubungi tim Aurora Media melalui halaman Kontak atau WhatsApp. Sampaikan nama brand, kategori bisnis, deskripsi layanan, dan alamat website atau media sosial.'],
+      ['Apakah Aurora Media menyediakan layanan iklan dan promosi?', 'Ya. Aurora Media membuka peluang promosi brand melalui penempatan banner, spotlight partner, dan bentuk kolaborasi promosi lainnya sesuai paket kerja sama yang tersedia.'],
+      ['Apakah promosi di Aurora Media berbayar?', 'Biaya promosi bergantung pada jenis penempatan, durasi, dan kesepakatan kerja sama. Silakan hubungi tim kami untuk mendapatkan informasi paket promosi.'],
     ],
   },
   {
     title: 'D. Pemesanan dan Keamanan',
     questions: [
       ['Bagaimana cara melakukan pemesanan layanan?', 'Pilih partner yang Anda inginkan, kunjungi website atau kanal kontak mereka, kemudian ikuti prosedur pemesanan yang disediakan oleh partner tersebut.'],
-      ['Apakah Portal.id bertanggung jawab atas transaksi dengan partner?', 'Portal.id berfungsi sebagai media penghubung dan promosi. Transaksi, pembayaran, kontrak, serta pelaksanaan layanan menjadi tanggung jawab pengunjung dan partner terkait sesuai kesepakatan masing-masing.'],
-      ['Bagaimana jika saya mengalami kendala dengan layanan partner?', 'Silakan hubungi partner secara langsung melalui kontak resmi mereka. Jika kendala berkaitan dengan informasi atau penayangan brand di Portal.id, Anda dapat menghubungi tim Portal.id.'],
+      ['Apakah Aurora Media bertanggung jawab atas transaksi dengan partner?', 'Aurora Media berfungsi sebagai media penghubung dan promosi. Transaksi, pembayaran, kontrak, serta pelaksanaan layanan menjadi tanggung jawab pengunjung dan partner terkait sesuai kesepakatan masing-masing.'],
+      ['Bagaimana jika saya mengalami kendala dengan layanan partner?', 'Silakan hubungi partner secara langsung melalui kontak resmi mereka. Jika kendala berkaitan dengan informasi atau penayangan brand di Aurora Media, Anda dapat menghubungi tim Aurora Media.'],
     ],
   },
   {
     title: 'E. Kontak dan Informasi',
     questions: [
-      ['Bagaimana cara menghubungi Portal.id?', 'Anda dapat menghubungi tim kami melalui halaman Kontak, email resmi, WhatsApp, atau media sosial Portal.id.'],
-      ['Bagaimana jika saya ingin mengajukan kerja sama khusus?', 'Kami terbuka terhadap berbagai bentuk kolaborasi kreatif. Kirimkan proposal atau gambaran kerja sama Anda kepada tim Portal.id untuk dibahas lebih lanjut.'],
+      ['Bagaimana cara menghubungi Aurora Media?', 'Anda dapat menghubungi tim kami melalui halaman Kontak, email resmi, WhatsApp, atau media sosial Aurora Media.'],
+      ['Bagaimana jika saya ingin mengajukan kerja sama khusus?', 'Kami terbuka terhadap berbagai bentuk kolaborasi kreatif. Kirimkan proposal atau gambaran kerja sama Anda kepada tim Aurora Media untuk dibahas lebih lanjut.'],
     ],
   },
 ];
@@ -1627,13 +1629,13 @@ const PortalInfoPage = ({ page }) => {
   const { theme } = portalData;
   const isAdvertisePage = page === 'advertise';
   const isContactPage = page === 'contact';
-  const whatsappHref = `https://wa.me/${String(portalData.whatsapp.number || '').replace(/\D/g, '')}?text=${encodeURIComponent(isAdvertisePage ? 'Halo, saya tertarik untuk bekerja sama dan beriklan di Portal.id.' : portalData.whatsapp.message || '')}`;
+  const whatsappHref = `https://wa.me/${String(portalData.whatsapp.number || '').replace(/\D/g, '')}?text=${encodeURIComponent(isAdvertisePage ? 'Halo, saya tertarik untuk bekerja sama dan beriklan di Aurora Media.' : portalData.whatsapp.message || '')}`;
   const title = isAdvertisePage ? `Beriklan — ${portalData.siteName}` : isContactPage ? `Kontak — ${portalData.siteName}` : `FAQ — ${portalData.siteName}`;
   const description = isAdvertisePage
     ? portalData.promotion.description
     : isContactPage
       ? `Hubungi ${portalData.siteName} melalui WhatsApp, email, atau telepon untuk pertanyaan dan kerja sama.`
-      : 'Temukan jawaban atas pertanyaan seputar layanan, partner, promosi, dan peluang kerja sama bersama Portal.id.';
+      : 'Temukan jawaban atas pertanyaan seputar layanan, partner, promosi, dan peluang kerja sama bersama Aurora Media.';
   const portalStyle = {
     '--primary': theme.primary,
     '--accent': theme.accent,
@@ -1683,17 +1685,17 @@ const PortalInfoPage = ({ page }) => {
                   <p>{portalData.promotion.description}</p>
                   <a className="portal-info-primary" href={whatsappHref} target="_blank" rel="noopener noreferrer">{portalData.promotion.button}<span aria-hidden="true"> ↗</span></a>
                 </div>
-                <div className="portal-info-art" aria-hidden="true"><span>PORTAL.ID</span><strong>Creative<br />connections.</strong><i>✳</i></div>
+                <div className="portal-info-art" aria-hidden="true"><span>AURORA MEDIA</span><strong>Creative<br />connections.</strong><i>✳</i></div>
               </div>
             </section>
             <section className="portal-info-details">
               <div className="container">
                 <div className="portal-info-heading">
-                  <p className="eyebrow">GROW WITH PORTAL.ID</p>
+                  <p className="eyebrow">GROW WITH AURORA MEDIA</p>
                   <h2>Jangkau audiens yang tepat, bersama partner kreatif.</h2>
                 </div>
                 <div className="portal-info-benefits">
-                  <article><span>01</span><h3>Profil brand</h3><p>Tampilkan layanan dan cerita brand Anda kepada pengunjung Portal.id.</p></article>
+                  <article><span>01</span><h3>Profil brand</h3><p>Tampilkan layanan dan cerita brand Anda kepada pengunjung Aurora Media.</p></article>
                   <article><span>02</span><h3>Ruang promosi</h3><p>Diskusikan penempatan promosi yang sesuai dengan kebutuhan brand.</p></article>
                   <article><span>03</span><h3>Kolaborasi kreatif</h3><p>Temukan peluang kolaborasi di bidang wedding, musik, hiburan, dan undangan.</p></article>
                 </div>
@@ -1707,7 +1709,7 @@ const PortalInfoPage = ({ page }) => {
                 <div>
                   <p className="eyebrow">KAMI SIAP TERHUBUNG</p>
                   <h1>Ada cerita atau rencana yang ingin Anda wujudkan?</h1>
-                  <p>Hubungi tim Portal.id untuk pertanyaan, rekomendasi partner, maupun peluang kerja sama. Kami akan senang mendengar dari Anda.</p>
+                  <p>Hubungi tim Aurora Media untuk pertanyaan, rekomendasi partner, maupun peluang kerja sama. Kami akan senang mendengar dari Anda.</p>
                 </div>
                 <div className="portal-info-art" aria-hidden="true"><span>LET'S TALK</span><strong>Every good<br />idea starts<br />with a hello.</strong><i>✳</i></div>
               </div>
@@ -1715,7 +1717,7 @@ const PortalInfoPage = ({ page }) => {
             <section className="portal-info-details">
               <div className="container">
                 <div className="portal-info-heading">
-                  <p className="eyebrow">KONTAK PORTAL.ID</p>
+                  <p className="eyebrow">KONTAK AURORA MEDIA</p>
                   <h2>Mari mulai percakapan.</h2>
                 </div>
                 <div className="portal-contact-grid">
@@ -1738,9 +1740,9 @@ const PortalInfoPage = ({ page }) => {
           <>
             <section className="portal-faq-hero">
               <div className="container">
-                <p className="eyebrow">PORTAL.ID — CREATIVE COLLECTIVE</p>
+                <p className="eyebrow">AURORA MEDIA — CREATIVE COLLECTIVE</p>
                 <h1>Frequently Asked Questions <span>(FAQ)</span></h1>
-                <p>Selamat datang di Portal.id. Temukan jawaban atas pertanyaan seputar layanan, partner, promosi, dan peluang kerja sama bersama kami.</p>
+                <p>Selamat datang di Aurora Media. Temukan jawaban atas pertanyaan seputar layanan, partner, promosi, dan peluang kerja sama bersama kami.</p>
               </div>
             </section>
             <section className="portal-faq-content">
@@ -1759,9 +1761,9 @@ const PortalInfoPage = ({ page }) => {
                   </section>
                 ))}
                 <div className="portal-faq-cta">
-                  <p className="eyebrow">PORTAL.ID — CREATIVE COLLECTIVE</p>
+                  <p className="eyebrow">AURORA MEDIA — CREATIVE COLLECTIVE</p>
                   <h2>Masih Ada Pertanyaan?</h2>
-                  <p>Kami siap membantu Anda menemukan partner kreatif yang tepat atau membuka peluang kolaborasi bersama Portal.id.</p>
+                  <p>Kami siap membantu Anda menemukan partner kreatif yang tepat atau membuka peluang kolaborasi bersama Aurora Media.</p>
                   <a className="portal-info-primary" href="/kontak">Hubungi tim kami <span aria-hidden="true">→</span></a>
                   <p className="portal-faq-tagline"><strong>{portalData.siteName} – Creative Collective</strong><br /><em>Creative Brands. One Portal. Endless Possibilities.</em></p>
                 </div>
@@ -1789,7 +1791,7 @@ const PortalInfoPage = ({ page }) => {
 };
 
 const portalTestimonialSources = [
-  { site: 'portal', label: 'Portal.id', href: '/', key: storage.portal, defaults: defaultPortalData },
+  { site: 'portal', label: 'Aurora Media', href: '/', key: storage.portal, defaults: defaultPortalData },
   { site: 'nunuy', label: 'Nunuy Nadhifa Wedding', href: '/nunuy-nadhifa-wedding', key: storage.nunuy, defaults: defaultNunuyData },
   { site: 'gibrig', label: 'Musik.id', href: '/gibrig', key: storage.gibrig, defaults: defaultGibrigData },
   { site: 'invitation', label: 'Undangan Digital', href: '/undangan', key: storage.invitation, defaults: defaultInvitationData },
@@ -1912,7 +1914,7 @@ const PortalPartnerTestimonials = () => {
         <div className="portal-partner-testimonials-heading">
           <p className="eyebrow">CERITA DARI PARTNER KAMI</p>
           <h2 id="portal-partner-testimonials-title">Momen berkesan, diceritakan langsung.</h2>
-          <p>Testimoni ditampilkan dari website partner Portal.id yang terhubung dan telah dipublikasikan.</p>
+          <p>Testimoni ditampilkan dari website partner Aurora Media yang terhubung dan telah dipublikasikan.</p>
         </div>
         {testimonials.length > 0 ? (
           <div className="portal-partner-testimonial-grid">
@@ -2076,7 +2078,7 @@ const GibrigHome = ({ path }) => {
               </a>
             ))}
             <a href="#social-media">Sosial Media</a>
-            <a href="/">Portal.id</a>
+            <a href="/">Aurora Media</a>
           </nav>
           <a
             className="gibrig-contact-cta"
@@ -2238,7 +2240,7 @@ const GibrigHome = ({ path }) => {
             <nav className="gibrig-footer-nav" aria-label="Navigasi footer">
               <strong>Navigasi</strong>
               {gibrigPages.map((page) => <a key={page.slug || 'home'} href={page.slug ? `/gibrig/${page.slug}` : '/gibrig'}>{page.label}</a>)}
-              <a href="/">Portal.id</a>
+              <a href="/">Aurora Media</a>
             </nav>
             <div className="gibrig-footer-contact">
               <strong>Hubungi Kami</strong>
@@ -2248,7 +2250,7 @@ const GibrigHome = ({ path }) => {
               {whatsappNumber ? <a href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`} target="_blank" rel="noopener noreferrer">◉ <span>WhatsApp</span></a> : null}
             </div>
           </div>
-          <div className="container gibrig-copyright"><p>{data.footer}</p><a href="/" aria-label="Kembali ke Portal.id">↑</a></div>
+          <div className="container gibrig-copyright"><p>{data.footer}</p><a href="/" aria-label="Kembali ke Aurora Media">↑</a></div>
         </section>
       </main>
       {previewImage ? (
@@ -2335,7 +2337,13 @@ const InvitationFeatureGrid = ({ features }) => (
 );
 
 const InvitationHome = ({ path = '/undangan' }) => {
-  const data = useMemo(() => normalizeInvitationBrand(mergeDataDefaults(defaultInvitationData, loadData(storage.invitation, defaultInvitationData))), []);
+  const data = useMemo(() => {
+    const saved = loadData(storage.invitation, defaultInvitationData);
+    return normalizeInvitationBrand({
+      ...mergeDataDefaults(defaultInvitationData, saved),
+      logoImage: saved.logoImage || defaultInvitationData.logoImage,
+    });
+  }, []);
   const [advertisements, setAdvertisements] = useState([]);
   const [advertisementsError, setAdvertisementsError] = useState('');
   const page = invitationPages[path] || invitationPages['/undangan'];
@@ -2353,7 +2361,7 @@ const InvitationHome = ({ path = '/undangan' }) => {
 
   return (
     <div className={`site-shell invitation-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
-      <SeoHead siteId="invitation" siteBasePath="/undangan" title={data.seo.title} description={data.seo.description} keywords={data.seo.keywords} image={data.hero.image} siteName={data.siteName} noIndex={data.seo.noIndex} canonicalUrl={data.seo.canonicalUrl} />
+      <SeoHead siteId="invitation" siteBasePath="/undangan" title={data.seo.title} description={data.seo.description} keywords={data.seo.keywords} image={data.hero.image} siteName={data.siteName} noIndex={data.seo.noIndex} canonicalUrl={data.seo.canonicalUrl} faviconUrl="/undangan-favicon.svg" />
       <Navbar
         siteName={data.siteName}
         logo={data.logo}

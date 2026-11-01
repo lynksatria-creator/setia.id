@@ -16,7 +16,7 @@ import NunuyConsultationAdmin from './components/NunuyConsultationAdmin';
 
 const renderApp = () => render(<AuthProvider><App /></AuthProvider>);
 
-test('renders the Portal.id reference landing page with working partner links', () => {
+test('renders the Aurora Media reference landing page with working partner links', () => {
   window.history.pushState({}, '', '/');
   render(<App />);
 
@@ -36,7 +36,7 @@ test('renders the Portal.id reference landing page with working partner links', 
   expect(weddingLink.getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
   expect(weddingLink.getAttribute('target')).toBe('_blank');
   expect(weddingLink.getAttribute('rel')).toBe('noopener noreferrer');
-  expect(document.title).toBe('Portal.id | Rekomendasi Wedding, Musik & Undangan Digital');
+  expect(document.title).toBe('Aurora Media | Rekomendasi Wedding, Musik & Undangan Digital');
 });
 
 test('super admin SEO dashboard saves independent website metadata to the backend', async () => {
@@ -143,7 +143,7 @@ test('FAQ page renders all five sections and provides a contact link', () => {
   render(<App />);
 
   expect(screen.getByRole('heading', { name: 'Frequently Asked Questions (FAQ)' })).toBeDefined();
-  expect(screen.getByRole('heading', { name: 'A. Tentang Portal.id' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'A. Tentang Aurora Media' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'E. Kontak dan Informasi' })).toBeDefined();
   expect(screen.getByText(/Portal\.id adalah platform creative collective yang menghubungkan berbagai brand/)).toBeDefined();
   expect(screen.getByRole('link', { name: /hubungi tim kami/i }).getAttribute('href')).toBe('/kontak');
@@ -181,7 +181,7 @@ test.each([
   const activeLink = navigation.querySelector('[aria-current="page"]');
   expect(activeLink.textContent).toBe(menuLabel);
   expect(activeLink.getAttribute('href')).toBe(path);
-  expect(navigation.querySelector('a[href="/"]').textContent).toBe('Portal.id');
+  expect(navigation.querySelector('a[href="/"]').textContent).toBe('Aurora Media');
   if (path === '/undangan') {
     expect(screen.queryByText('RSVP online')).toBeNull();
     expect(screen.queryByText('Personal & elegan')).toBeNull();
@@ -220,7 +220,7 @@ test('portal admin can add, edit, publish, and remove advertised websites', asyn
   expect(screen.getByRole('button', { name: /elastic spring motion/i })).toBeDefined();
   expect(screen.getByRole('button', { name: /ekspor json/i })).toBeDefined();
   expect(screen.getByRole('button', { name: 'Tambah website' })).toBeDefined();
-  expect(screen.getByRole('heading', { name: 'SEO & social media Portal.id' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'SEO & social media Aurora Media' })).toBeDefined();
   expect(screen.getByText(/impor json/i)).toBeDefined();
   fireEvent.change(screen.getAllByLabelText('URL website partner')[0], { target: { value: 'https://nunuy.example' } });
   fireEvent.change(screen.getAllByLabelText('Kategori')[0], { target: { value: 'WEDDING ORGANIZER · PILIHAN' } });
@@ -1488,7 +1488,7 @@ test.each([
 
   expect(screen.getByRole('heading', { name: heading })).toBeDefined();
   expect(screen.getAllByRole('link', { name: 'Beranda' }).every((link) => link.getAttribute('href') === href)).toBe(true);
-  expect(screen.getAllByRole('link', { name: 'Portal.id' }).every((link) => link.getAttribute('href') === '/')).toBe(true);
+  expect(screen.getAllByRole('link', { name: 'Aurora Media' }).every((link) => link.getAttribute('href') === '/')).toBe(true);
 });
 
 test('renders the Nunuy wedding experience with real-data disclaimers and consultation', () => {
@@ -1566,7 +1566,7 @@ test.each([
   expect(currentMenuLink.getAttribute('aria-current')).toBe('page');
   expect(currentMenuLink.textContent).toBe(menuLabel);
   expect(screen.getByRole('link', { name: 'Beranda' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
-  expect(screen.getAllByRole('link', { name: 'Portal.id' }).every((link) => link.getAttribute('href') === '/')).toBe(true);
+  expect(screen.getAllByRole('link', { name: 'Aurora Media' }).every((link) => link.getAttribute('href') === '/')).toBe(true);
   await waitFor(() => expect(document.head.querySelector('link[rel="canonical"]').href).toContain(path));
 });
 
@@ -1836,7 +1836,7 @@ test.each([
   }
 });
 
-test('Portal.id displays published testimonials attributed to their connected partner websites', async () => {
+test('Aurora Media displays published testimonials attributed to their connected partner websites', async () => {
   const testimonials = {
     nunuy: [{ id: 'nunuy-1', name: 'Alya dan Bima', message: 'Hari pernikahan kami terasa hangat dan tertata.', rating: 5 }],
     gibrig: [{ id: 'gibrig-1', name: 'Keluarga Rani', message: 'Musiknya membuat acara kami semakin meriah.', rating: 4 }],
@@ -1887,7 +1887,7 @@ test('visitors can submit a star rating with an optional message for admin appro
   const app = renderApp();
 
   try {
-    const rating = screen.getByRole('button', { name: 'Beri rating 4 dari 5 untuk Portal.id' });
+    const rating = screen.getByRole('button', { name: 'Beri rating 4 dari 5 untuk Aurora Media' });
     fireEvent.click(rating);
     expect(screen.getByLabelText(/pesan opsional/i)).toBeDefined();
     expect(fetchMock.mock.calls.some(([, options]) => options.method === 'POST')).toBe(false);
@@ -1922,10 +1922,10 @@ test('renders the Gibrig public homepage and connects booking inquiry', async ()
   const nav = screen.getByRole('navigation', { name: 'Navigasi utama' });
   expect(nav.querySelectorAll('a')).toHaveLength(8);
   expect([...nav.querySelectorAll('a')].map((link) => link.textContent)).toEqual([
-    'Beranda', 'Tentang & Artis', 'Entertainment', 'Paket', 'Galeri', 'Testimoni', 'Sosial Media', 'Portal.id',
+    'Beranda', 'Tentang & Artis', 'Entertainment', 'Paket', 'Galeri', 'Testimoni', 'Sosial Media', 'Aurora Media',
   ]);
   expect(nav.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
-  expect(nav.querySelector('a[href="/"]').textContent).toBe('Portal.id');
+  expect(nav.querySelector('a[href="/"]').textContent).toBe('Aurora Media');
   expect(nav.querySelector('a[href="#social-media"]')).not.toBeNull();
   expect(container.querySelector('.gibrig-social-links a[href="https://www.tiktok.com/@neng_syelfi_oktora_2"]')).not.toBeNull();
   expect(container.querySelector('.gibrig-social-links a[href="https://www.youtube.com/@nengsyelfioktora7310"]')).not.toBeNull();
@@ -1973,11 +1973,11 @@ test.each([
   const mainNavigation = screen.getByRole('navigation', { name: 'Navigasi utama' });
   expect(mainNavigation.querySelectorAll('a')).toHaveLength(8);
   expect(mainNavigation.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
-  expect(mainNavigation.querySelector('a[href="/"]').textContent).toBe('Portal.id');
+  expect(mainNavigation.querySelector('a[href="/"]').textContent).toBe('Aurora Media');
   const footerNavigation = screen.getByRole('navigation', { name: 'Navigasi footer' });
   expect(footerNavigation.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
-  expect(footerNavigation.querySelector('a[href="/"]').textContent).toBe('Portal.id');
-  expect(screen.getByRole('link', { name: 'Kembali ke Portal.id' }).getAttribute('href')).toBe('/');
+  expect(footerNavigation.querySelector('a[href="/"]').textContent).toBe('Aurora Media');
+  expect(screen.getByRole('link', { name: 'Kembali ke Aurora Media' }).getAttribute('href')).toBe('/');
   expect(screen.getByRole('link', { name: /gibrig entertainment, beranda/i }).getAttribute('href')).toBe('/gibrig');
   expect(document.title).toContain('Gibrig Entertainment');
 });

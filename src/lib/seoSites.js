@@ -1,7 +1,7 @@
 export const SEO_DEFAULTS = {
   portal: {
-    title: 'Portal.id | Rekomendasi Wedding, Musik & Undangan Digital',
-    description: 'Temukan wedding organizer, hiburan musik, dan undangan digital pilihan untuk merencanakan momen istimewa bersama partner Portal.id.',
+    title: 'Aurora Media | Wedding, Musik & Undangan Digital',
+    description: 'Temukan wedding organizer, hiburan musik, dan undangan digital pilihan bersama Aurora Media.',
     keywords: 'wedding organizer, hiburan musik, undangan digital, partner pernikahan, rekomendasi vendor acara',
     canonicalUrl: '',
     ogImage: '',
@@ -34,7 +34,7 @@ export const SEO_DEFAULTS = {
 };
 
 export const SEO_WEBSITES = [
-  { id: 'portal', name: 'Portal.id', href: '/', cmsKey: 'portal-cms' },
+  { id: 'portal', name: 'Aurora Media', href: '/', cmsKey: 'portal-cms' },
   { id: 'gibrig', name: 'Gibrig Entertainment / Musik.id', href: '/gibrig', cmsKey: 'gibrig-cms' },
   { id: 'nunuy', name: 'Nunuy Nadhifa Wedding', href: '/nunuy-nadhifa-wedding', cmsKey: 'nunuy-cms' },
   { id: 'invitation', name: 'Nuansa Invite', href: '/undangan', cmsKey: 'invitation-cms' },

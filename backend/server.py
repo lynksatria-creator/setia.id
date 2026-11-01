@@ -477,13 +477,16 @@ def get_smtp_settings():
     if bool(username) != bool(password):
         raise HTTPException(status_code=503, detail="SMTP_USERNAME dan SMTP_PASSWORD harus diatur bersama.")
     use_ssl = os.environ.get("SMTP_USE_SSL", "false").strip().lower() in {"1", "true", "yes"}
+    sender_name = os.environ.get("SMTP_FROM_NAME", "Nuansa Invite").strip() or "Nuansa Invite"
+    if sender_name.casefold() == "undangan.id":
+        sender_name = "Nuansa Invite"
     return {
         "host": host,
         "port": port,
         "username": username,
         "password": password,
         "sender": sender,
-        "sender_name": os.environ.get("SMTP_FROM_NAME", "Undangan.id").strip() or "Undangan.id",
+        "sender_name": sender_name,
         "use_ssl": use_ssl,
     }
 
@@ -510,12 +513,12 @@ def send_smtp_message(settings, message):
 async def send_registration_code_email(email, full_name, code):
     settings = get_smtp_settings()
     message = EmailMessage()
-    message["Subject"] = "Kode OTP pendaftaran Undangan.id"
+    message["Subject"] = "Kode OTP pendaftaran Nuansa Invite"
     message["From"] = formataddr((settings["sender_name"], settings["sender"]))
     message["To"] = email
     message.set_content(
         f"Halo {full_name},\n\n"
-        f"Kode OTP pendaftaran Undangan.id Anda adalah: {code}\n\n"
+        f"Kode OTP pendaftaran Nuansa Invite Anda adalah: {code}\n\n"
         "Kode berlaku selama 10 menit dan hanya dapat digunakan satu kali. "
         "Jangan bagikan kode ini kepada siapa pun.\n\n"
         "Jika Anda tidak merasa mendaftar, abaikan email ini."
@@ -902,7 +905,7 @@ async def midtrans_request(method, path, **kwargs):
 
 
 async def create_midtrans_transaction(payment, user, mobile=None):
-    full_name = " ".join(str(user.get("full_name") or "").split()) or "Pengguna Undangan.id"
+    full_name = " ".join(str(user.get("full_name") or "").split()) or "Pengguna Nuansa Invite"
     name_parts = full_name.split(" ", 1)
     customer_details = {
         "first_name": name_parts[0][:50],
@@ -924,7 +927,7 @@ async def create_midtrans_transaction(payment, user, mobile=None):
                 "id": payment["plan_id"][:50],
                 "price": payment["amount"],
                 "quantity": 1,
-                "name": f"Paket {payment['plan_name']} - Undangan.id"[:50],
+                "name": f"Paket {payment['plan_name']} - Nuansa Invite"[:50],
             }],
             "customer_details": customer_details,
         },

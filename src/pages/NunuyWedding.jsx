@@ -235,7 +235,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
             const href = menuHref(item.href);
             return <a href={href} key={`${item.href}-${index}`} aria-current={href === path ? 'page' : undefined} onClick={() => setMenuOpen(false)}>{item.label}</a>;
           })}
-          <a href="/" onClick={() => setMenuOpen(false)}>Portal.id</a>
+          <a href="/" onClick={() => setMenuOpen(false)}>Aurora Media</a>
         </nav>
         <a
           className="nunuy-nav-cta"
@@ -468,7 +468,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
         {data.contact?.facebook ? <a href={data.contact.facebook} target="_blank" rel="noopener noreferrer">Facebook</a> : null}
         {data.contact?.tiktok ? <a href={data.contact.tiktok} target="_blank" rel="noopener noreferrer">TikTok</a> : null}
         {whatsappNumber ? <a className="whatsapp-contact-link" href={contactLink} target="_blank" rel="noopener noreferrer">{whatsappNumber}</a> : null}
-        <a href="/">Portal.id</a>
+        <a href="/">Aurora Media</a>
         <a href={path === nunuyBasePath ? '#home' : nunuyBasePath}>{data.footer?.backToTop} ↑</a>
         <small>© {new Date().getFullYear()} {data.siteName}</small>
       </footer>

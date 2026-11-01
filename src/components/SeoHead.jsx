@@ -72,7 +72,7 @@ export default function SeoHead({
     const previousFaviconType = favicon.getAttribute('type');
     if (faviconUrl) {
       favicon.href = faviconUrl;
-      favicon.type = 'image/png';
+      favicon.type = faviconUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
     }
     const routeCanonical = `${window.location.origin}${window.location.pathname}`;
     let canonicalHref = routeCanonical;

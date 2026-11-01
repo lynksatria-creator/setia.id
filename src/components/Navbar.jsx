@@ -15,7 +15,7 @@ export default function Navbar({ siteName, logo = 'U', logoImage, activePath = '
   return (
     <header className="topbar invitation-topbar">
       <div className="container nav-wrap invitation-nav-wrap">
-        <a className="brand" href="/undangan">
+        <a className="brand" href="/undangan" aria-label={`${siteName}, beranda`}>
           {logoImage ? (
             <img className="site-logo-image" src={logoImage} alt={`${siteName} logo`} />
           ) : (
@@ -28,7 +28,7 @@ export default function Navbar({ siteName, logo = 'U', logoImage, activePath = '
               ) : logo}
             </span>
           )}
-          {siteName}
+          {!logoImage ? siteName : null}
         </a>
         <button
           className="invitation-menu-toggle"
@@ -52,7 +52,7 @@ export default function Navbar({ siteName, logo = 'U', logoImage, activePath = '
               {item.label}
             </a>
           ))}
-          <a href="/" onClick={() => setMenuOpen(false)}>Portal.id</a>
+          <a href="/" onClick={() => setMenuOpen(false)}>Aurora Media</a>
         </nav>
         <div className="invitation-nav-actions">
           <button className="invitation-login-link" onClick={onLogin}>Masuk</button>

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Aurora Media</title>
+  <desc id="desc">Lambang Aurora Media berwarna emas di dalam medali klasik.</desc>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff1a8"/>
+      <stop offset=".24" stop-color="#c59a3d"/>
+      <stop offset=".48" stop-color="#fff0ad"/>
+      <stop offset=".72" stop-color="#9d7023"/>
+      <stop offset="1" stop-color="#f2d578"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffdf7"/>
+      <stop offset="1" stop-color="#f2ead8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#55401b" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <circle cx="256" cy="256" r="245" fill="url(#face)" stroke="url(#gold)" stroke-width="12"/>
+  <circle cx="256" cy="256" r="226" fill="none" stroke="#6e572b" stroke-width="4"/>
+  <circle cx="256" cy="256" r="217" fill="none" stroke="url(#gold)" stroke-width="9"/>
+  <circle cx="256" cy="256" r="203" fill="none" stroke="#aa873f" stroke-width="2" stroke-dasharray="2 5"/>
+  <g fill="url(#gold)" stroke="#775d2a" stroke-width="2">
+    <path d="m256 38 8 15 17 2-12 12 3 17-16-8-15 8 3-17-12-12 17-2Z"/>
+    <path d="m256 428 6 11 13 2-10 9 2 13-11-6-12 6 3-13-10-9 13-2Z"/>
+    <circle cx="54" cy="256" r="8"/><circle cx="458" cy="256" r="8"/>
+  </g>
+  <g fill="none" stroke="url(#gold)" stroke-linecap="round" stroke-width="5">
+    <path d="M92 153c18-35 45-62 80-80M420 153c-18-35-45-62-80-80"/>
+    <path d="M92 359c18 35 45 62 80 80M420 359c-18 35-45 62-80 80"/>
+  </g>
+  <g fill="#a17a32">
+    <path d="M114 126c-20-4-31-16-33-36 19 4 30 16 33 36ZM139 101c-17-11-22-26-14-45 17 10 22 25 14 45ZM398 126c20-4 31-16 33-36-19 4-30 16-33 36ZM373 101c17-11 22-26 14-45-17 10-22 25-14 45Z"/>
+    <path d="M114 386c-20 4-31 16-33 36 19-4 30-16 33-36ZM139 411c-17 11-22 26-14 45 17-10 22-25 14-45ZM398 386c20 4 31 16 33 36-19-4-30-16-33-36ZM373 411c17 11 22 26 14 45-17-10-22-25-14-45Z"/>
+  </g>
+  <g filter="url(#shadow)" text-anchor="middle">
+    <text x="256" y="238" fill="url(#gold)" stroke="#6b5124" stroke-width="3" paint-order="stroke" font-family="Georgia, 'Times New Roman', serif" font-size="154" font-weight="700" letter-spacing="-18">AM</text>
+    <path d="M145 274h222" stroke="url(#gold)" stroke-width="4"/>
+    <text x="256" y="330" fill="#8a672b" font-family="Georgia, 'Times New Roman', serif" font-size="43" font-weight="700" letter-spacing="5">AURORA</text>
+    <text x="256" y="369" fill="#8a672b" font-family="Georgia, 'Times New Roman', serif" font-size="29" font-weight="700" letter-spacing="8">MEDIA</text>
+  </g>
+</svg>

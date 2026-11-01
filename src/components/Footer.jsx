@@ -31,7 +31,7 @@ export default function Footer({ siteName, phone, email, whatsappNumber, whatsap
         <div>
           <h4>Jelajahi</h4>
           {invitationNavigation.map((item) => <p key={item.href}><a href={item.href}>{item.label}</a></p>)}
-          <p><a href="/">Portal.id</a></p>
+          <p><a href="/">Aurora Media</a></p>
         </div>
       </div>
     </footer>

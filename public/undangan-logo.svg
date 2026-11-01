@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" role="img" aria-labelledby="title desc">
+  <title id="title">Invite - Undangan Online</title>
+  <desc id="desc">Logo undangan online dengan bingkai floral navy dan emas.</desc>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="500" cy="320" rx="424" ry="282" stroke="#c6a45e" stroke-width="12"/>
+    <ellipse cx="500" cy="320" rx="405" ry="264" stroke="#112653" stroke-width="9"/>
+    <path d="M245 534C145 470 119 365 150 263c20-67 58-118 111-158" stroke="#c6a45e" stroke-width="7"/>
+  </g>
+  <g fill="#173e70" stroke="#c6a45e" stroke-width="3" stroke-linejoin="round">
+    <path d="M177 465c-39-5-61-27-68-65 37 4 60 26 68 65Z"/>
+    <path d="M151 405c-38-11-55-37-54-75 36 11 54 36 54 75Z"/>
+    <path d="M145 337c-32-20-42-49-31-85 31 19 42 47 31 85Z"/>
+    <path d="M164 272c-25-27-26-57-7-88 25 26 27 55 7 88Z"/>
+    <path d="M203 213c-15-33-7-61 20-84 15 32 8 60-20 84Z"/>
+    <path d="M249 171c-4-36 12-60 44-73 4 35-11 60-44 73Z"/>
+    <path d="M211 501c-34 2-57-16-69-51 34-2 57 15 69 51Z"/>
+    <path d="M194 444c-34-5-54-26-59-62 34 5 54 26 59 62Z"/>
+    <path d="M184 380c-31-14-45-39-39-75 31 14 45 39 39 75Z"/>
+    <path d="M188 315c-27-22-34-50-19-84 27 22 34 50 19 84Z"/>
+    <path d="M213 255c-20-29-18-58 5-87 20 29 18 58-5 87Z"/>
+    <path d="M260 202c-9-33 3-60 33-78 9 33-2 59-33 78Z"/>
+  </g>
+  <g fill="#c6a45e">
+    <circle cx="111" cy="398" r="8"/><circle cx="119" cy="318" r="7"/>
+    <circle cx="158" cy="239" r="8"/><circle cx="213" cy="172" r="7"/>
+    <circle cx="269" cy="126" r="8"/>
+  </g>
+  <g transform="translate(1000 0) scale(-1 1)">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M245 534C145 470 119 365 150 263c20-67 58-118 111-158" stroke="#c6a45e" stroke-width="7"/>
+    </g>
+    <g fill="#173e70" stroke="#c6a45e" stroke-width="3" stroke-linejoin="round">
+      <path d="M177 465c-39-5-61-27-68-65 37 4 60 26 68 65Z"/>
+      <path d="M151 405c-38-11-55-37-54-75 36 11 54 36 54 75Z"/>
+      <path d="M145 337c-32-20-42-49-31-85 31 19 42 47 31 85Z"/>
+      <path d="M164 272c-25-27-26-57-7-88 25 26 27 55 7 88Z"/>
+      <path d="M203 213c-15-33-7-61 20-84 15 32 8 60-20 84Z"/>
+      <path d="M249 171c-4-36 12-60 44-73 4 35-11 60-44 73Z"/>
+      <path d="M211 501c-34 2-57-16-69-51 34-2 57 15 69 51Z"/>
+      <path d="M194 444c-34-5-54-26-59-62 34 5 54 26 59 62Z"/>
+      <path d="M184 380c-31-14-45-39-39-75 31 14 45 39 39 75Z"/>
+      <path d="M188 315c-27-22-34-50-19-84 27 22 34 50 19 84Z"/>
+      <path d="M213 255c-20-29-18-58 5-87 20 29 18 58-5 87Z"/>
+      <path d="M260 202c-9-33 3-60 33-78 9 33-2 59-33 78Z"/>
+    </g>
+    <g fill="#c6a45e">
+      <circle cx="111" cy="398" r="8"/><circle cx="119" cy="318" r="7"/>
+      <circle cx="158" cy="239" r="8"/><circle cx="213" cy="172" r="7"/>
+      <circle cx="269" cy="126" r="8"/>
+    </g>
+  </g>
+  <text x="500" y="228" text-anchor="middle" fill="#102653" font-family="Georgia, 'Times New Roman', serif" font-size="148" font-weight="600">INVITE</text>
+  <g transform="rotate(-13 438 356)">
+    <rect x="365" y="276" width="132" height="176" rx="21" fill="#173e70" stroke="#c6a45e" stroke-width="8"/>
+    <rect x="378" y="294" width="106" height="137" rx="8" fill="#f8f6ef"/>
+    <path d="M394 319h73M394 336h58M394 373h73M394 390h58" stroke="#c6a45e" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="431" cy="441" r="5" fill="#f8f6ef"/>
+  </g>
+  <g transform="rotate(9 562 342)">
+    <rect x="500" y="262" width="129" height="163" rx="7" fill="#fffdf7" stroke="#c6a45e" stroke-width="7"/>
+    <path d="M520 296h87M520 316h72M520 360h87M520 380h63" stroke="#173e70" stroke-width="5" stroke-linecap="round"/>
+    <path d="m548 262 16 21 17-21" fill="#f2e7c9" stroke="#c6a45e" stroke-width="4"/>
+  </g>
+  <path d="m402 375 98 67 98-67v65l-98 59-98-59Z" fill="#173e70" stroke="#c6a45e" stroke-width="8" stroke-linejoin="round"/>
+  <path d="m402 375 98 71 98-71" fill="none" stroke="#f3dfae" stroke-width="7" stroke-linejoin="round"/>
+  <g fill="#c6a45e">
+    <path d="m330 278 7 18 18 7-18 7-7 18-7-18-18-7 18-7Z"/>
+    <path d="m672 286 5 13 13 5-13 5-5 13-5-13-13-5 13-5Z"/>
+    <circle cx="360" cy="345" r="5"/><circle cx="644" cy="356" r="5"/>
+  </g>
+  <text x="500" y="526" text-anchor="middle" fill="#102653" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="700">UNDANGAN ONLINE</text>
+</svg>

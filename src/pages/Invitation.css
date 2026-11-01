@@ -43,6 +43,11 @@
   box-shadow: 0 8px 22px rgba(37, 99, 235, 0.25);
 }
 
+.invitation-nav-wrap .site-logo-image {
+  width: 128px;
+  height: 80px;
+}
+
 .invitation-nav-wrap .logo-mark svg,
 .invitation-footer .logo-mark svg {
   width: 22px;
@@ -830,8 +835,8 @@
   }
 
   .invitation-nav-wrap .site-logo-image {
-    width: 34px;
-    height: 34px;
+    width: 112px;
+    height: 70px;
   }
 
   .invitation-menu-toggle {
