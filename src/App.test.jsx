@@ -165,6 +165,29 @@ test('mobile navigation opens and closes from its accessible toggle', () => {
   window.dispatchEvent(new Event('resize'));
 });
 
+test.each([
+  ['/undangan', /ciptakan momen istimewa berkelas & elegan/i, 'Beranda'],
+  ['/undangan/keunggulan', /keunggulan yang membuat setiap undangan lebih bermakna/i, 'Keunggulan'],
+  ['/undangan/template', /pilih desain yang terasa seperti cerita anda/i, 'Katalog Template'],
+  ['/undangan/harga', /pilih paket sesuai kebutuhan acara anda/i, 'Paket Harga'],
+  ['/undangan/testimoni', /momen istimewa, cerita yang selalu dikenang/i, 'Testimoni'],
+  ['/undangan/faq', /pertanyaan seputar undangan digital/i, 'FAQ'],
+])('opens the Nuansa Invite %s page from its matching menu', (path, heading, menuLabel) => {
+  window.history.pushState({}, '', path);
+  renderApp();
+
+  expect(screen.getByRole('heading', { level: 1, name: heading })).toBeDefined();
+  const navigation = screen.getByRole('navigation', { name: 'Navigasi Nuansa Invite' });
+  const activeLink = navigation.querySelector('[aria-current="page"]');
+  expect(activeLink.textContent).toBe(menuLabel);
+  expect(activeLink.getAttribute('href')).toBe(path);
+  expect(navigation.querySelector('a[href="/"]').textContent).toBe('Portal.id');
+  if (path === '/undangan') {
+    expect(screen.queryByText('RSVP online')).toBeNull();
+    expect(screen.queryByText('Personal & elegan')).toBeNull();
+  }
+});
+
 test('replaces the previous brand in saved invitation website content', () => {
   const storageKey = 'invitation-cms';
   const previousValue = localStorage.getItem(storageKey);
@@ -1277,7 +1300,7 @@ test('super admin can review affiliate history, manage ads, and deactivate witho
 test.each([
   ['/gibrig', /artist performance & entertainment studio/i],
   ['/nunuy-nadhifa-wedding', /make your wedding unforgettable/i],
-  ['/undangan', /buat undangan digital premium/i],
+  ['/undangan', /ciptakan momen istimewa berkelas & elegan/i],
 ])('keeps the public website at %s free of admin buttons', (path, heading) => {
   window.history.pushState({}, '', path);
   renderApp();
@@ -1458,7 +1481,7 @@ test.each([
 test.each([
   ['/gibrig', /artist performance & entertainment studio/i, '/gibrig'],
   ['/nunuy-nadhifa-wedding', /make your wedding unforgettable/i, '/nunuy-nadhifa-wedding'],
-  ['/undangan', /buat undangan digital premium/i, '/undangan'],
+  ['/undangan', /ciptakan momen istimewa berkelas & elegan/i, '/undangan'],
 ])('provides a Beranda link on %s', (path, heading, href) => {
   window.history.pushState({}, '', path);
   renderApp();
@@ -1496,6 +1519,18 @@ test('renders the Nunuy wedding experience with real-data disclaimers and consul
   expect(container.querySelector('.nunuy-floating-whatsapp').getAttribute('href')).toContain('wa.me/6281277881122');
   expect(container.querySelector('.nunuy-floating-whatsapp svg')).toBeDefined();
   expect(container.querySelector('.nunuy-floating-whatsapp').textContent).toBe('');
+});
+
+test('Nunuy uses the provided brand logo and its own favicon', async () => {
+  window.history.pushState({}, '', '/nunuy-nadhifa-wedding');
+  const { container } = renderApp();
+
+  const headerLogo = container.querySelector('.nunuy-header .nunuy-logo-image');
+  expect(headerLogo.getAttribute('src')).toBe('/nunuy-nadhifa-logo.webp');
+  expect(headerLogo.getAttribute('alt')).toBe('');
+  expect(container.querySelector('.nunuy-header .nunuy-brand-copy strong')).toHaveTextContent('Nunuy Nadhifa Wedding');
+  expect(container.querySelector('.nunuy-footer .nunuy-brand-copy strong')).toHaveTextContent('Nunuy Nadhifa Wedding');
+  await waitFor(() => expect(document.head.querySelector('link[rel="icon"]').getAttribute('href')).toBe('/nunuy-nadhifa-favicon.png'));
 });
 
 test('Nunuy mobile menu exposes page links and can be closed', () => {
@@ -1874,11 +1909,15 @@ test('visitors can submit a star rating with an optional message for admin appro
   }
 });
 
-test('renders the Gibrig public homepage and connects booking inquiry', () => {
+test('renders the Gibrig public homepage and connects booking inquiry', async () => {
   window.history.pushState({}, '', '/gibrig');
   const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
   const { container } = render(<App />);
 
+  expect(container.querySelector('.gibrig-topbar .gibrig-brand-logo').getAttribute('src')).toBe('/musik-id-logo.webp');
+  expect(container.querySelector('.gibrig-topbar .gibrig-brand-copy strong')).toHaveTextContent('Musik.id');
+  expect(container.querySelector('.gibrig-footer-brand .gibrig-brand-logo').getAttribute('src')).toBe('/musik-id-logo.webp');
+  expect(await waitFor(() => document.head.querySelector('link[rel="icon"]').getAttribute('href'))).toBe('/musik-id-favicon.png');
   expect(screen.getByRole('heading', { name: 'Hiburan Berkualitas, Momen Tak Terlupakan' })).toBeDefined();
   const nav = screen.getByRole('navigation', { name: 'Navigasi utama' });
   expect(nav.querySelectorAll('a')).toHaveLength(8);

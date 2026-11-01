@@ -52,13 +52,32 @@
 }
 
 .gibrig-shell .gibrig-brand {
-  gap: 9px;
+  gap: 11px;
   color: var(--gibrig-purple-deep);
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0;
   white-space: nowrap;
+}
+
+.gibrig-shell .gibrig-brand-copy strong,
+.gibrig-shell .gibrig-brand-copy small {
+  display: block;
+}
+
+.gibrig-shell .gibrig-brand-copy strong {
+  color: #38134f;
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.gibrig-shell .gibrig-brand-copy small {
+  margin-top: 4px;
+  color: #715187;
+  font-family: Arial, sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .035em;
 }
 
 .gibrig-shell .gibrig-brand .logo-mark {
@@ -70,9 +89,16 @@
   font-size: 14px;
 }
 
-.gibrig-shell .gibrig-brand .site-logo-image {
-  width: 34px;
-  height: 34px;
+.gibrig-shell .gibrig-brand .gibrig-brand-logo {
+  display: block;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border: 1px solid rgba(148, 79, 181, .45);
+  border-radius: 50%;
+  background: #210c31;
+  box-shadow: 0 3px 12px rgba(49, 16, 74, .22);
+  object-fit: cover;
 }
 
 .gibrig-shell .gibrig-nav {
@@ -798,6 +824,14 @@
   color: #fff;
 }
 
+.gibrig-shell .gibrig-contact .gibrig-brand-copy strong {
+  color: #fff;
+}
+
+.gibrig-shell .gibrig-contact .gibrig-brand-copy small {
+  color: #ead8fb;
+}
+
 .gibrig-shell .gibrig-contact .gibrig-brand .logo-mark {
   background: #fff;
   color: var(--gibrig-purple);
@@ -1093,7 +1127,22 @@
   }
 
   .gibrig-shell .gibrig-brand {
-    font-size: 12px;
+    gap: 8px;
+  }
+
+  .gibrig-shell .gibrig-brand-copy strong {
+    font-size: 14px;
+  }
+
+  .gibrig-shell .gibrig-brand-copy small {
+    max-width: 130px;
+    font-size: 8px;
+  }
+
+  .gibrig-shell .gibrig-brand .gibrig-brand-logo {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
   }
 
   .gibrig-shell .gibrig-nav {

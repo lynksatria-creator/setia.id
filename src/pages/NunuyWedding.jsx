@@ -220,11 +220,12 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
         noIndex={data.seo?.noIndex}
         canonicalUrl={data.seo?.canonicalUrl}
         isHomePage={!detailTitle && selectedMenuPage === 'home'}
+        faviconUrl="/nunuy-nadhifa-favicon.png"
       />
       <header className="nunuy-header">
         <a className="nunuy-brand" href={path === nunuyBasePath ? '#home' : nunuyBasePath} aria-label={data.uiLabels?.brandHomeLabel}>
-          {data.logoImage ? <img className="nunuy-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="nunuy-brand-flower" aria-hidden="true">✿</span>}
-          <span><strong>{data.siteName || 'NUNUY NADHIFA'}</strong><small>{data.logo || 'WEDDING'}</small></span>
+          {data.logoImage ? <img className="nunuy-logo-image" src={data.logoImage} alt="" /> : <span className="nunuy-brand-flower" aria-hidden="true">✿</span>}
+          <span className="nunuy-brand-copy"><strong>{data.siteName || 'Nunuy Nadhifa Wedding'}</strong><small>{data.logo || 'WEDDING'}</small></span>
         </a>
         <button className="nunuy-menu-toggle" type="button" aria-expanded={menuOpen} aria-label={menuOpen ? 'Tutup menu' : 'Buka menu'} onClick={() => setMenuOpen((open) => !open)}>
           <span /><span />
@@ -455,7 +456,10 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
       </main>
 
       <footer className="nunuy-footer">
-        <a className="nunuy-brand" href={path === nunuyBasePath ? '#home' : nunuyBasePath}>{data.logoImage ? <img className="nunuy-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="nunuy-brand-flower" aria-hidden="true">✿</span>}<span><strong>{data.siteName}</strong><small>{data.logo || 'WEDDING'}</small></span></a>
+        <a className="nunuy-brand" href={path === nunuyBasePath ? '#home' : nunuyBasePath} aria-label={data.uiLabels?.brandHomeLabel}>
+          {data.logoImage ? <img className="nunuy-logo-image" src={data.logoImage} alt="" /> : <span className="nunuy-brand-flower" aria-hidden="true">✿</span>}
+          <span className="nunuy-brand-copy"><strong>{data.siteName || 'Nunuy Nadhifa Wedding'}</strong><small>{data.logo || 'WEDDING'}</small></span>
+        </a>
         <p>{data.footer?.tagline}</p>
         {phoneNumber ? <a href={`tel:${String(phoneNumber).replace(/[^\d+]/g, '')}`}>{phoneNumber}</a> : null}
         {data.contact?.email ? <a href={`mailto:${data.contact.email}`}>{data.contact.email}</a> : null}

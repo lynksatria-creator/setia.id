@@ -29,6 +29,7 @@ export default function SeoHead({
   siteId,
   isHomePage = true,
   siteBasePath = '/',
+  faviconUrl = '',
 }) {
   const [serverConfig, setServerConfig] = useState(null);
 
@@ -60,6 +61,19 @@ export default function SeoHead({
   useEffect(() => {
     const previousTitle = document.title;
     document.title = seo.title;
+    let favicon = document.head.querySelector('link[rel="icon"]');
+    const existedFavicon = Boolean(favicon);
+    if (!favicon) {
+      favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      document.head.appendChild(favicon);
+    }
+    const previousFaviconHref = favicon.getAttribute('href');
+    const previousFaviconType = favicon.getAttribute('type');
+    if (faviconUrl) {
+      favicon.href = faviconUrl;
+      favicon.type = 'image/png';
+    }
     const routeCanonical = `${window.location.origin}${window.location.pathname}`;
     let canonicalHref = routeCanonical;
     if (seo.canonicalUrl) {
@@ -108,8 +122,15 @@ export default function SeoHead({
       restoreMeta.reverse().forEach((restore) => restore());
       if (existedCanonical) canonical.setAttribute('href', previousCanonical || '');
       else canonical.remove();
+      if (existedFavicon) {
+        favicon.setAttribute('href', previousFaviconHref || '');
+        if (previousFaviconType === null) favicon.removeAttribute('type');
+        else favicon.setAttribute('type', previousFaviconType);
+      } else {
+        favicon.remove();
+      }
     };
-  }, [isHomePage, seo.canonicalUrl, seo.description, seo.image, seo.keywords, seo.noIndex, seo.ogImage, seo.title, siteBasePath, siteName, type]);
+  }, [faviconUrl, isHomePage, seo.canonicalUrl, seo.description, seo.image, seo.keywords, seo.noIndex, seo.ogImage, seo.title, siteBasePath, siteName, type]);
 
   return null;
 }

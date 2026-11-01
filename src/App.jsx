@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import './pages/Gibrig.css';
+import './pages/Invitation.css';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Auth from './pages/Auth';
@@ -220,7 +221,7 @@ const defaultPortalData = {
 const defaultGibrigData = {
   siteName: 'Gibrig Entertainment',
   logo: 'G',
-  logoImage: '',
+  logoImage: '/musik-id-logo.webp',
   tagline: 'Official Gibrig Entertainment',
   hero: {
     eyebrow: 'Gibrig Entertainment',
@@ -294,7 +295,7 @@ const defaultGibrigData = {
 const defaultNunuyData = {
   siteName: 'Nunuy Nadhifa Wedding',
   logo: 'NN',
-  logoImage: '',
+  logoImage: '/nunuy-nadhifa-logo.webp',
   uiLabels: {
     brandHomeLabel: 'Nunuy Nadhifa Wedding, beranda',
     primaryNavigationLabel: 'Navigasi utama',
@@ -513,14 +514,23 @@ const defaultInvitationData = {
   logo: 'U',
   logoImage: '',
   hero: {
-    title: 'Buat undangan digital premium yang elegan, modern, dan berkesan.',
-    subtitle: 'Buat undangan yang tampil profesional, mudah dibagikan, dan siap menghadirkan momen spesial Anda dengan sentuhan elegan.',
-    cta: 'Buat Undangan',
-    secondary: 'Lihat Template',
+    title: 'Ciptakan Momen Istimewa Berkelas & Elegan.',
+    subtitle: 'Rancang undangan digital personal yang elegan dan mudah dibagikan. Kelola RSVP, daftar tamu, musik, lokasi, dan cerita acara dalam satu dashboard praktis.',
+    cta: 'Buat Undangan Sekarang',
+    secondary: 'Lihat Katalog',
     image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1500&q=85',
-    eyebrow: 'Platform undangan digital premium',
+    eyebrow: 'Luxury Digital Invitation',
   },
-  theme: createDefaultTheme('invitation'),
+  theme: {
+    ...createDefaultTheme('invitation'),
+    primary: '#2563EB',
+    secondary: '#E0F2FE',
+    accent: '#06B6D4',
+    background: '#F4F7FC',
+    text: '#0F172A',
+    font: 'DM Sans',
+    headingFont: 'Cormorant Garamond',
+  },
   templates: [
     { name: 'Luxury Gold', category: 'Pernikahan', description: 'Tema mewah dengan palet gold, bouquet, dan detail elegan yang berkesan.', active: true, palette: 'gold' },
     { name: 'Romantic Pink', category: 'Engagement', description: 'Desain lembut, romantis, dan memikat untuk momen istimewa Anda.', active: true, palette: 'pink' },
@@ -1988,7 +1998,13 @@ const gibrigPages = [
 ];
 
 const GibrigHome = ({ path }) => {
-  const data = useMemo(() => mergeDataDefaults(defaultGibrigData, loadData(storage.gibrig, defaultGibrigData)), []);
+  const data = useMemo(() => {
+    const saved = loadData(storage.gibrig, defaultGibrigData);
+    return {
+      ...mergeDataDefaults(defaultGibrigData, saved),
+      logoImage: saved.logoImage || defaultGibrigData.logoImage,
+    };
+  }, []);
   const [previewImage, setPreviewImage] = useState(null);
   const previewTriggerRef = useRef(null);
   const previewCloseRef = useRef(null);
@@ -2042,12 +2058,12 @@ const GibrigHome = ({ path }) => {
 
   return (
     <div className={`site-shell gibrig-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
-      <SeoHead siteId="gibrig" siteBasePath="/gibrig" isHomePage={!activePage.slug} title={activePage.slug ? `${activePage.title} | ${data.siteName}` : data.seo.title} description={data.seo.description} keywords={data.seo.keywords} image={data.hero.image} siteName={data.siteName} noIndex={data.seo.noIndex} canonicalUrl={data.seo.canonicalUrl} />
+      <SeoHead siteId="gibrig" siteBasePath="/gibrig" isHomePage={!activePage.slug} title={activePage.slug ? `${activePage.title} | ${data.siteName}` : data.seo.title} description={data.seo.description} keywords={data.seo.keywords} image={data.hero.image} siteName={data.siteName} noIndex={data.seo.noIndex} canonicalUrl={data.seo.canonicalUrl} faviconUrl="/musik-id-favicon.png" />
       <header className="topbar gibrig-topbar">
         <div className="container nav-wrap gibrig-nav-wrap">
           <a className="brand gibrig-brand" href="/gibrig" aria-label={`${data.siteName}, beranda`}>
-            {data.logoImage ? <img className="site-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="logo-mark">{data.logo || 'G'}</span>}
-            <span>{data.siteName}</span>
+            {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt="Logo Musik.id — Neng Syelfi Oktora Official Music" /> : <span className="logo-mark">{data.logo || 'G'}</span>}
+            <span className="gibrig-brand-copy"><strong>Musik.id</strong><small>{data.siteName}</small></span>
           </a>
           <nav className="nav-links gibrig-nav" aria-label="Navigasi utama">
             {gibrigPages.map((page) => (
@@ -2199,8 +2215,8 @@ const GibrigHome = ({ path }) => {
           <div className="container gibrig-footer-content">
             <div className="gibrig-footer-brand">
               <a className="brand gibrig-brand" href="/gibrig">
-                {data.logoImage ? <img className="site-logo-image" src={data.logoImage} alt="" /> : <span className="logo-mark">{data.logo || 'G'}</span>}
-                <span>{data.siteName}</span>
+                {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt="" /> : <span className="logo-mark">{data.logo || 'G'}</span>}
+                <span className="gibrig-brand-copy"><strong>Musik.id</strong><small>{data.siteName}</small></span>
               </a>
               <p>{data.about}</p>
               <div className="gibrig-social-links" id="social-media">
@@ -2249,7 +2265,13 @@ const GibrigHome = ({ path }) => {
 };
 
 const NunuyHome = ({ path }) => {
-  const data = useMemo(() => mergeDataDefaults(defaultNunuyData, loadData(storage.nunuy, defaultNunuyData)), []);
+  const data = useMemo(() => {
+    const saved = loadData(storage.nunuy, defaultNunuyData);
+    return {
+      ...mergeDataDefaults(defaultNunuyData, saved),
+      logoImage: saved.logoImage || defaultNunuyData.logoImage,
+    };
+  }, []);
   return (
     <NunuyWedding
       data={data}
@@ -2261,19 +2283,73 @@ const NunuyHome = ({ path }) => {
   );
 };
 
-const InvitationHome = () => {
+const invitationPages = {
+  '/undangan': {
+    label: 'Beranda',
+    eyebrow: 'Nuansa Invite',
+    title: 'Undangan digital yang merangkai cerita Anda.',
+    description: 'Temukan cara yang lebih praktis dan personal untuk mengundang keluarga serta sahabat ke momen istimewa.',
+  },
+  '/undangan/keunggulan': {
+    label: 'Keunggulan',
+    eyebrow: 'Dirancang untuk momen Anda',
+    title: 'Keunggulan yang membuat setiap undangan lebih bermakna.',
+    description: 'Semua fitur penting untuk menyiapkan, membagikan, dan mengelola undangan dalam satu tempat.',
+  },
+  '/undangan/template': {
+    label: 'Katalog Template',
+    eyebrow: 'Katalog desain',
+    title: 'Pilih desain yang terasa seperti cerita Anda.',
+    description: 'Jelajahi koleksi template untuk berbagai jenis acara dan buka pratinjau undangan sebelum memilih.',
+  },
+  '/undangan/harga': {
+    label: 'Paket Harga',
+    eyebrow: 'Paket & harga',
+    title: 'Pilih paket sesuai kebutuhan acara Anda.',
+    description: 'Bandingkan fasilitas setiap paket dan lanjutkan dengan membuat akun Nuansa Invite.',
+  },
+  '/undangan/testimoni': {
+    label: 'Testimoni',
+    eyebrow: 'Cerita dari pengguna',
+    title: 'Momen istimewa, cerita yang selalu dikenang.',
+    description: 'Baca pengalaman pengguna dan bagikan cerita Anda. Testimoni akan ditinjau sebelum ditampilkan.',
+  },
+  '/undangan/faq': {
+    label: 'FAQ',
+    eyebrow: 'Bantuan Nuansa Invite',
+    title: 'Pertanyaan seputar undangan digital.',
+    description: 'Temukan jawaban tentang pembuatan undangan, template, RSVP, dan fitur yang tersedia.',
+  },
+};
+
+const InvitationFeatureGrid = ({ features }) => (
+  <div className="feature-grid invitation-feature-grid">
+    {features.map((feature, index) => (
+      <article key={feature.title} className="feature-card invitation-feature-card">
+        <div className="feature-icon" aria-hidden="true">{['✦', '↗', '▦', '⌖'][index % 4]}</div>
+        <h3>{feature.title}</h3>
+        <p>{feature.description}</p>
+      </article>
+    ))}
+  </div>
+);
+
+const InvitationHome = ({ path = '/undangan' }) => {
   const data = useMemo(() => normalizeInvitationBrand(mergeDataDefaults(defaultInvitationData, loadData(storage.invitation, defaultInvitationData))), []);
   const [advertisements, setAdvertisements] = useState([]);
   const [advertisementsError, setAdvertisementsError] = useState('');
+  const page = invitationPages[path] || invitationPages['/undangan'];
+  const isHome = path === '/undangan';
   const openAuth = (mode) => navigate(`/undangan-auth?mode=${mode}`);
 
   useEffect(() => {
+    if (!isHome) return undefined;
     let active = true;
     advertisementsApi.listPublic()
       .then((items) => { if (active) setAdvertisements(items); })
       .catch((error) => { if (active) setAdvertisementsError(error.message); });
     return () => { active = false; };
-  }, []);
+  }, [isHome]);
 
   return (
     <div className={`site-shell invitation-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
@@ -2282,40 +2358,51 @@ const InvitationHome = () => {
         siteName={data.siteName}
         logo={data.logo}
         logoImage={data.logoImage}
+        activePath={path}
         onLogin={() => openAuth('login')}
         onRegister={() => openAuth('register')}
       />
 
       <main>
-        <section className="hero-section invitation-hero">
-          <div className="container hero-grid">
-            <div>
-              <p className="eyebrow">{data.hero.eyebrow}</p>
-              <h1>{data.hero.title}</h1>
-              <p>{data.hero.subtitle}</p>
-              <div className="cta-row">
-                <button className="primary-btn" onClick={() => openAuth('register')}>{data.hero.cta}</button>
-                <button className="secondary-btn" onClick={() => document.getElementById('templates')?.scrollIntoView({ behavior: 'smooth' })}>{data.hero.secondary}</button>
+        {isHome ? (
+          <section className="hero-section invitation-hero invitation-home-hero">
+            <div className="container hero-grid">
+              <div className="invitation-hero-copy">
+                <p className="eyebrow invitation-hero-eyebrow"><span aria-hidden="true" />{data.hero.eyebrow}</p>
+                <h1>{data.hero.title}</h1>
+                <p>{data.hero.subtitle}</p>
+                <div className="cta-row">
+                  <button className="primary-btn" onClick={() => openAuth('register')}>
+                    {data.hero.cta}<span aria-hidden="true"> ↗</span>
+                  </button>
+                  <a className="secondary-btn" href="/undangan/template">{data.hero.secondary}</a>
+                </div>
+                <div className="hero-micro" aria-label="Fitur undangan">
+                  <span>✓ RSVP dan buku tamu</span>
+                  <span>✓ Link mudah dibagikan</span>
+                  <span>✓ Kelola dari dashboard</span>
+                </div>
               </div>
-              <div className="hero-micro">
-                <span>✓ Template premium</span>
-                <span>✓ RSVP otomatis</span>
-                <span>✓ Share WhatsApp</span>
+              <div className="hero-visual invitation-visual">
+                <img className="site-hero-image" src={data.hero.image} alt={`${data.siteName} undangan digital`} />
+                <div className="hero-panel">
+                  <span>YOUR STORY, BEAUTIFULLY TOLD</span>
+                  <strong>{data.siteName}</strong>
+                </div>
               </div>
             </div>
-            <div className="hero-visual invitation-visual">
-              <img className="site-hero-image" src={data.hero.image} alt={`${data.siteName} undangan digital`} />
-              <div className="floating-card card-a">Wedding</div>
-              <div className="floating-card card-b">Event</div>
-              <div className="hero-panel">
-                <span>Digital Invitation</span>
-                <strong>Elegant • Modern • Custom</strong>
-              </div>
+          </section>
+        ) : (
+          <section className="invitation-page-hero">
+            <div className="container">
+              <p className="eyebrow">{page.eyebrow}</p>
+              <h1>{page.title}</h1>
+              <p>{page.description}</p>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        {(advertisements.length || advertisementsError) ? (
+        {isHome && (advertisements.length || advertisementsError) ? (
           <section className="section-wrap affiliate-advertisements" aria-labelledby="affiliate-advertisements-title">
             <div className="container">
               <div className="section-head">
@@ -2353,82 +2440,119 @@ const InvitationHome = () => {
           </section>
         ) : null}
 
-        <section className="section-wrap">
-          <div className="container invite-why-grid">
-            <div>
-              <p className="eyebrow">Kenapa Nuansa Invite</p>
-              <h2>Semua kebutuhan undangan digital dalam satu platform</h2>
-              <p>Mulai dari desain elegant, fitur RSVP, gallery, musik, countdown, hingga share ke WhatsApp dan Google Maps. Semua bisa dikelola dengan mudah.</p>
-            </div>
-            <div className="stats-stack">
-              <div className="mini-stat"><strong>10k+</strong><span>Undangan dibuat</span></div>
-              <div className="mini-stat"><strong>98%</strong><span>Pengguna puas</span></div>
-              <div className="mini-stat"><strong>24/7</strong><span>Siap diakses</span></div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section-wrap muted-bg">
-          <div className="container">
-            <div className="section-head">
-              <p className="eyebrow">Fitur utama</p>
-              <h2>Desain yang memudahkan undangan Anda tampil lebih istimewa</h2>
-            </div>
-            <div className="feature-grid">
-              {data.features.map((feature) => (
-                <div key={feature.title} className="feature-card">
-                  <div className="feature-icon">✦</div>
-                  <h3>{feature.title}</h3>
-                  <p>{feature.description}</p>
+        {(isHome || path === '/undangan/keunggulan') ? (
+          <section className={`section-wrap invitation-features-section${isHome ? '' : ' muted-bg'}`} id="features">
+            <div className="container">
+              <div className="section-head invitation-section-head">
+                <p className="eyebrow">{isHome ? 'Kenapa Nuansa Invite' : 'Keunggulan platform'}</p>
+                <h2>{isHome ? 'Semua kebutuhan undangan dalam satu platform.' : 'Fitur yang membantu setiap langkah persiapan.'}</h2>
+                <p>{isHome ? 'Rancang undangan, bagikan kepada tamu, lalu kelola konfirmasi kehadiran dengan lebih praktis.' : page.description}</p>
+              </div>
+              <InvitationFeatureGrid features={data.features} />
+              {isHome ? (
+                <a className="invitation-text-link" href="/undangan/keunggulan">Jelajahi semua keunggulan <span aria-hidden="true">↗</span></a>
+              ) : (
+                <div className="invitation-inline-cta">
+                  <p>Siap mulai menyiapkan undangan Anda?</p>
+                  <button className="primary-btn" onClick={() => openAuth('register')}>Buat Undangan</button>
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
-        <Templates templates={data.templates} demos={data.demoItems} categories={data.categories} />
-
-        <Pricing plans={data.pricingPlans} onChoose={() => openAuth('register')} />
-
-        <PublicTestimonials
-          site="invitation"
-          initialItems={data.testimonials}
-          eyebrow="Apa kata mereka?"
-          title="Cerita dari keluarga dan klien"
-        />
-
-        <section className="section-wrap muted-bg">
-          <div className="container auth-panel">
-            <div>
-              <p className="eyebrow">Login & Registrasi</p>
-              <h2>Mulai membuat undangan Anda hari ini</h2>
-              <p>Masuk ke dashboard untuk mengelola template, undangan, tamu, RSVP, dan statistik secara praktis.</p>
-            </div>
-            <div className="login-box">
-              <button className="primary-btn" onClick={() => openAuth('register')}>Daftar Sekarang</button>
-              <button className="secondary-btn" onClick={() => openAuth('login')}>Masuk</button>
-            </div>
-          </div>
-        </section>
-
-        <Blog articles={data.articles} onOpen={(slug) => navigate(`/undangan-blog/${slug}`)} />
-
-        <section id="faq" className="section-wrap muted-bg">
-          <div className="container faq-grid">
-            <div>
-              <p className="eyebrow">FAQ</p>
-              <h2>Pertanyaan seputar undangan digital</h2>
-            </div>
-            <div className="faq-list">
-              {data.faq.map((item) => (
-                <div key={item.q} className="faq-item">
-                  <h4>{item.q}</h4>
-                  <p>{item.a}</p>
+        {isHome ? (
+          <>
+            <section className="section-wrap muted-bg invitation-template-teaser">
+              <div className="container">
+                <div className="section-head invitation-section-head">
+                  <p className="eyebrow">Katalog template</p>
+                  <h2>Koleksi desain untuk berbagai momen.</h2>
+                  <p>Pilih kategori acara dan lihat pratinjau sebelum membuat undangan.</p>
                 </div>
-              ))}
+                <div className="invitation-template-preview-grid">
+                  {data.templates.filter((template) => template.active !== false).slice(0, 3).map((template) => (
+                    <a className={`invitation-template-preview template-${template.palette}`} href="/undangan/template" key={template.name}>
+                      <span className="invitation-template-preview-art" aria-hidden="true">✦</span>
+                      <span className="template-tag">{template.category}</span>
+                      <strong>{template.name}</strong>
+                      <span>{template.description}</span>
+                    </a>
+                  ))}
+                </div>
+                <a className="invitation-text-link" href="/undangan/template">Lihat seluruh katalog <span aria-hidden="true">↗</span></a>
+              </div>
+            </section>
+            <section className="invitation-promo">
+              <div className="container invitation-promo-inner">
+                <div>
+                  <p className="eyebrow">Momen Anda, cara Anda</p>
+                  <h2>Mulai merangkai undangan yang personal.</h2>
+                  <p>Pilih desain, lengkapi detail acara, dan bagikan undangan kepada orang-orang terdekat.</p>
+                </div>
+                <button className="primary-btn" onClick={() => openAuth('register')}>Mulai Sekarang <span aria-hidden="true">↗</span></button>
+              </div>
+            </section>
+            <section className="section-wrap invitation-home-cta">
+              <div className="container auth-panel">
+                <div>
+                  <p className="eyebrow">Login & registrasi</p>
+                  <h2>Kelola undangan Anda dalam satu dashboard.</h2>
+                  <p>Atur detail acara, daftar tamu, RSVP, dan statistik setelah masuk ke akun Nuansa Invite.</p>
+                </div>
+                <div className="login-box">
+                  <button className="primary-btn" onClick={() => openAuth('register')}>Daftar Sekarang</button>
+                  <button className="secondary-btn" onClick={() => openAuth('login')}>Masuk</button>
+                </div>
+              </div>
+            </section>
+          </>
+        ) : null}
+
+        {path === '/undangan/template' ? (
+          <Templates templates={data.templates} demos={data.demoItems} categories={data.categories} />
+        ) : null}
+
+        {path === '/undangan/harga' ? (
+          <Pricing plans={data.pricingPlans} onChoose={() => openAuth('register')} />
+        ) : null}
+
+        {path === '/undangan/testimoni' ? (
+          <PublicTestimonials
+            site="invitation"
+            initialItems={data.testimonials}
+            eyebrow="Apa kata mereka?"
+            title="Cerita dari keluarga dan klien"
+            description="Bagikan pengalaman menggunakan Nuansa Invite. Testimoni ditampilkan setelah ditinjau."
+            className="invitation-page-testimonials"
+            sectionId="testimoni"
+          />
+        ) : null}
+
+        {path === '/undangan/faq' ? (
+          <section id="faq" className="section-wrap invitation-faq-section">
+            <div className="container faq-grid">
+              <div className="invitation-faq-intro">
+                <p className="eyebrow">FAQ</p>
+                <h2>Jawaban untuk persiapan Anda.</h2>
+                <p>Belum menemukan jawaban? Hubungi kami melalui WhatsApp.</p>
+                <a href={`https://wa.me/${String(data.whatsapp.number || '').replace(/\D/g, '')}?text=${encodeURIComponent(data.whatsapp.message || '')}`} target="_blank" rel="noopener noreferrer">Tanya melalui WhatsApp ↗</a>
+              </div>
+              <div className="faq-list">
+                {data.faq.map((item, index) => (
+                  <details key={item.q} className="faq-item invitation-faq-item" open={index === 0}>
+                    <summary>{item.q}<span aria-hidden="true">+</span></summary>
+                    <p>{item.a}</p>
+                  </details>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
+
+        {isHome ? (
+          <Blog articles={data.articles} onOpen={(slug) => navigate(`/undangan-blog/${slug}`)} />
+        ) : null}
       </main>
 
       <Footer
@@ -2560,7 +2684,7 @@ function App() {
 
   if (path === '/gibrig' || path.startsWith('/gibrig/')) return <GibrigHome path={path} />;
   if (path === '/nunuy-nadhifa-wedding' || path.startsWith('/nunuy-nadhifa-wedding/')) return <NunuyHome path={path} />;
-  if (path === '/undangan') return <InvitationHome />;
+  if (Object.hasOwn(invitationPages, path)) return <InvitationHome path={path} />;
   if (path === '/beriklan') return <PortalInfoPage page="advertise" />;
   if (path === '/kontak') return <PortalInfoPage page="contact" />;
   if (path === '/faq') return <PortalInfoPage page="faq" />;
