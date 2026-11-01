@@ -42,6 +42,8 @@ export async function apiRequest(path, { token, ...options } = {}) {
 
 export const authApi = {
   register: (data) => apiRequest('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  resendRegistrationCode: (data) => apiRequest('/auth/register/resend', { method: 'POST', body: JSON.stringify(data) }),
+  verifyRegistrationCode: (data) => apiRequest('/auth/register/verify', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => apiRequest('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   currentUser: (token) => apiRequest('/auth/me', { token }),
 };

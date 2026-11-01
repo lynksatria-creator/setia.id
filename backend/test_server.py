@@ -54,6 +54,49 @@ class FakeCollection:
         self.document = copy.deepcopy(document)
 
 
+class FakeRegistrationOtpCollection:
+    def __init__(self):
+        self.documents = {}
+
+    async def create_index(self, *_args, **_kwargs):
+        return None
+
+    async def find_one(self, query, _projection=None):
+        document = self.documents.get(query["email"])
+        return copy.deepcopy(document)
+
+    async def replace_one(self, query, document, upsert=False):
+        assert upsert is True
+        self.documents[query["email"]] = copy.deepcopy(document)
+
+    async def find_one_and_update(self, query, update, return_document):
+        assert return_document == server.ReturnDocument.AFTER
+        document = self.documents.get(query["email"])
+        if document is None or document["attempts"] >= query["attempts"]["$lt"]:
+            return None
+        document["attempts"] += update["$inc"]["attempts"]
+        return copy.deepcopy(document)
+
+    async def delete_one(self, query):
+        self.documents.pop(query["email"], None)
+
+
+class FakeUsersCollection:
+    def __init__(self):
+        self.documents = {}
+
+    async def create_index(self, *_args, **_kwargs):
+        return None
+
+    async def find_one(self, query, _projection=None):
+        return copy.deepcopy(self.documents.get(query["email"]))
+
+    async def insert_one(self, document):
+        if document["email"] in self.documents:
+            raise DuplicateKeyError("duplicate email")
+        self.documents[document["email"]] = copy.deepcopy(document)
+
+
 class FakePackageCapacityLocks:
     def __init__(self):
         self.document = None
@@ -613,6 +656,27 @@ def test_account_endpoint_requires_bearer_token():
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize("password", ["password123", "PASSWORD123", "Passwordabc", "Pass1"])
+def test_registration_rejects_password_without_required_character_types(password):
+    with pytest.raises(ValidationError):
+        server.UserRegistration.model_validate({
+            "full_name": "Test User",
+            "email": "test@example.com",
+            "password": password,
+        })
+
+
+@pytest.mark.parametrize("password", ["Password123", "Password123!"])
+def test_registration_accepts_password_with_or_without_symbol(password):
+    registration = server.UserRegistration.model_validate({
+        "full_name": "Test User",
+        "email": "test@example.com",
+        "password": password,
+    })
+
+    assert registration.password == password
+
+
 def test_admin_settings_reject_anonymous_requests():
     response = TestClient(server.app).get("/api/admin/billing/config")
 
@@ -623,11 +687,157 @@ def test_registration_requires_jwt_secret(monkeypatch):
     monkeypatch.delenv("JWT_SECRET", raising=False)
     response = TestClient(server.app).post(
         "/api/auth/register",
-        json={"full_name": "Test User", "email": "test@example.com", "password": "password123"},
+        json={"full_name": "Test User", "email": "test@example.com", "password": "Password123"},
     )
 
     assert response.status_code == 503
     assert "JWT_SECRET" in response.json()["detail"]
+
+
+def test_registration_requires_configured_smtp(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_FROM_EMAIL", raising=False)
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        users=FakeUsersCollection(),
+        registration_otps=FakeRegistrationOtpCollection(),
+    ))
+
+    response = TestClient(server.app).post("/api/auth/register", json={
+        "full_name": "Test User",
+        "email": "test@example.com",
+        "password": "Password123",
+    })
+
+    assert response.status_code == 503
+    assert "SMTP_HOST" in response.json()["detail"]
+
+
+def test_registration_verifies_email_otp_before_creating_session(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    users = FakeUsersCollection()
+    registration_otps = FakeRegistrationOtpCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(users=users, registration_otps=registration_otps))
+    sent_codes = []
+    generated_codes = iter([123456, 654321])
+    monkeypatch.setattr(server.secrets, "randbelow", lambda _limit: next(generated_codes))
+
+    async def capture_registration_email(email, full_name, code):
+        sent_codes.append((email, full_name, code))
+
+    monkeypatch.setattr(server, "send_registration_code_email", capture_registration_email)
+    client = TestClient(server.app)
+
+    requested = client.post("/api/auth/register", json={
+        "full_name": "Test User",
+        "email": "Test@Example.com",
+        "password": "Password123",
+    })
+    assert requested.status_code == 200
+    assert "OTP" in requested.json()["message"]
+    assert users.documents == {}
+    assert sent_codes[0][:2] == ("test@example.com", "Test User")
+    assert sent_codes[0][2].isdigit() and len(sent_codes[0][2]) == 6
+    pending = registration_otps.documents["test@example.com"]
+    assert pending["code_hash"] != sent_codes[0][2]
+    assert pending["expires_at"] > datetime.now(timezone.utc)
+    throttled_resend = client.post("/api/auth/register/resend", json={"email": "test@example.com"})
+    assert throttled_resend.status_code == 429
+
+    wrong_code = client.post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": "000000" if sent_codes[0][2] != "000000" else "000001",
+    })
+    assert wrong_code.status_code == 400
+    assert registration_otps.documents["test@example.com"]["attempts"] == 1
+    assert "access_token" not in wrong_code.json()
+
+    registration_otps.documents["test@example.com"]["last_sent_at"] -= timedelta(seconds=61)
+    resent = client.post("/api/auth/register/resend", json={"email": "test@example.com"})
+    assert resent.status_code == 200
+    assert len(sent_codes) == 2
+    assert sent_codes[1][2] != sent_codes[0][2]
+
+    verified = client.post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": sent_codes[1][2],
+    })
+    assert verified.status_code == 200
+    assert verified.json()["user"]["email"] == "test@example.com"
+    assert users.documents["test@example.com"]["email_verified"] is True
+    assert registration_otps.documents == {}
+
+    replayed = client.post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": sent_codes[1][2],
+    })
+    assert replayed.status_code == 400
+
+
+def test_registration_rejects_expired_email_otp(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    users = FakeUsersCollection()
+    pending = FakeRegistrationOtpCollection()
+    pending.documents["test@example.com"] = {
+        "email": "test@example.com",
+        "full_name": "Test User",
+        "password_hash": "hashed-password",
+        "code_hash": server.hmac.new(
+            b"test-secret-that-is-at-least-32-characters-long",
+            b"123456",
+            server.hashlib.sha256,
+        ).hexdigest(),
+        "attempts": 0,
+        "last_sent_at": datetime.now(timezone.utc) - timedelta(minutes=11),
+        "expires_at": datetime.now(timezone.utc) - timedelta(minutes=1),
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(users=users, registration_otps=pending))
+
+    response = TestClient(server.app).post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": "123456",
+    })
+
+    assert response.status_code == 400
+    assert "kedaluwarsa" in response.json()["detail"]
+    assert users.documents == {}
+    assert pending.documents == {}
+
+
+def test_registration_limits_otp_attempts(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    users = FakeUsersCollection()
+    pending = FakeRegistrationOtpCollection()
+    pending.documents["test@example.com"] = {
+        "email": "test@example.com",
+        "full_name": "Test User",
+        "password_hash": "hashed-password",
+        "code_hash": server.hmac.new(
+            b"test-secret-that-is-at-least-32-characters-long",
+            b"123456",
+            server.hashlib.sha256,
+        ).hexdigest(),
+        "attempts": 0,
+        "last_sent_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(users=users, registration_otps=pending))
+    client = TestClient(server.app)
+
+    for _ in range(5):
+        response = client.post("/api/auth/register/verify", json={
+            "email": "test@example.com",
+            "code": "000000",
+        })
+        assert response.status_code == 400
+    blocked = client.post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": "000000",
+    })
+
+    assert blocked.status_code == 429
+    assert pending.documents == {}
+    assert users.documents == {}
 
 
 def test_admin_login_requires_server_configuration(monkeypatch):

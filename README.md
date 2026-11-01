@@ -76,7 +76,9 @@ cp .env.example .env
 uvicorn server:app --reload --port 8000
 ```
 
-Sebelum menjalankan server, isi `JWT_SECRET` di `backend/.env` dengan nilai acak minimal 32 karakter dan atur `ADMIN_EMAIL` serta `ADMIN_PASSWORD_HASH`. Buat JWT secret dengan `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`; buat hash password admin dengan `python3 -c "import getpass, bcrypt; print(bcrypt.hashpw(getpass.getpass().encode(), bcrypt.gensalt()).decode())"`. Pastikan MongoDB aktif.
+Pendaftaran akun Undangan.id mengirim OTP enam digit ke email yang didaftarkan. OTP berlaku 10 menit, dibatasi lima percobaan, dan dapat dikirim ulang setelah 60 detik. Akun dan sesi baru dibuat hanya setelah OTP benar. Kata sandi pendaftaran minimal 8 karakter dan wajib mengandung huruf kecil, huruf besar, serta angka; simbol bersifat opsional. Form pendaftaran menampilkan indikator kekuatan kata sandi. Atur `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, dan `SMTP_FROM_EMAIL` pada `backend/.env` agar backend dapat mengirim email. Port 587 memakai STARTTLS; untuk SSL implisit seperti port 465, set `SMTP_USE_SSL=true`. `SMTP_FROM_NAME` mengatur nama pengirim.
+
+Sebelum menjalankan server, isi `JWT_SECRET` di `backend/.env` dengan nilai acak minimal 32 karakter dan atur `ADMIN_EMAIL` serta `ADMIN_PASSWORD_HASH`. Buat JWT secret dengan `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`; buat hash password admin dengan `python3 -c "import getpass, bcrypt; print(bcrypt.hashpw(getpass.getpass().encode(), bcrypt.gensalt()).decode())"`. Pastikan MongoDB aktif dan kredensial SMTP sudah terkonfigurasi untuk mengaktifkan pendaftaran.
 
 ### Mayar payment gateway
 API tersedia di `http://localhost:8000/api`; dokumentasi interaktif tersedia di `http://localhost:8000/docs`. Login super admin ada di `http://localhost:3000/setia-creative-admin`; pemilik mengelola draft, pembayaran, masa aktif, dan publish di `http://localhost:3000/undangan-dashboard`.

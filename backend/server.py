@@ -1,11 +1,18 @@
 from contextlib import asynccontextmanager
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from email.message import EmailMessage
+from email.utils import formataddr
+import hashlib
+import hmac
 import logging
 import os
 from pathlib import Path
 import re
 import secrets
+import smtplib
+import ssl
 import uuid
 from typing import Literal
 
@@ -58,6 +65,34 @@ class UserRegistration(BaseModel):
     full_name: str = Field(min_length=2, max_length=80)
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value):
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("Nama lengkap harus berisi minimal dua karakter.")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, value):
+        if not re.search(r"[a-z]", value):
+            raise ValueError("Kata sandi harus memiliki minimal satu huruf kecil.")
+        if not re.search(r"[A-Z]", value):
+            raise ValueError("Kata sandi harus memiliki minimal satu huruf besar.")
+        if not re.search(r"[0-9]", value):
+            raise ValueError("Kata sandi harus memiliki minimal satu angka.")
+        return value
+
+
+class RegistrationCodeVerification(BaseModel):
+    email: EmailStr
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class RegistrationCodeResend(BaseModel):
+    email: EmailStr
 
 
 class UserLogin(BaseModel):
@@ -388,6 +423,72 @@ def get_jwt_secret():
     if len(secret) < 32:
         raise HTTPException(status_code=503, detail="JWT_SECRET belum dikonfigurasi.")
     return secret
+
+
+def get_smtp_settings():
+    host = os.environ.get("SMTP_HOST", "").strip()
+    sender = os.environ.get("SMTP_FROM_EMAIL", "").strip()
+    if not host or not sender:
+        raise HTTPException(status_code=503, detail="SMTP_HOST dan SMTP_FROM_EMAIL harus dikonfigurasi untuk mengirim OTP.")
+    try:
+        port = int(os.environ.get("SMTP_PORT", "587"))
+    except ValueError:
+        raise HTTPException(status_code=503, detail="SMTP_PORT harus berupa nomor port yang valid.") from None
+    if not 1 <= port <= 65535:
+        raise HTTPException(status_code=503, detail="SMTP_PORT harus berada di antara 1 dan 65535.")
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    if bool(username) != bool(password):
+        raise HTTPException(status_code=503, detail="SMTP_USERNAME dan SMTP_PASSWORD harus diatur bersama.")
+    use_ssl = os.environ.get("SMTP_USE_SSL", "false").strip().lower() in {"1", "true", "yes"}
+    return {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "sender": sender,
+        "sender_name": os.environ.get("SMTP_FROM_NAME", "Undangan.id").strip() or "Undangan.id",
+        "use_ssl": use_ssl,
+    }
+
+
+def ensure_utc(value):
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def send_smtp_message(settings, message):
+    if settings["use_ssl"]:
+        server = smtplib.SMTP_SSL(settings["host"], settings["port"], timeout=15, context=ssl.create_default_context())
+    else:
+        server = smtplib.SMTP(settings["host"], settings["port"], timeout=15)
+    with server:
+        if not settings["use_ssl"]:
+            server.starttls(context=ssl.create_default_context())
+        if settings["username"]:
+            server.login(settings["username"], settings["password"])
+        server.send_message(message)
+
+
+async def send_registration_code_email(email, full_name, code):
+    settings = get_smtp_settings()
+    message = EmailMessage()
+    message["Subject"] = "Kode OTP pendaftaran Undangan.id"
+    message["From"] = formataddr((settings["sender_name"], settings["sender"]))
+    message["To"] = email
+    message.set_content(
+        f"Halo {full_name},\n\n"
+        f"Kode OTP pendaftaran Undangan.id Anda adalah: {code}\n\n"
+        "Kode berlaku selama 10 menit dan hanya dapat digunakan satu kali. "
+        "Jangan bagikan kode ini kepada siapa pun.\n\n"
+        "Jika Anda tidak merasa mendaftar, abaikan email ini."
+    )
+    try:
+        await asyncio.to_thread(send_smtp_message, settings, message)
+    except Exception as error:
+        logging.getLogger(__name__).exception("Gagal mengirim email OTP pendaftaran.")
+        raise HTTPException(status_code=502, detail="Email OTP gagal dikirim. Coba lagi beberapa saat.") from error
 
 
 def create_access_token(user_id: str, role: str = "user"):
@@ -1108,25 +1209,102 @@ async def create_demo_account(payload: DemoAccountCreate, _admin=Depends(require
 
 @api_router.post("/auth/register")
 async def register_user(payload: UserRegistration):
-    get_jwt_secret()
+    secret = get_jwt_secret()
     email = str(payload.email).lower()
     await db.users.create_index("email", unique=True)
     if await db.users.find_one({"email": email}, {"_id": 1}):
         raise HTTPException(status_code=409, detail="Email sudah terdaftar.")
 
+    await db.registration_otps.create_index("email", unique=True)
+    await db.registration_otps.create_index("expires_at", expireAfterSeconds=0)
+    existing = await db.registration_otps.find_one({"email": email})
+    now = datetime.now(timezone.utc)
+    if existing and existing.get("last_sent_at") and now - ensure_utc(existing["last_sent_at"]) < timedelta(seconds=60):
+        raise HTTPException(status_code=429, detail="Tunggu 60 detik sebelum meminta kode OTP baru.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    pending_registration = {
+        "email": email,
+        "full_name": payload.full_name.strip(),
+        "password_hash": bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        "code_hash": hmac.new(secret.encode("utf-8"), code.encode("ascii"), hashlib.sha256).hexdigest(),
+        "attempts": 0,
+        "last_sent_at": now,
+        "expires_at": now + timedelta(minutes=10),
+    }
+    await send_registration_code_email(email, pending_registration["full_name"], code)
+    await db.registration_otps.replace_one({"email": email}, pending_registration, upsert=True)
+    return {"message": "Kode OTP telah dikirim ke email Anda. Periksa kotak masuk atau folder spam."}
+
+
+@api_router.post("/auth/register/resend")
+async def resend_registration_code(payload: RegistrationCodeResend):
+    secret = get_jwt_secret()
+    email = str(payload.email).lower()
+    pending = await db.registration_otps.find_one({"email": email})
+    if pending is None:
+        raise HTTPException(status_code=404, detail="Pendaftaran belum dimulai. Isi formulir daftar untuk meminta kode OTP.")
+
+    now = datetime.now(timezone.utc)
+    if now - ensure_utc(pending["last_sent_at"]) < timedelta(seconds=60):
+        raise HTTPException(status_code=429, detail="Tunggu 60 detik sebelum meminta kode OTP baru.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    pending.update({
+        "code_hash": hmac.new(secret.encode("utf-8"), code.encode("ascii"), hashlib.sha256).hexdigest(),
+        "attempts": 0,
+        "last_sent_at": now,
+        "expires_at": now + timedelta(minutes=10),
+    })
+    await send_registration_code_email(email, pending["full_name"], code)
+    await db.registration_otps.replace_one({"email": email}, pending, upsert=True)
+    return {"message": "Kode OTP baru telah dikirim ke email Anda."}
+
+
+@api_router.post("/auth/register/verify")
+async def verify_registration_code(payload: RegistrationCodeVerification):
+    secret = get_jwt_secret()
+    email = str(payload.email).lower()
+    pending = await db.registration_otps.find_one({"email": email})
+    if pending is None:
+        raise HTTPException(status_code=400, detail="Kode OTP tidak ditemukan. Silakan mulai pendaftaran kembali.")
+
+    now = datetime.now(timezone.utc)
+    if ensure_utc(pending["expires_at"]) <= now:
+        await db.registration_otps.delete_one({"email": email})
+        raise HTTPException(status_code=400, detail="Kode OTP sudah kedaluwarsa. Minta kode baru untuk melanjutkan.")
+    if pending["attempts"] >= 5:
+        await db.registration_otps.delete_one({"email": email})
+        raise HTTPException(status_code=429, detail="Batas percobaan OTP tercapai. Mulai pendaftaran kembali.")
+
+    submitted_hash = hmac.new(secret.encode("utf-8"), payload.code.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(submitted_hash, pending["code_hash"]):
+        failed_attempt = await db.registration_otps.find_one_and_update(
+            {"email": email, "attempts": {"$lt": 5}},
+            {"$inc": {"attempts": 1}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if failed_attempt is None:
+            await db.registration_otps.delete_one({"email": email})
+            raise HTTPException(status_code=429, detail="Batas percobaan OTP tercapai. Mulai pendaftaran kembali.")
+        raise HTTPException(status_code=400, detail="Kode OTP salah.")
+
     user = {
         "id": str(uuid.uuid4()),
-        "full_name": payload.full_name.strip(),
+        "full_name": pending["full_name"],
         "email": email,
-        "password_hash": bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        "password_hash": pending["password_hash"],
         "role": "user",
         "active": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "email_verified": True,
+        "created_at": now.isoformat(),
     }
     try:
         await db.users.insert_one(user)
     except DuplicateKeyError:
+        await db.registration_otps.delete_one({"email": email})
         raise HTTPException(status_code=409, detail="Email sudah terdaftar.") from None
+    await db.registration_otps.delete_one({"email": email})
 
     return {
         "access_token": create_access_token(user["id"]),

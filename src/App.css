@@ -2942,12 +2942,115 @@ input {
   border-radius: 4px;
 }
 
+.auth-password-strength {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: -8px;
+  color: #68717b;
+  font-size: 0.72rem;
+}
+
+.auth-password-strength strong {
+  font-size: 0.72rem;
+}
+
+.auth-password-strength-1 strong {
+  color: #b54747;
+}
+
+.auth-password-strength-2 strong {
+  color: #9a6b1b;
+}
+
+.auth-password-strength-3 strong {
+  color: #28714e;
+}
+
+.auth-password-strength-track {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.auth-password-strength-track span {
+  height: 5px;
+  border-radius: 999px;
+  background: #e4e6e8;
+}
+
+.auth-password-strength-1 .auth-password-strength-track span.is-active {
+  background: #c94d4d;
+}
+
+.auth-password-strength-2 .auth-password-strength-track span.is-active {
+  background: #d29a32;
+}
+
+.auth-password-strength-3 .auth-password-strength-track span.is-active {
+  background: #329066;
+}
+
+.auth-password-requirements {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: -8px 0 0;
+  padding: 0;
+  color: #747d85;
+  font-size: 0.68rem;
+  list-style: none;
+}
+
+.auth-password-requirements li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.auth-password-requirements li > span {
+  color: #9299a0;
+}
+
+.auth-password-requirements li.is-met {
+  color: #28714e;
+}
+
+.auth-password-requirements li.is-met > span {
+  color: #28714e;
+  font-weight: 700;
+}
+
+.auth-password-requirements li.is-optional:not(.is-met) {
+  color: #9299a0;
+}
+
 .auth-page-form-wrap form .primary-btn {
   margin-top: 8px;
 }
 
 .auth-switch {
   margin-top: 22px;
+}
+
+.auth-status {
+  margin: 0;
+  color: #355b4b;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.auth-registration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 18px;
+}
+
+.auth-registration-actions .auth-text-button {
+  min-height: 36px;
 }
 
 .auth-text-button {

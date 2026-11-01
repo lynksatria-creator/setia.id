@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ExcelJS from 'exceljs';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import Auth from './pages/Auth';
 import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
 import { getThemeCatalog } from './lib/themeCatalog';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
@@ -494,6 +495,94 @@ test('renders the registration form on the register route', () => {
 
   expect(screen.getByRole('heading', { name: 'Buat akun' })).toBeDefined();
   expect(screen.getByLabelText('Nama lengkap')).toBeDefined();
+});
+
+test('requires email OTP verification before completing Nuansa Invite registration', async () => {
+  sessionStorage.clear();
+  const fetchMock = vi.fn(async (url, options) => {
+    const path = new URL(url, window.location.origin).pathname;
+    const payload = path.endsWith('/auth/register')
+      ? { message: 'Kode OTP telah dikirim ke email Anda.' }
+      : {
+        access_token: 'verified-registration-token',
+        token_type: 'bearer',
+        user: { id: 'user-1', full_name: 'Test User', email: 'test@example.com', role: 'user' },
+      };
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: () => 'application/json' },
+      json: async () => payload,
+    };
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  window.history.pushState({}, '', '/undangan-auth?mode=register');
+  const onSuccess = vi.fn();
+  render(<AuthProvider><Auth onBack={vi.fn()} onSuccess={onSuccess} /></AuthProvider>);
+
+  fireEvent.change(screen.getByLabelText('Nama lengkap'), { target: { value: 'Test User' } });
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'test@example.com' } });
+  fireEvent.change(screen.getByLabelText('Kata sandi'), { target: { value: 'Password123' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Daftar' }));
+
+  expect(await screen.findByRole('heading', { name: 'Masukkan kode OTP' })).toBeDefined();
+  expect(screen.getByText('Kode OTP telah dikirim ke email Anda.')).toBeDefined();
+  expect(sessionStorage.getItem('undangan.id.session')).toBeNull();
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+    full_name: 'Test User',
+    email: 'test@example.com',
+    password: 'Password123',
+  });
+
+  fireEvent.change(screen.getByLabelText(/^Kode OTP/), { target: { value: '123456' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Verifikasi email' }));
+
+  await waitFor(() => {
+    expect(JSON.parse(sessionStorage.getItem('undangan.id.session'))).toMatchObject({
+      access_token: 'verified-registration-token',
+      user: { email: 'test@example.com' },
+    });
+  });
+  expect(onSuccess).toHaveBeenCalledOnce();
+  expect(new URL(fetchMock.mock.calls[1][0], window.location.origin).pathname).toBe('/api/auth/register/verify');
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ email: 'test@example.com', code: '123456' });
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
+});
+
+test('shows password strength and keeps symbols optional during signup', async () => {
+  sessionStorage.clear();
+  const fetchMock = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: { get: () => 'application/json' },
+    json: async () => ({ message: 'Kode OTP telah dikirim ke email Anda.' }),
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  window.history.pushState({}, '', '/undangan-auth?mode=register');
+  render(<AuthProvider><Auth onBack={vi.fn()} onSuccess={vi.fn()} /></AuthProvider>);
+
+  fireEvent.change(screen.getByLabelText('Nama lengkap'), { target: { value: 'Test User' } });
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'test@example.com' } });
+  const passwordInput = screen.getByLabelText('Kata sandi');
+  const strengthMeter = screen.getByRole('meter', { name: 'Kekuatan kata sandi' });
+
+  fireEvent.change(passwordInput, { target: { value: 'password123' } });
+  expect(strengthMeter.getAttribute('aria-valuetext')).toBe('Lemah');
+  fireEvent.click(screen.getByRole('button', { name: 'Daftar' }));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/huruf kecil, huruf besar, dan angka/i);
+  expect(fetchMock).not.toHaveBeenCalled();
+
+  fireEvent.change(passwordInput, { target: { value: 'Password123' } });
+  expect(strengthMeter.getAttribute('aria-valuetext')).toBe('Cukup');
+  expect(screen.getByText('Simbol (opsional)')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Daftar' }));
+  expect(await screen.findByRole('heading', { name: 'Masukkan kode OTP' })).toBeDefined();
+  expect(fetchMock).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 
 test('renders a blog detail route for a published article', () => {
