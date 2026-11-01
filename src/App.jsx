@@ -4,7 +4,7 @@ import './pages/Gibrig.css';
 import './pages/Invitation.css';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import Auth from './pages/Auth';
+import InvitationUnderDevelopment from './pages/InvitationUnderDevelopment';
 import Blog, { articleSlug } from './pages/Blog';
 import BlogDetail from './pages/BlogDetail';
 import Pricing from './pages/Pricing';
@@ -27,6 +27,7 @@ import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
 import { createDefaultTheme, getThemeCatalog, themeStyle } from './lib/themeCatalog';
 import { SEO_DEFAULTS } from './lib/seoSites';
 import { createWhatsAppUrl } from './lib/whatsapp';
+import { getRootRouteForHost, getSiteUrl, resolveBrandHref } from './lib/siteDomains';
 
 const storage = {
   portal: 'portal-cms',
@@ -619,7 +620,10 @@ const navItems = [
   { label: 'Kontak', href: '#contact' },
 ];
 
-const formatPath = (path) => path || '/';
+const formatPath = (path) => {
+  const normalizedPath = path || '/';
+  return normalizedPath === '/' ? getRootRouteForHost() : normalizedPath;
+};
 
 const isValidPortalPartnerHref = (href) => {
   if (typeof href !== 'string' || !href.trim()) return false;
@@ -1469,7 +1473,8 @@ const PortalHome = () => {
   const renderAd = (key, className) => {
     const slot = portalData.ads[key];
     if (!slot?.enabled) return null;
-    const href = isValidPortalPartnerHref(slot.href) || slot.href?.startsWith('#') ? slot.href : '#contact';
+    const rawHref = isValidPortalPartnerHref(slot.href) || slot.href?.startsWith('#') ? slot.href : '#contact';
+    const href = resolveBrandHref(rawHref);
     const external = /^https?:\/\//i.test(href);
     return (
       <a className={`portal-ad-slot ${className}`} href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>
@@ -1543,7 +1548,7 @@ const PortalHome = () => {
             <div className="portal-showcase-grid">
               {portalData.services.filter((service) => service.active !== false).map((service, index) => (
                 <article className={`portal-showcase-card portal-showcase-card-${index + 1}`} key={`${service.name}-${index}`} style={{ '--brand-accent': service.accent || '#59416F', '--brand-heading-font': `'${service.headingFont || theme.headingFont}', Georgia, serif`, '--brand-body-font': `'${service.bodyFont || theme.bodyFont}', sans-serif` }} data-portal-reveal>
-                  <a className="portal-showcase-image" href={isValidPortalPartnerHref(service.href) ? service.href : '#brands'} target="_blank" rel="noopener noreferrer" aria-label={`Kunjungi ${service.name}`}>
+                  <a className="portal-showcase-image" href={isValidPortalPartnerHref(service.href) ? resolveBrandHref(service.href) : '#brands'} target="_blank" rel="noopener noreferrer" aria-label={`Kunjungi ${service.name}`}>
                     {service.image ? <img src={service.image} alt={`Visual ${service.name}`} loading="lazy" /> : <span className="portal-image-fallback" aria-hidden="true">P.</span>}
                     <span>0{index + 1} <i /> {String(Math.max(portalData.services.filter((item) => item.active !== false).length, 1)).padStart(2, '0')}</span>
                   </a>
@@ -1554,7 +1559,7 @@ const PortalHome = () => {
                     <span className="portal-partner-category">{service.category || 'CREATIVE PARTNER'}</span>
                     <h3>{service.name}</h3>
                     <p>{service.description}</p>
-                    <a className="portal-showcase-link" href={isValidPortalPartnerHref(service.href) ? service.href : '#brands'} target="_blank" rel="noopener noreferrer">{service.button || 'Kunjungi Website'}<span aria-hidden="true">↗</span></a>
+                    <a className="portal-showcase-link" href={isValidPortalPartnerHref(service.href) ? resolveBrandHref(service.href) : '#brands'} target="_blank" rel="noopener noreferrer">{service.button || 'Kunjungi Website'}<span aria-hidden="true">↗</span></a>
                   </div>
                 </article>
               ))}
@@ -2085,7 +2090,7 @@ const GibrigHome = ({ path }) => {
               </a>
             ))}
             <a href="#social-media">Sosial Media</a>
-            <a href="/">Aurora Media</a>
+            <a href={getSiteUrl('aurora')}>Aurora Media</a>
           </nav>
           <a
             className="gibrig-contact-cta"
@@ -2247,7 +2252,7 @@ const GibrigHome = ({ path }) => {
             <nav className="gibrig-footer-nav" aria-label="Navigasi footer">
               <strong>Navigasi</strong>
               {gibrigPages.map((page) => <a key={page.slug || 'home'} href={page.slug ? `/gibrig/${page.slug}` : '/gibrig'}>{page.label}</a>)}
-              <a href="/">Aurora Media</a>
+              <a href={getSiteUrl('aurora')}>Aurora Media</a>
             </nav>
             <div className="gibrig-footer-contact">
               <strong>Hubungi Kami</strong>
@@ -2257,7 +2262,7 @@ const GibrigHome = ({ path }) => {
               {whatsappNumber ? <a href={createWhatsAppUrl(whatsappNumber, whatsappMessage, 'Entertainment Musik', 'Footer > WhatsApp')} target="_blank" rel="noopener noreferrer">◉ <span>WhatsApp</span></a> : null}
             </div>
           </div>
-          <div className="container gibrig-copyright"><p>{data.footer}</p><a href="/" aria-label="Kembali ke Aurora Media">↑</a></div>
+          <div className="container gibrig-copyright"><p>{data.footer}</p><a href={getSiteUrl('aurora')} aria-label="Kembali ke Aurora Media">↑</a></div>
         </section>
       </main>
       {previewImage ? (
@@ -2593,11 +2598,7 @@ function App() {
   };
 
   if (path === '/undangan-auth') {
-    const requestedPath = new URLSearchParams(window.location.search).get('next');
-    const dashboardPath = requestedPath?.startsWith('/undangan-dashboard') && !requestedPath.startsWith('//')
-      ? requestedPath
-      : '/undangan-dashboard';
-    return <Auth onBack={() => navigate('/undangan')} onSuccess={() => navigate(dashboardPath)} />;
+    return <InvitationUnderDevelopment />;
   }
 
   if (path === '/undangan-dashboard') {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getSiteUrl } from '../lib/siteDomains';
 
 export const invitationNavigation = [
   { label: 'Beranda', href: '/undangan' },
@@ -52,7 +53,7 @@ export default function Navbar({ siteName, logo = 'U', logoImage, activePath = '
               {item.label}
             </a>
           ))}
-          <a href="/" onClick={() => setMenuOpen(false)}>Aurora Media</a>
+          <a href={getSiteUrl('aurora')} onClick={() => setMenuOpen(false)}>Aurora Media</a>
         </nav>
         <div className="invitation-nav-actions">
           <button className="invitation-login-link" onClick={onLogin}>Masuk</button>

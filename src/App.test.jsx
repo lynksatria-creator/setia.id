@@ -48,7 +48,7 @@ test('super admin SEO dashboard saves independent website metadata to the backen
     const site = path.split('/').pop();
     const payload = options.method === 'PUT'
       ? { site, seo: JSON.parse(options.body) }
-      : { site, seo: null };
+      : { site, seo: site === 'portal' ? { ogImage: '' } : null };
     return {
       ok: true,
       status: 200,
@@ -62,7 +62,20 @@ test('super admin SEO dashboard saves independent website metadata to the backen
 
   expect(await screen.findByRole('heading', { name: /kelola pencarian untuk setiap website/i })).toBeDefined();
   await waitFor(() => expect(requests.filter((request) => request.path.startsWith('/api/admin/seo/'))).toHaveLength(4));
-  fireEvent.click(screen.getByRole('button', { name: /Gibrig Entertainment \/ Musik\.id/i }));
+  await screen.findByLabelText(/^SEO title/);
+  expect(screen.getByText(/Deskripsi antara 90–160 karakter/).closest('li')).toHaveClass('is-complete');
+  expect(screen.getByText(/Gambar pratinjau sosial tersedia/).closest('li')).toHaveClass('is-complete');
+  expect(screen.getByRole('link', { name: 'Google Search Console ↗' }).getAttribute('href'))
+    .toBe('https://search.google.com/search-console?resource_id=sc-domain%3Aauroramedia.online');
+  expect(screen.getByRole('link', { name: 'https://auroramedia.online/sitemap-aurora-media.xml' }).getAttribute('href'))
+    .toBe('https://auroramedia.online/sitemap-aurora-media.xml');
+  expect(screen.getByRole('link', { name: 'https://entertainment.musik.auroramedia.online/sitemap-gibrig.xml' }).getAttribute('href'))
+    .toBe('https://entertainment.musik.auroramedia.online/sitemap-gibrig.xml');
+  expect(screen.getByRole('link', { name: 'https://wediing.auroramedia.online/sitemap-nunuy.xml' }).getAttribute('href'))
+    .toBe('https://wediing.auroramedia.online/sitemap-nunuy.xml');
+  expect(screen.getByRole('link', { name: 'https://invite.auroramedia.online/sitemap-nuansa-invite.xml' }).getAttribute('href'))
+    .toBe('https://invite.auroramedia.online/sitemap-nuansa-invite.xml');
+  fireEvent.click(screen.getByRole('button', { name: /Gibrig Entertainment \/ Entertainment Musik/i }));
   await screen.findByLabelText(/^SEO title/);
   fireEvent.change(screen.getByLabelText(/^SEO title/), { target: { value: 'Gibrig Entertainment | Musik Live Garut' } });
   fireEvent.change(screen.getByLabelText(/^Meta description/), {
@@ -76,14 +89,14 @@ test('super admin SEO dashboard saves independent website metadata to the backen
   });
   fireEvent.click(screen.getByRole('button', { name: /simpan seo gibrig entertainment/i }));
 
-  expect(await screen.findByText(/SEO Gibrig Entertainment \/ Musik\.id berhasil disimpan/i)).toBeDefined();
+  expect(await screen.findByText(/SEO Gibrig Entertainment \/ Entertainment Musik berhasil disimpan/i)).toBeDefined();
   const update = requests.find((request) => request.path === '/api/admin/seo/gibrig' && request.options.method === 'PUT');
   expect(JSON.parse(update.options.body)).toMatchObject({
     title: 'Gibrig Entertainment | Musik Live Garut',
     ogImage: 'https://portal.id/gibrig-share.jpg',
     noIndex: false,
   });
-  expect(update.options.headers.get('Authorization')).toBe('Bearer seo-admin-token');
+  expect(update.options.headers.get('Authorization')).toBe(`Bearer ${SUPER_ADMIN_TEST_TOKEN}`);
   sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
   vi.unstubAllGlobals();
 });
@@ -182,7 +195,7 @@ test.each([
   const activeLink = navigation.querySelector('[aria-current="page"]');
   expect(activeLink.textContent).toBe(menuLabel);
   expect(activeLink.getAttribute('href')).toBe(path);
-  expect(navigation.querySelector('a[href="/"]').textContent).toBe('Aurora Media');
+  expect(navigation.querySelector('a[href="https://auroramedia.online/"]').textContent).toBe('Aurora Media');
   if (path === '/undangan') {
     expect(screen.queryByText('RSVP online')).toBeNull();
     expect(screen.queryByText('Personal & elegan')).toBeNull();
@@ -1503,7 +1516,7 @@ test.each([
 
   expect(screen.getByRole('heading', { name: heading })).toBeDefined();
   expect(screen.getAllByRole('link', { name: 'Beranda' }).every((link) => link.getAttribute('href') === href)).toBe(true);
-  expect(screen.getAllByRole('link', { name: 'Aurora Media' }).every((link) => link.getAttribute('href') === '/')).toBe(true);
+  expect(screen.getAllByRole('link', { name: 'Aurora Media' }).every((link) => link.getAttribute('href') === 'https://auroramedia.online/')).toBe(true);
 });
 
 test('renders the Nunuy wedding experience with real-data disclaimers and consultation', () => {
@@ -1584,7 +1597,7 @@ test.each([
   expect(currentMenuLink.getAttribute('aria-current')).toBe('page');
   expect(currentMenuLink.textContent).toBe(menuLabel);
   expect(screen.getByRole('link', { name: 'Beranda' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
-  expect(screen.getAllByRole('link', { name: 'Aurora Media' }).every((link) => link.getAttribute('href') === '/')).toBe(true);
+  expect(screen.getAllByRole('link', { name: 'Aurora Media' }).every((link) => link.getAttribute('href') === 'https://auroramedia.online/')).toBe(true);
   await waitFor(() => expect(document.head.querySelector('link[rel="canonical"]').href).toContain(path));
 });
 
@@ -1949,7 +1962,7 @@ test('renders the Gibrig public homepage and connects booking inquiry', async ()
     'Beranda', 'Tentang & Artis', 'Entertainment', 'Paket', 'Galeri', 'Testimoni', 'Sosial Media', 'Aurora Media',
   ]);
   expect(nav.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
-  expect(nav.querySelector('a[href="/"]').textContent).toBe('Aurora Media');
+  expect(nav.querySelector('a[href="https://auroramedia.online/"]').textContent).toBe('Aurora Media');
   expect(nav.querySelector('a[href="#social-media"]')).not.toBeNull();
   expect(container.querySelector('.gibrig-social-links a[href="https://www.tiktok.com/@neng_syelfi_oktora_2"]')).not.toBeNull();
   expect(container.querySelector('.gibrig-social-links a[href="https://www.youtube.com/@nengsyelfioktora7310"]')).not.toBeNull();
@@ -2001,11 +2014,11 @@ test.each([
   const mainNavigation = screen.getByRole('navigation', { name: 'Navigasi utama' });
   expect(mainNavigation.querySelectorAll('a')).toHaveLength(8);
   expect(mainNavigation.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
-  expect(mainNavigation.querySelector('a[href="/"]').textContent).toBe('Aurora Media');
+  expect(mainNavigation.querySelector('a[href="https://auroramedia.online/"]').textContent).toBe('Aurora Media');
   const footerNavigation = screen.getByRole('navigation', { name: 'Navigasi footer' });
   expect(footerNavigation.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
-  expect(footerNavigation.querySelector('a[href="/"]').textContent).toBe('Aurora Media');
-  expect(screen.getByRole('link', { name: 'Kembali ke Aurora Media' }).getAttribute('href')).toBe('/');
+  expect(footerNavigation.querySelector('a[href="https://auroramedia.online/"]').textContent).toBe('Aurora Media');
+  expect(screen.getByRole('link', { name: 'Kembali ke Aurora Media' }).getAttribute('href')).toBe('https://auroramedia.online/');
   expect(screen.getByRole('link', { name: /gibrig entertainment, beranda/i }).getAttribute('href')).toBe('/gibrig');
   expect(document.title).toContain('Gibrig Entertainment');
 });

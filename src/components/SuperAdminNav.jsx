@@ -1,3 +1,5 @@
+import { getSiteUrl } from '../lib/siteDomains';
+
 const adminLinks = [
   { label: 'Portal', href: '/portal-admin' },
   { label: 'SEO Semua Website', href: '/setia-creative-admin/seo' },
@@ -8,10 +10,10 @@ const adminLinks = [
 ];
 
 const websiteLinks = [
-  { label: 'Portal', href: '/' },
-  { label: 'Gibrig', href: '/gibrig' },
-  { label: 'Nunuy Wedding', href: '/nunuy-nadhifa-wedding' },
-  { label: 'Nuansa Invite', href: '/undangan' },
+  { label: 'Portal', href: getSiteUrl('aurora') },
+  { label: 'Gibrig', href: getSiteUrl('entertainment', '/gibrig') },
+  { label: 'Nunuy Wedding', href: getSiteUrl('nunuy', '/nunuy-nadhifa-wedding') },
+  { label: 'Nuansa Invite', href: getSiteUrl('invitation', '/undangan') },
 ];
 
 export default function SuperAdminNav() {

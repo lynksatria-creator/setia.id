@@ -1,5 +1,6 @@
 import { invitationNavigation } from './Navbar';
 import { createWhatsAppUrl } from '../lib/whatsapp';
+import { getSiteUrl } from '../lib/siteDomains';
 
 export default function Footer({ siteName, phone, email, whatsappNumber, whatsappMessage }) {
   const whatsappDigits = String(whatsappNumber || '').replace(/\D/g, '');
@@ -32,7 +33,7 @@ export default function Footer({ siteName, phone, email, whatsappNumber, whatsap
         <div>
           <h4>Jelajahi</h4>
           {invitationNavigation.map((item) => <p key={item.href}><a href={item.href}>{item.label}</a></p>)}
-          <p><a href="/">Aurora Media</a></p>
+          <p><a href={getSiteUrl('aurora')}>Aurora Media</a></p>
         </div>
       </div>
     </footer>

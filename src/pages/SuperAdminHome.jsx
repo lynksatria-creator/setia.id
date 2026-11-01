@@ -2,6 +2,7 @@ import { useState } from 'react';
 import SuperAdminNav from '../components/SuperAdminNav';
 import { adminApi } from '../lib/api';
 import { getAdminScope, SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
+import { getSiteUrl } from '../lib/siteDomains';
 
 const adminPanels = [
   { title: 'SEO Semua Website', description: 'Atur judul, deskripsi, frasa pencarian, dan metadata untuk setiap website.', href: '/setia-creative-admin/seo' },
@@ -13,10 +14,10 @@ const adminPanels = [
 ];
 
 const websites = [
-  { title: 'Portal utama', href: '/' },
-  { title: 'Gibrig Entertainment', href: '/gibrig' },
-  { title: 'Nunuy Nadhifa Wedding', href: '/nunuy-nadhifa-wedding' },
-  { title: 'Nuansa Invite', href: '/undangan' },
+  { title: 'Portal utama', href: getSiteUrl('aurora') },
+  { title: 'Gibrig Entertainment', href: getSiteUrl('entertainment', '/gibrig') },
+  { title: 'Nunuy Nadhifa Wedding', href: getSiteUrl('nunuy', '/nunuy-nadhifa-wedding') },
+  { title: 'Nuansa Invite', href: getSiteUrl('invitation', '/undangan') },
 ];
 
 const scopedPanels = {
@@ -60,7 +61,7 @@ export default function SuperAdminHome({ onLogin }) {
     return (
       <main className="super-admin-home">
         <header className="billing-admin-header">
-          <a className="brand" href="/"><span className="logo-mark">A</span>Aurora Media</a>
+          <a className="brand" href={getSiteUrl('aurora')}><span className="logo-mark">A</span>Aurora Media</a>
           <div><span>Akses panel terbatas</span><button onClick={logout}>Keluar</button></div>
         </header>
         <div className="super-admin-content">
