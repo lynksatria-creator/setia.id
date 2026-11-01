@@ -3,14 +3,14 @@ const labelFor = (key) => key
   .replace(/[_-]+/g, ' ')
   .replace(/^./, (first) => first.toUpperCase());
 
-function ValueEditor({ name, value, path, onChange }) {
+function ValueEditor({ name, value, path, onChange, onImageUpload }) {
   if (Array.isArray(value)) {
     return (
       <fieldset className="data-editor-collection">
         <legend>{labelFor(name)}</legend>
         {value.map((item, index) => (
           <div className="data-editor-array-item" key={`${path.join('.')}-${index}`}>
-            <ValueEditor name={`Item ${index + 1}`} value={item} path={[...path, index]} onChange={onChange} />
+            <ValueEditor name={`Item ${index + 1}`} value={item} path={[...path, index]} onChange={onChange} onImageUpload={onImageUpload} />
             <button type="button" className="data-editor-remove" onClick={() => onChange(path, value.filter((_, itemIndex) => itemIndex !== index))}>Hapus item</button>
           </div>
         ))}
@@ -35,7 +35,7 @@ function ValueEditor({ name, value, path, onChange }) {
         <legend>{labelFor(name)}</legend>
         <div className="data-editor-grid">
           {Object.entries(value).map(([key, nestedValue]) => (
-            <ValueEditor key={key} name={key} value={nestedValue} path={[...path, key]} onChange={onChange} />
+            <ValueEditor key={key} name={key} value={nestedValue} path={[...path, key]} onChange={onChange} onImageUpload={onImageUpload} />
           ))}
         </div>
       </fieldset>
@@ -69,15 +69,26 @@ function ValueEditor({ name, value, path, onChange }) {
       ) : (
         <input id={id} value={value ?? ''} onChange={(event) => onChange(path, event.target.value)} />
       )}
+      {onImageUpload && typeof value === 'string' && /^(image|photo|logoImage)$/i.test(name) ? (
+        <input
+          type="file"
+          accept="image/*"
+          aria-label={`Unggah ${labelFor(name).toLowerCase()}`}
+          onChange={(event) => {
+            onImageUpload(path, event.target.files?.[0]);
+            event.target.value = '';
+          }}
+        />
+      ) : null}
     </label>
   );
 }
 
-export default function StructuredEditor({ data, onChange }) {
+export default function StructuredEditor({ data, onChange, onImageUpload }) {
   return (
     <div className="data-editor">
       {Object.entries(data).map(([key, value]) => (
-        <ValueEditor key={key} name={key} value={value} path={[key]} onChange={onChange} />
+        <ValueEditor key={key} name={key} value={value} path={[key]} onChange={onChange} onImageUpload={onImageUpload} />
       ))}
     </div>
   );

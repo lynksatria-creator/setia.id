@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import logging
 import os
@@ -257,13 +257,26 @@ class GuestbookModeration(BaseModel):
 
 
 class PublicTestimonialCreate(BaseModel):
+    kind: Literal["testimonial", "rating"] = "testimonial"
     site: Literal["portal", "gibrig", "nunuy", "invitation"]
     name: str = Field(min_length=2, max_length=80)
     event: str = Field(min_length=2, max_length=120)
-    message: str = Field(min_length=10, max_length=1000)
+    message: str | None = Field(default=None, max_length=1000)
     rating: int = Field(ge=1, le=5)
 
-    @field_validator("name", "event", "message")
+    @model_validator(mode="before")
+    @classmethod
+    def provide_rating_metadata(cls, value):
+        if isinstance(value, dict) and value.get("kind") == "rating":
+            value = {
+                **value,
+                "name": value.get("name") or "Pengunjung",
+                "event": "Rating website",
+                "message": value.get("message"),
+            }
+        return value
+
+    @field_validator("name", "event")
     @classmethod
     def normalize_testimonial_text(cls, value: str):
         value = value.strip()
@@ -271,9 +284,51 @@ class PublicTestimonialCreate(BaseModel):
             raise ValueError("Kolom testimoni tidak boleh kosong.")
         return value
 
+    @field_validator("message")
+    @classmethod
+    def normalize_testimonial_message(cls, value: str | None):
+        return value.strip() if value is not None else None
+
+    @model_validator(mode="after")
+    def validate_testimonial_message(self):
+        if self.kind == "testimonial" and (self.message is None or len(self.message) < 10):
+            raise ValueError("Testimoni harus berisi minimal 10 karakter.")
+        if self.kind == "rating" and self.message == "":
+            self.message = None
+        return self
 
 class TestimonialModeration(BaseModel):
     status: Literal["visible", "hidden"]
+
+
+class PublicNunuyConsultationCreate(BaseModel):
+    couple: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=8, max_length=24, pattern=r"^[0-9+()\-\s]+$")
+    email: EmailStr | None = None
+    wedding_date: date | None = None
+    location: str | None = Field(default=None, max_length=160)
+    guests: int | None = Field(default=None, ge=1, le=100000)
+    service: str | None = Field(default=None, max_length=120)
+    package: str | None = Field(default=None, max_length=120)
+    budget: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("couple", "phone")
+    @classmethod
+    def normalize_required_contact(cls, value: str):
+        value = value.strip()
+        if not value:
+            raise ValueError("Nama dan nomor WhatsApp wajib diisi.")
+        return value
+
+    @field_validator("location", "service", "package", "budget", "notes")
+    @classmethod
+    def normalize_optional_consultation_text(cls, value: str | None):
+        return value.strip() or None if value is not None else None
+
+
+class NunuyConsultationStatusUpdate(BaseModel):
+    status: Literal["new", "contacted", "closed"]
 
 
 class InvitationTicketRecipient(BaseModel):
@@ -1842,6 +1897,7 @@ async def create_public_guestbook(slug: str, payload: GuestbookEntryCreate):
 def public_testimonial_entry(entry):
     return {
         "id": entry["id"],
+        "kind": entry.get("kind", "testimonial"),
         "name": entry["name"],
         "event": entry["event"],
         "message": entry["message"],
@@ -1900,6 +1956,44 @@ async def moderate_testimonial(
         if entry.get("status") != payload.status:
             raise HTTPException(status_code=409, detail="Status testimoni tidak dapat diperbarui.")
     return {"id": testimonial_id, "status": payload.status}
+
+
+@api_router.post("/public/nunuy-consultations")
+async def create_public_nunuy_consultation(payload: PublicNunuyConsultationCreate):
+    consultation_id = str(uuid.uuid4())
+    entry = {
+        "id": consultation_id,
+        **payload.model_dump(mode="json"),
+        "status": "new",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.nunuy_consultations.insert_one(entry)
+    return {"id": consultation_id, "status": entry["status"]}
+
+
+@api_router.get("/admin/nunuy-consultations")
+async def list_nunuy_consultations(_admin=Depends(require_admin)):
+    entries = await db.nunuy_consultations.find({}, {"_id": 0}).sort("created_at", -1).to_list(length=500)
+    return entries
+
+
+@api_router.patch("/admin/nunuy-consultations/{consultation_id}")
+async def update_nunuy_consultation_status(
+    consultation_id: str,
+    payload: NunuyConsultationStatusUpdate,
+    _admin=Depends(require_admin),
+):
+    result = await db.nunuy_consultations.update_one(
+        {"id": consultation_id},
+        {"$set": {"status": payload.status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.modified_count == 0:
+        entry = await db.nunuy_consultations.find_one({"id": consultation_id}, {"_id": 0, "status": 1})
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Konsultasi tidak ditemukan.")
+        if entry.get("status") != payload.status:
+            raise HTTPException(status_code=409, detail="Status konsultasi tidak dapat diperbarui.")
+    return {"id": consultation_id, "status": payload.status}
 
 
 def public_invitation_ticket(ticket, invitation):

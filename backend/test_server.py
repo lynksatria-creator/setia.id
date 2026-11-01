@@ -408,6 +408,28 @@ class FakeWritableCollection:
         self.documents.append(copy.deepcopy(document))
 
 
+class FakeConsultationCollection:
+    def __init__(self):
+        self.documents = []
+
+    def find(self, _query, _projection=None):
+        return FakeCursor(self.documents)
+
+    async def insert_one(self, document):
+        self.documents.append(copy.deepcopy(document))
+
+    async def find_one(self, query, _projection=None):
+        return next((copy.deepcopy(item) for item in self.documents if item.get("id") == query.get("id")), None)
+
+    async def update_one(self, query, update):
+        item = next((entry for entry in self.documents if entry.get("id") == query.get("id")), None)
+        if item is None:
+            return SimpleNamespace(modified_count=0)
+        changed = any(item.get(key) != value for key, value in update["$set"].items())
+        item.update(update["$set"])
+        return SimpleNamespace(modified_count=int(changed))
+
+
 def test_health_endpoint_is_public():
     response = TestClient(server.app).get("/api/")
 
@@ -470,6 +492,89 @@ def test_public_testimonial_validates_site_and_content(monkeypatch):
         "rating": 8,
     })
 
+    assert response.status_code == 422
+
+
+def test_website_rating_stays_pending_until_published(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    testimonials = FakeTestimonialCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(testimonials=testimonials))
+    client = TestClient(server.app)
+
+    submitted = client.post("/api/public/testimonials", json={
+        "kind": "rating",
+        "site": "portal",
+        "message": "Informasi partner mudah ditemukan.",
+        "rating": 4,
+    })
+
+    assert submitted.status_code == 200
+    assert submitted.json()["status"] == "pending"
+    assert client.get("/api/public/testimonials/portal").json() == []
+
+    admin_token = server.create_access_token("admin@example.com", role="admin")
+    headers = {"Authorization": f"******"}
+    rating = testimonials.documents[0]
+    assert rating["kind"] == "rating"
+    assert rating["rating"] == 4
+    assert rating["message"] == "Informasi partner mudah ditemukan."
+    rating["status"] = "visible"
+    public_rating = client.get("/api/public/testimonials/portal").json()
+    assert client.get("/api/public/testimonials/nunuy").json() == []
+    assert len(public_rating) == 1
+    assert public_rating[0]["kind"] == "rating"
+    assert public_rating[0]["rating"] == 4
+    assert rating["site"] == "portal"
+    assert public_rating[0]["message"] == "Informasi partner mudah ditemukan."
+
+
+def test_nunuy_consultation_is_saved_and_managed_only_by_admin(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    consultations = FakeConsultationCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(nunuy_consultations=consultations))
+    client = TestClient(server.app)
+
+    response = client.post("/api/public/nunuy-consultations", json={
+        "couple": "Alya & Bima",
+        "phone": "+62 812-3456-7890",
+        "email": "alya@example.com",
+        "wedding_date": "2027-06-12",
+        "location": "Bandung",
+        "guests": 180,
+        "service": "Wedding Organizer",
+        "package": "Gold",
+        "notes": "Tema lilac",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "new"
+    assert client.get("/api/admin/nunuy-consultations").status_code == 401
+
+    token = server.create_access_token("admin@example.com", role="admin")
+    headers = {"Authorization": f"Bearer {token}"}
+    queued = client.get("/api/admin/nunuy-consultations", headers=headers)
+    assert queued.status_code == 200
+    assert queued.json()[0]["couple"] == "Alya & Bima"
+    assert queued.json()[0]["wedding_date"] == "2027-06-12"
+
+    consultation_id = response.json()["id"]
+    updated = client.patch(
+        f"/api/admin/nunuy-consultations/{consultation_id}",
+        headers=headers,
+        json={"status": "contacted"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "contacted"
+    assert consultations.documents[0]["status"] == "contacted"
+
+
+def test_nunuy_consultation_validates_public_contact_data(monkeypatch):
+    monkeypatch.setattr(server, "db", SimpleNamespace(nunuy_consultations=FakeConsultationCollection()))
+    response = TestClient(server.app).post("/api/public/nunuy-consultations", json={
+        "couple": "A",
+        "phone": "not a phone",
+        "email": "not-an-email",
+    })
     assert response.status_code == 422
 
 

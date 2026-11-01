@@ -65,6 +65,16 @@ export const testimonialsApi = {
   }),
 };
 
+export const nunuyConsultationsApi = {
+  createPublic: (data) => apiRequest('/public/nunuy-consultations', { method: 'POST', body: JSON.stringify(data) }),
+  listAdmin: (token) => apiRequest('/admin/nunuy-consultations', { token }),
+  updateStatus: (token, id, status) => apiRequest(`/admin/nunuy-consultations/${encodeURIComponent(id)}`, {
+    token,
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  }),
+};
+
 export const invitationsApi = {
   list: (token) => apiRequest('/invitations', { token }),
   create: (token, data) => apiRequest('/invitations', { token, method: 'POST', body: JSON.stringify(data) }),

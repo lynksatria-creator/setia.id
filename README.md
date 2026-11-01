@@ -4,7 +4,23 @@ Platform undangan digital yang dibangun dengan React dan Vite.
 
 ## Portal.id
 
-Beranda `/` menampilkan portal tiga brand: Nunuy Nadhifa Wedding, Musik.id, dan Nuansa Invite. Panel `/admin` menyediakan editor konten dan gambar hero/kartu brand, slot iklan Top Banner/Mid-Feed/Sidebar/Floating Bottom, 20 preset visual, Google Fonts terpisah per brand, warna, spacing, radius, dan animasi. Konfigurasi portal disimpan di browser, dapat dipublikasikan dari panel, serta diekspor atau diimpor sebagai JSON.
+Beranda `/` mengikuti referensi Portal.id: header ringkas, hero wedding dua kolom, tiga kartu website partner mendatar, testimoni dan rating terpublikasi dari Portal.id serta partner, dan footer ungu. Pengunjung memberi rating website dengan memilih satu hingga lima bintang; rating dikirim dan dibaca melalui API sesuai situs, sehingga rating yang disetujui tersedia di Portal.id dan halaman partner terkait. Halaman partner juga dapat menerima rating melalui API yang sama. Halaman `/beriklan` dan `/kontak` menyediakan informasi promosi dan kanal kontak langsung; `/faq` berisi jawaban atas pertanyaan umum. Partner default adalah Nunuy Nadhifa Wedding, Musik.id, dan Undangan Digital; tautannya membuka tab baru dan dapat diubah di panel.
+
+Jika frontend Portal.id dan website partner dipasang pada domain terpisah, arahkan `VITE_API_BASE_URL` semuanya ke backend API yang sama dan masukkan setiap domain frontend ke `CORS_ORIGINS` backend agar rating tetap tersinkron.
+
+## Musik.id — Gibrig Entertainment
+
+Halaman `/gibrig` mempertahankan landing page lengkap sesuai referensi, dengan lima halaman terpisah: `/gibrig/tentang`, `/gibrig/entertainment`, `/gibrig/paket`, `/gibrig/galeri`, dan `/gibrig/testimoni`. Navigasi enam halaman tersedia di header dan footer. Semua data artis, paket, gambar, galeri, kontak, dan testimoni tetap berasal dari konfigurasi CMS yang ada; tombol paket mengirim pertanyaan paket yang dipilih melalui WhatsApp.
+
+## Nunuy Nadhifa Wedding
+
+Halaman `/nunuy-nadhifa-wedding` memakai tema Luxury Lilac dan menampilkan layanan, paket Silver/Gold/Platinum, galeri yang dapat difilter, testimoni terverifikasi, inspirasi, FAQ, serta konsultasi WhatsApp. Setiap layanan dan artikel memiliki halaman detail sendiri; metadata SEO dan sitemap mencakup halaman bawaan. Harga, jumlah kru, durasi, dokumentasi, profil tim, dan testimoni dapat diubah admin; data yang belum dikonfirmasi tidak diisi dengan klaim atau testimoni contoh.
+
+Panel `/nunuy-admin` dilindungi login super admin. Editor mendukung CRUD data situs dan gambar WebP, sementara permintaan konsultasi dikirim ke API/MongoDB dan dapat ditindaklanjuti atau ditutup dari panel. Untuk domain deployment, konfigurasi `MONGO_URL`, `DB_NAME`, `VITE_API_BASE_URL`, serta `CORS_ORIGINS` backend/frontend harus menunjuk ke layanan yang sama. Konten situs saat ini tetap disimpan di `localStorage` browser; gunakan ekspor/impor konfigurasi admin untuk cadangan atau pemindahan perangkat.
+
+Panel `/admin` (alias `/portal-admin`) menyediakan pengelolaan partner: tambah, edit kategori/nama/deskripsi/gambar/URL, ubah urutan, aktifkan, atau hapus. Panel juga mengatur hero, banner promosi, kontak WhatsApp, tautan sosial, SEO, slot iklan, gambar WebP, dan tema. Masuk ke panel melalui autentikasi super admin di `/setia-creative-admin`. Konfigurasi konten portal tersimpan di `localStorage` browser yang dipakai, sehingga perubahan berlaku pada browser/perangkat tersebut; gunakan ekspor/impor JSON untuk memindahkan konfigurasi.
+
+Sitemap tersedia di `/sitemap.xml`, dan robots crawler mengarah ke sitemap domain `portal.id`.
 
 Admin Portal lokal: `admin` / `admin123`.
 
