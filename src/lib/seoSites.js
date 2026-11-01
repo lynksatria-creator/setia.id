@@ -1,5 +1,7 @@
 import { getSiteUrl } from './siteDomains';
 
+export const GOOGLE_SEARCH_CONSOLE_URL = `https://search.google.com/search-console?resource_id=sc-domain%3A${new URL(getSiteUrl('aurora')).hostname}`;
+
 export const SEO_DEFAULTS = {
   portal: {
     title: 'Aurora Media | Wedding, Musik & Undangan Digital',

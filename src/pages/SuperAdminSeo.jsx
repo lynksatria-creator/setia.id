@@ -3,9 +3,8 @@ import SeoHead from '../components/SeoHead';
 import SuperAdminNav from '../components/SuperAdminNav';
 import { adminApi } from '../lib/api';
 import { SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
-import { SEO_WEBSITES } from '../lib/seoSites';
+import { GOOGLE_SEARCH_CONSOLE_URL, SEO_WEBSITES } from '../lib/seoSites';
 
-const googleSearchConsoleUrl = 'https://search.google.com/search-console?resource_id=sc-domain%3Aauroramedia.online';
 const DESCRIPTION_MIN_LENGTH = 90;
 const DESCRIPTION_MAX_LENGTH = 160;
 
@@ -161,7 +160,7 @@ export default function SuperAdminSeo() {
         <section className="super-admin-section seo-sitemap-section" aria-label="Sitemap setiap website">
           <div className="super-admin-section-heading">
             <div><p className="eyebrow">Pengindeksan</p><h2>Sitemap setiap website</h2></div>
-            <a href={googleSearchConsoleUrl} target="_blank" rel="noopener noreferrer">Google Search Console ↗</a>
+            <a href={GOOGLE_SEARCH_CONSOLE_URL} target="_blank" rel="noopener noreferrer">Google Search Console ↗</a>
           </div>
           <div className="seo-sitemap-list">
             {SEO_WEBSITES.map((website) => (

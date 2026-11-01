@@ -1344,9 +1344,13 @@ test('super admin home links to all admin panels and public websites', () => {
   expect(screen.getByRole('link', { name: /portal admin/i }).getAttribute('href')).toBe('/portal-admin');
   expect(screen.getByRole('link', { name: /gibrig admin/i }).getAttribute('href')).toBe('/gibrig-admin');
   expect(screen.getByRole('link', { name: /nunuy wedding admin/i }).getAttribute('href')).toBe('/nunuy-admin');
+  expect(screen.getByRole('link', { name: 'Google Search Console' })).toMatchObject({
+    href: 'https://search.google.com/search-console?resource_id=sc-domain%3Aauroramedia.online',
+    target: '_blank',
+  });
   expect(screen.getByRole('link', { name: /nuansa invite website admin/i }).getAttribute('href')).toBe('/undangan-website-admin');
   expect(screen.getByRole('link', { name: /nuansa invite admin/i }).getAttribute('href')).toBe('/undangan-admin');
-  expect(screen.getByRole('link', { name: 'Nunuy Nadhifa Wedding' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
+  expect(screen.getByRole('link', { name: 'Nunuy Nadhifa Wedding' }).getAttribute('href')).toBe('https://wediing.auroramedia.online/nunuy-nadhifa-wedding');
   sessionStorage.clear();
 });
 
