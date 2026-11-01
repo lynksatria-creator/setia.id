@@ -2616,14 +2616,14 @@ function App() {
     );
   }
   if (path.startsWith('/undangan-ticket/')) return <GuestTicket ticketToken={path.slice('/undangan-ticket/'.length)} />;
-  if (path === '/setia-creative-admin') return <SuperAdminHome />;
+  if (path === '/setia-creative-admin') return <SuperAdminHome onLogin={(targetPath) => { if (targetPath) navigate(targetPath); }} />;
   if (path === '/setia-creative-admin/seo') {
     return superAdminAuthenticated
       ? <SuperAdminSeo />
-      : <SuperAdminHome onLogin={() => navigate(path)} />;
+      : <SuperAdminHome onLogin={(targetPath) => navigate(targetPath || path)} />;
   }
   if (path === '/undangan-website-admin') {
-    if (!canManageSite('invitation')) return <SuperAdminHome onLogin={() => navigate(path)} />;
+    if (!canManageSite('invitation')) return <SuperAdminHome onLogin={(targetPath) => navigate(targetPath || path)} />;
     return (
       <AdminPanel
         site="invitation"
@@ -2640,7 +2640,7 @@ function App() {
   if (path === '/setia-creative-admin/billing' || path === '/undangan-admin') {
     return superAdminAuthenticated
       ? <AdminBilling onLogout={() => navigate('/setia-creative-admin')} />
-      : <SuperAdminHome onLogin={() => navigate(path)} />;
+      : <SuperAdminHome onLogin={(targetPath) => navigate(targetPath || path)} />;
   }
   if (path.startsWith('/i/')) return <PublicInvitation slug={path.slice(3)} />;
 
@@ -2657,7 +2657,7 @@ function App() {
   }
 
   if (path === '/portal-admin' || path === '/admin') {
-    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
+    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={(targetPath) => navigate(targetPath || path)} />;
     return (
       <AdminPanel
         site="admin"
@@ -2672,7 +2672,7 @@ function App() {
   }
 
   if (path === '/gibrig-admin') {
-    if (!canManageSite('gibrig')) return <SuperAdminHome onLogin={() => navigate(path)} />;
+    if (!canManageSite('gibrig')) return <SuperAdminHome onLogin={(targetPath) => navigate(targetPath || path)} />;
     return (
       <AdminPanel
         site="gibrig"
@@ -2688,7 +2688,7 @@ function App() {
   }
 
   if (path === '/nunuy-admin') {
-    if (!canManageSite('nunuy')) return <SuperAdminHome onLogin={() => navigate(path)} />;
+    if (!canManageSite('nunuy')) return <SuperAdminHome onLogin={(targetPath) => navigate(targetPath || path)} />;
     return (
       <AdminPanel
         site="nunuy"

@@ -1354,6 +1354,28 @@ test('super admin home links to all admin panels and public websites', () => {
   sessionStorage.clear();
 });
 
+test('restricted admin login opens its assigned panel directly', async () => {
+  const invitationAdminToken = `header.${btoa(JSON.stringify({ role: 'admin', scope: 'invitation' }))}.signature`;
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ access_token: invitationAdminToken }),
+  })));
+  sessionStorage.clear();
+  window.history.pushState({}, '', '/admin');
+  renderApp();
+
+  fireEvent.change(screen.getByLabelText('Email admin'), { target: { value: 'invitation@example.com' } });
+  fireEvent.change(screen.getByLabelText('Kata sandi'), { target: { value: 'password' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Masuk' }));
+
+  await waitFor(() => expect(window.location.pathname).toBe('/undangan-website-admin'));
+  expect(screen.queryByText('Akses panel terbatas')).toBeNull();
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
+});
+
 test('opens Nuansa Invite admin from its own direct link after one super admin login', () => {
   sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/undangan-admin');

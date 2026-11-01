@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import SuperAdminNav from '../components/SuperAdminNav';
 import { adminApi } from '../lib/api';
 import { getAdminScope, SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
@@ -33,6 +33,11 @@ export default function SuperAdminHome({ onLogin }) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scope = getAdminScope(token);
+  const scopedPanel = scope && scope !== 'all' ? scopedPanels[scope] : null;
+
+  useEffect(() => {
+    if (token && scopedPanel && onLogin) onLogin(scopedPanel.href);
+  }, [onLogin, scopedPanel, token]);
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -40,10 +45,12 @@ export default function SuperAdminHome({ onLogin }) {
     setIsLoading(true);
     try {
       const result = await adminApi.login({ email, password });
-      sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, result.access_token);
-      setToken(result.access_token);
+      const accessToken = result.access_token;
+      const nextScope = getAdminScope(accessToken);
+      sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, accessToken);
+      setToken(accessToken);
       setPassword('');
-      onLogin?.();
+      if (nextScope === 'all') onLogin?.();
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -57,7 +64,7 @@ export default function SuperAdminHome({ onLogin }) {
   };
 
   if (token && scope && scope !== 'all') {
-    const panel = scopedPanels[scope];
+    if (scopedPanel && onLogin) return null;
     return (
       <main className="super-admin-home">
         <header className="billing-admin-header">
@@ -67,9 +74,9 @@ export default function SuperAdminHome({ onLogin }) {
         <div className="super-admin-content">
           <section className="super-admin-intro">
             <p className="eyebrow">Akun admin situs</p>
-            <h1>{panel?.title || 'Panel admin'}</h1>
+            <h1>{scopedPanel?.title || 'Panel admin'}</h1>
             <p>Akun ini hanya dapat mengelola website yang ditetapkan.</p>
-            {panel ? <a className="primary-btn" href={panel.href}>Buka panel</a> : null}
+            {scopedPanel ? <a className="primary-btn" href={scopedPanel.href}>Buka panel</a> : null}
           </section>
         </div>
       </main>
