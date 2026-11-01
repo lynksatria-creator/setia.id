@@ -338,7 +338,6 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const [editingId, setEditingId] = useState(null);
   const [activationPlanSelections, setActivationPlanSelections] = useState({});
   const [paymentMethodId, setPaymentMethodId] = useState('');
-  const [paymentMobile, setPaymentMobile] = useState('');
   const [activePayment, setActivePayment] = useState(null);
   const [transferReference, setTransferReference] = useState('');
   const [whatsAppInvitationId, setWhatsAppInvitationId] = useState(null);
@@ -1006,7 +1005,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
     setMessage('');
     const planId = activationPlanSelections[invitation.id] || invitation.plan_id;
     try {
-      const payment = await paymentsApi.create(token, invitation.id, paymentMethodId, paymentMobile, planId);
+      const payment = await paymentsApi.create(token, invitation.id, paymentMethodId, planId);
       setActivePayment(payment);
       if (payment.redirect_url) window.location.assign(payment.redirect_url);
       else setMessage('Instruksi transfer siap. Setelah transfer, kirim referensi untuk verifikasi admin.');
@@ -1515,7 +1514,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                   <button className="primary-btn" disabled={!resellerDashboard.sales_enabled}>Buat pesanan & invoice</button>
                 </form>
               )}
-              {resellerCheckout?.redirect_url ? <p className="account-message" role="status">Invoice pesanan {resellerCheckout.order_id} siap: <a href={resellerCheckout.redirect_url} target="_blank" rel="noreferrer">Buka checkout Mayar</a></p> : null}
+              {resellerCheckout?.redirect_url ? <p className="account-message" role="status">Invoice pesanan {resellerCheckout.order_id} siap: <a href={resellerCheckout.redirect_url} target="_blank" rel="noreferrer">Buka checkout Midtrans</a></p> : null}
               <div className="affiliate-list">
                 <h3>Pesanan pelanggan</h3>
                 {resellerDashboard.orders.map((order) => <article className="managed-account-row" key={order.id}>
@@ -1851,8 +1850,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                         {user.role === 'user' && !active ? <>
                           <label className="payment-method-select">Paket aktivasi<select value={activationPlan?.id || ''} onChange={(event) => setActivationPlanSelections((current) => ({ ...current, [invitation.id]: event.target.value }))}>{billing.plans.filter((item) => item.enabled !== false).map((item) => <option key={item.id} value={item.id}>{item.name} · Rp {Number(item.price).toLocaleString('id-ID')} · {item.duration_days} hari</option>)}</select></label>
                           <label className="payment-method-select">Metode<select value={paymentMethodId} onChange={(event) => setPaymentMethodId(event.target.value)}>{billing.payment_methods.map((method) => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label>
-                          {selectedPaymentMethod?.provider === 'mayar' ? <label className="payment-method-select">Nomor ponsel untuk invoice Mayar<input type="tel" inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" value={paymentMobile} onChange={(event) => setPaymentMobile(event.target.value)} /></label> : null}
-                          <button className="primary-btn" disabled={!activationPlan || !paymentMethodId || (selectedPaymentMethod?.provider === 'mayar' && !paymentMobile.trim())} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(activationPlan?.price || 0).toLocaleString('id-ID')}</button>
+                          <button className="primary-btn" disabled={!activationPlan || !paymentMethodId} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(activationPlan?.price || 0).toLocaleString('id-ID')}</button>
                         </> : null}
                         {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/i/${invitation.slug}`} target="_blank" rel="noreferrer">Buka link ↗</a> : null}
                         {user.role === 'user' && invitation.status === 'published' ? <>

@@ -1,5 +1,6 @@
 const adminLinks = [
   { label: 'Portal', href: '/portal-admin' },
+  { label: 'SEO Semua Website', href: '/setia-creative-admin/seo' },
   { label: 'Gibrig', href: '/gibrig-admin' },
   { label: 'Nunuy Wedding', href: '/nunuy-admin' },
   { label: 'Nuansa Invite Website', href: '/undangan-website-admin' },

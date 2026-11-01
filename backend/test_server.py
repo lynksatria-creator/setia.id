@@ -13,11 +13,14 @@ from backend import server
 
 
 class FakeHttpResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
     def raise_for_status(self):
         return None
 
     def json(self):
-        return {"statusCode": 200, "data": {"id": "invoice-1", "transactionId": "transaction-1", "link": "https://merchant.myr.id/invoices/invoice-1"}}
+        return self.payload
 
 
 class FakeHttpClient:
@@ -34,7 +37,11 @@ class FakeHttpClient:
 
     async def request(self, method, url, **kwargs):
         self.calls.append((method, url, kwargs))
-        return FakeHttpResponse()
+        payload = {"transaction_status": "pending"} if method == "GET" else {
+            "token": "snap-token",
+            "redirect_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/snap-token",
+        }
+        return FakeHttpResponse(payload)
 
 
 class FakeCollection:
@@ -215,7 +222,7 @@ class FakeTestimonialCollection:
         return SimpleNamespace(modified_count=1)
 
 
-def test_saved_midtrans_checkout_config_migrates_to_mayar(monkeypatch):
+def test_saved_midtrans_checkout_config_remains_midtrans(monkeypatch):
     config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
     config["payment_methods"][0] = {
         "id": "gopay-qris",
@@ -230,10 +237,27 @@ def test_saved_midtrans_checkout_config_migrates_to_mayar(monkeypatch):
 
     migrated = asyncio.run(server.get_billing_config())
 
-    assert migrated["payment_methods"][0]["provider"] == "mayar"
-    assert migrated["payment_methods"][0]["name"] == "Mayar checkout"
+    assert migrated["payment_methods"][0]["provider"] == "midtrans"
+    assert migrated["payment_methods"][0]["name"] == "Midtrans checkout"
     assert "payment_code" not in migrated["payment_methods"][0]
     assert migrated["payment_methods"][1]["provider"] == "manual"
+
+
+def test_saved_mayar_checkout_config_migrates_to_midtrans(monkeypatch):
+    config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    config["payment_methods"][0] = {
+        "id": "mayar",
+        "name": "Mayar checkout",
+        "provider": "mayar",
+        "enabled": True,
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=FakeCollection(config)))
+
+    migrated = asyncio.run(server.get_billing_config())
+
+    assert migrated["payment_methods"][0]["provider"] == "midtrans"
+    assert migrated["payment_methods"][0]["name"] == "Midtrans checkout"
+    assert migrated["schema_version"] == 4
 
 
 def test_legacy_billing_config_gets_package_and_reseller_entitlements(monkeypatch):
@@ -250,7 +274,7 @@ def test_legacy_billing_config_gets_package_and_reseller_entitlements(monkeypatc
     migrated = asyncio.run(server.get_billing_config())
 
     plans = {plan["id"]: plan for plan in migrated["plans"]}
-    assert migrated["schema_version"] == 3
+    assert migrated["schema_version"] == 4
     assert plans["basic"]["max_invitations"] == 1
     assert plans["basic"]["bulk_upload_enabled"] is False
     assert plans["basic"]["max_recipients"] == 1
@@ -478,6 +502,63 @@ def test_health_endpoint_is_public():
 
     assert response.status_code == 200
     assert response.json()["message"] == "Nuansa Invite API is running"
+
+
+def test_seo_config_is_per_site_public_and_admin_managed(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+
+    class SettingsCollection:
+        def __init__(self):
+            self.documents = {}
+
+        async def find_one(self, query, _projection=None):
+            return copy.deepcopy(self.documents.get(query["key"]))
+
+        async def update_one(self, query, update, upsert=False):
+            assert upsert is True
+            self.documents[query["key"]] = copy.deepcopy(update["$set"])
+
+    settings = SettingsCollection()
+    audit_logs = FakeCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=settings, audit_logs=audit_logs))
+    client = TestClient(server.app)
+
+    assert client.get("/api/public/seo/gibrig").json() == {"site": "gibrig", "seo": None}
+    assert client.put("/api/admin/seo/gibrig", json={}).status_code == 401
+
+    token = server.create_access_token("admin@example.com", role="admin")
+    headers = {"Authorization": f"Bearer {token}"}
+    config = {
+        "title": "Gibrig Entertainment | Musik Live Garut",
+        "description": "Hiburan musik live untuk pernikahan dan acara keluarga di Garut bersama Gibrig Entertainment.",
+        "keywords": "musik live Garut, hiburan wedding, Gibrig Entertainment",
+        "canonicalUrl": "https://portal.id/gibrig",
+        "ogImage": "https://portal.id/gibrig-share.jpg",
+        "noIndex": False,
+    }
+    saved = client.put("/api/admin/seo/gibrig", headers=headers, json=config)
+
+    assert saved.status_code == 200
+    assert saved.json() == {"site": "gibrig", "seo": config}
+    assert client.get("/api/public/seo/gibrig").json() == {"site": "gibrig", "seo": config}
+    assert client.get("/api/public/seo/nunuy").json() == {"site": "nunuy", "seo": None}
+    assert audit_logs.document["action"] == "seo.config.updated"
+
+
+def test_seo_config_rejects_non_https_canonical_urls(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    token = server.create_access_token("admin@example.com", role="admin")
+    response = TestClient(server.app).put(
+        "/api/admin/seo/portal",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "Portal SEO title",
+            "description": "Deskripsi SEO cukup lengkap.",
+            "canonicalUrl": "http://portal.id/",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_public_testimonial_requires_admin_approval_and_can_be_hidden(monkeypatch):
@@ -853,25 +934,33 @@ def test_admin_login_requires_server_configuration(monkeypatch):
     assert "ADMIN_EMAIL" in response.json()["detail"]
 
 
-def test_mayar_webhook_rejects_when_gateway_is_unconfigured(monkeypatch):
-    monkeypatch.delenv("MAYAR_API_KEY", raising=False)
-    response = TestClient(server.app).post("/api/payments/mayar/webhook", json={})
+def midtrans_notification(order_id, status_code, gross_amount, server_key):
+    source = f"{order_id}{status_code}{gross_amount}{server_key}"
+    return {
+        "order_id": order_id,
+        "status_code": status_code,
+        "gross_amount": gross_amount,
+        "signature_key": hashlib.sha512(source.encode()).hexdigest(),
+    }
+
+
+def test_midtrans_webhook_rejects_when_gateway_is_unconfigured(monkeypatch):
+    monkeypatch.delenv("MIDTRANS_SERVER_KEY", raising=False)
+    response = TestClient(server.app).post("/api/payments/midtrans/webhook", json={})
 
     assert response.status_code == 503
-    assert "Mayar" in response.json()["detail"]
+    assert "Midtrans" in response.json()["detail"]
 
 
-def test_mayar_webhook_verifies_invoice_before_activating_invitation(monkeypatch):
+def test_midtrans_webhook_verifies_transaction_before_activating_invitation(monkeypatch):
     payment = {
         "id": "payment-1",
         "order_id": "UND-TESTORDER123456789",
         "invitation_id": "invitation-1",
-        "provider": "mayar",
+        "provider": "midtrans",
         "status": "pending",
         "amount": 249000,
         "duration_days": 365,
-        "mayar_invoice_id": "invoice-1",
-        "mayar_transaction_id": "transaction-1",
     }
     payment_collection = FakeCollection(payment)
     invitation_collection = FakeCollection({"id": "invitation-1", "active_until": None})
@@ -879,29 +968,44 @@ def test_mayar_webhook_verifies_invoice_before_activating_invitation(monkeypatch
         payment_orders=payment_collection,
         invitations=invitation_collection,
     ))
-    monkeypatch.setenv("MAYAR_API_KEY", "test-mayar-api-key")
+    server_key = "test-midtrans-server-key"
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", server_key)
 
-    async def verified_invoice(method, path, **_kwargs):
+    async def verified_transaction(method, path, **_kwargs):
         assert method == "GET"
-        assert path == "/invoices/invoice-1"
-        return {"id": "invoice-1", "amount": 249000, "status": "paid"}
+        assert path == f"/v2/{payment['order_id']}/status"
+        return {
+            "order_id": payment["order_id"],
+            "gross_amount": "249000.00",
+            "currency": "IDR",
+            "transaction_status": "settlement",
+            "status_code": "200",
+            "transaction_id": "transaction-1",
+        }
 
-    monkeypatch.setattr(server, "mayar_request", verified_invoice)
+    monkeypatch.setattr(server, "midtrans_request", verified_transaction)
 
     client = TestClient(server.app)
-    response = client.post("/api/payments/mayar/webhook", json={
-        "event": "payment.received",
-        "data": {"id": "transaction-1", "transactionId": "transaction-1", "status": "SUCCESS"},
-    })
+    notification = midtrans_notification(payment["order_id"], "200", "249000.00", server_key)
+    response = client.post("/api/payments/midtrans/webhook", json=notification)
     assert response.status_code == 200
     assert payment_collection.document["status"] == "paid"
     assert invitation_collection.document["status"] == "active"
-    duplicate = client.post("/api/payments/mayar/webhook", json={
-        "event": "payment.received",
-        "data": {"id": "transaction-1", "transactionId": "transaction-1", "status": "SUCCESS"},
-    })
+    duplicate = client.post("/api/payments/midtrans/webhook", json=notification)
     assert duplicate.status_code == 200
     assert payment_collection.document["status"] == "paid"
+
+
+def test_midtrans_webhook_rejects_invalid_signature(monkeypatch):
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", "test-midtrans-server-key")
+    response = TestClient(server.app).post("/api/payments/midtrans/webhook", json={
+        "order_id": "UND-UNKNOWN",
+        "status_code": "200",
+        "gross_amount": "249000.00",
+        "signature_key": "invalid",
+    })
+
+    assert response.status_code == 401
 
 
 def test_payment_activation_copies_the_payment_entitlement_snapshot(monkeypatch):
@@ -1178,35 +1282,38 @@ def test_affiliate_and_dashboard_admin_can_check_in_and_read_their_assigned_invi
     assert len(guestbook.documents) == 1
 
 
-def test_mayar_webhook_does_not_activate_when_invoice_amount_mismatches(monkeypatch):
+def test_midtrans_webhook_does_not_activate_when_transaction_amount_mismatches(monkeypatch):
     payment_collection = FakeCollection({
         "id": "payment-1",
         "order_id": "UND-TEST",
         "invitation_id": "invitation-1",
-        "provider": "mayar",
+        "provider": "midtrans",
         "status": "pending",
         "amount": 249000,
         "duration_days": 365,
-        "mayar_invoice_id": "invoice-1",
-        "mayar_transaction_id": "transaction-1",
     })
     invitation_collection = FakeCollection({"id": "invitation-1", "active_until": None})
     monkeypatch.setattr(server, "db", SimpleNamespace(
         payment_orders=payment_collection,
         invitations=invitation_collection,
     ))
-    monkeypatch.setenv("MAYAR_API_KEY", "test-mayar-api-key")
+    server_key = "test-midtrans-server-key"
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", server_key)
 
-    async def mismatched_invoice(_method, _path, **_kwargs):
-        return {"id": "invoice-1", "amount": 1000, "status": "paid"}
+    async def mismatched_transaction(_method, _path, **_kwargs):
+        return {
+            "order_id": "UND-TEST",
+            "gross_amount": "1000.00",
+            "currency": "IDR",
+            "transaction_status": "settlement",
+            "status_code": "200",
+        }
 
-    monkeypatch.setattr(server, "mayar_request", mismatched_invoice)
+    monkeypatch.setattr(server, "midtrans_request", mismatched_transaction)
+    notification = midtrans_notification("UND-TEST", "200", "249000.00", server_key)
     response = TestClient(server.app).post(
-        "/api/payments/mayar/webhook",
-        json={
-            "event": "payment.received",
-            "data": {"id": "transaction-1", "transactionId": "transaction-1", "status": "SUCCESS"},
-        },
+        "/api/payments/midtrans/webhook",
+        json=notification,
     )
 
     assert response.status_code == 400
@@ -1214,18 +1321,17 @@ def test_mayar_webhook_does_not_activate_when_invoice_amount_mismatches(monkeypa
     assert invitation_collection.document["active_until"] is None
 
 
-def test_mayar_invoice_creation_sends_v2_request_and_stores_invoice_ids(monkeypatch):
+def test_midtrans_snap_creation_sends_transaction_and_stores_token(monkeypatch):
     captured = {}
 
     async def fake_request(method, path, **kwargs):
         captured.update({"method": method, "path": path, **kwargs})
         return {
-            "id": "invoice-1",
-            "transactionId": "transaction-1",
-            "link": "https://merchant.myr.id/invoices/invoice-1",
+            "token": "snap-token",
+            "redirect_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/snap-token",
         }
 
-    monkeypatch.setattr(server, "mayar_request", fake_request)
+    monkeypatch.setattr(server, "midtrans_request", fake_request)
     payment = {
         "id": "payment-1",
         "order_id": "UND-TEST",
@@ -1235,31 +1341,33 @@ def test_mayar_invoice_creation_sends_v2_request_and_stores_invoice_ids(monkeypa
     }
     user = {"full_name": "Test User", "email": "test@example.com"}
 
-    redirect_url = asyncio.run(server.create_mayar_invoice(payment, user, "+628123456789"))
+    redirect_url = asyncio.run(server.create_midtrans_transaction(payment, user, "+628123456789"))
 
-    assert redirect_url == "https://merchant.myr.id/invoices/invoice-1"
+    assert redirect_url == "https://app.sandbox.midtrans.com/snap/v2/vtweb/snap-token"
     assert captured["method"] == "POST"
-    assert captured["path"] == "/invoices/create"
-    assert captured["json"]["name"] == "Test User"
-    assert captured["json"]["mobile"] == "+628123456789"
-    assert captured["json"]["items"][0]["rate"] == 99000
-    assert payment["mayar_invoice_id"] == "invoice-1"
-    assert payment["mayar_transaction_id"] == "transaction-1"
+    assert captured["path"] == "/snap/v1/transactions"
+    assert captured["json"]["transaction_details"] == {"order_id": "UND-TEST", "gross_amount": 99000}
+    assert captured["json"]["customer_details"]["first_name"] == "Test"
+    assert captured["json"]["customer_details"]["last_name"] == "User"
+    assert captured["json"]["customer_details"]["phone"] == "+628123456789"
+    assert captured["json"]["item_details"][0]["price"] == 99000
+    assert payment["midtrans_token"] == "snap-token"
 
 
-def test_mayar_requests_use_configured_v2_environment_and_api_key(monkeypatch):
+def test_midtrans_requests_use_configured_environment_and_server_key(monkeypatch):
     FakeHttpClient.calls.clear()
     monkeypatch.setattr(server.httpx, "AsyncClient", FakeHttpClient)
-    monkeypatch.setenv("MAYAR_API_KEY", "test-mayar-api-key")
-    monkeypatch.setenv("MAYAR_IS_SANDBOX", "true")
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", "test-midtrans-server-key")
+    monkeypatch.setenv("MIDTRANS_IS_SANDBOX", "true")
 
-    result = asyncio.run(server.mayar_request("GET", "/invoices/invoice-1"))
+    result = asyncio.run(server.midtrans_request("GET", "/v2/UND-TEST/status"))
 
-    assert result["id"] == "invoice-1"
+    assert result["transaction_status"] == "pending"
     method, url, kwargs = FakeHttpClient.calls[0]
     assert method == "GET"
-    assert url == "https://api.mayar.io/hl/v2/invoices/invoice-1"
-    assert kwargs["headers"]["Authorization"] == "test-mayar-api-key"
+    assert url == "https://api.sandbox.midtrans.com/v2/UND-TEST/status"
+    assert kwargs["auth"] == ("test-midtrans-server-key", "")
+    assert kwargs["headers"]["Accept"] == "application/json"
 
 
 def test_publish_rejects_unpaid_draft(monkeypatch):

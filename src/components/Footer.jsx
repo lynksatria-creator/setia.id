@@ -22,6 +22,7 @@ export default function Footer({ siteName, phone, email, whatsappNumber, whatsap
           <h4>Mulai di sini</h4>
           <p><a href="#templates">Pilih template</a></p>
           <p><a href="#pricing">Lihat paket</a></p>
+          <p><a href="/">Portal.id</a></p>
         </div>
       </div>
     </footer>

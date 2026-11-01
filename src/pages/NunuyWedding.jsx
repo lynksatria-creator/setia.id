@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PublicTestimonials } from '../components/PublicTestimonials';
+import SeoHead from '../components/SeoHead';
 import { nunuyConsultationsApi } from '../lib/api';
 import './NunuyWedding.css';
 
@@ -10,6 +11,20 @@ const whatsappLink = (number, message) => {
 
 const defaultWhatsAppMessage = 'Halo Nunuy Nadhifa Wedding, saya ingin berkonsultasi mengenai paket dan layanan pernikahan. Mohon informasi lebih lanjut.';
 const nunuyBasePath = '/nunuy-nadhifa-wedding';
+const nunuyMenuPaths = {
+  '#home': nunuyBasePath,
+  '#about': `${nunuyBasePath}/tentang-kami`,
+  '#services': `${nunuyBasePath}/layanan`,
+  '#packages': `${nunuyBasePath}/paket-wedding`,
+  '#gallery': `${nunuyBasePath}/galeri`,
+  '#journal': `${nunuyBasePath}/inspirasi`,
+  '#testimonials': `${nunuyBasePath}/testimoni`,
+  '#faq': `${nunuyBasePath}/faq`,
+  '#contact': `${nunuyBasePath}/kontak`,
+};
+const nunuyMenuPages = Object.fromEntries(
+  Object.entries(nunuyMenuPaths).map(([section, pagePath]) => [pagePath, section.slice(1)]),
+);
 const createSlug = (value) => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -45,8 +60,17 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
   const articleSlug = path.match(/^\/nunuy-nadhifa-wedding\/inspirasi\/([^/]+)$/)?.[1];
   const selectedService = services.find((item) => createSlug(item.slug || item.title) === serviceSlug);
   const selectedArticle = articles.find((item) => createSlug(item.slug || item.title) === articleSlug);
+  const selectedMenuPage = nunuyMenuPages[path] || 'home';
+  const showMenuPage = (page) => path === nunuyBasePath || selectedMenuPage === page;
+  const menuHref = (section) => nunuyMenuPaths[section] || (section.startsWith('#') ? `${nunuyBasePath}${section}` : section);
   const detailTitle = selectedService?.title || selectedArticle?.title;
   const detailDescription = selectedService?.description || selectedArticle?.summary || data.seo?.description || data.about?.description;
+  const menuTitle = (data.navigation || []).find((item) => item.href === `#${selectedMenuPage}`)?.label;
+  const seoTitle = detailTitle
+    ? `${detailTitle} | ${data.siteName}`
+    : selectedMenuPage !== 'home' && menuTitle
+      ? `${menuTitle} | ${data.siteName}`
+      : data.seo?.title || `${data.siteName} | Wedding Planner`;
   const contactMessage = whatsappMessage || defaultWhatsAppMessage;
   const contactLink = whatsappLink(whatsappNumber, contactMessage);
   const getPackageWhatsAppLink = (packageName) => whatsappLink(
@@ -70,40 +94,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
   };
 
   useEffect(() => {
-    const previousTitle = document.title;
-    const managedMeta = [
-      ['name', 'description', data.seo?.description || data.about?.description || 'Wedding planning yang personal dan penuh perhatian bersama Nunuy Nadhifa Wedding.'],
-      ['property', 'og:title', detailTitle ? `${detailTitle} | ${data.siteName}` : data.seo?.title || `${data.siteName} | Wedding Planner`],
-      ['property', 'og:description', detailDescription],
-      ['property', 'og:type', selectedArticle ? 'article' : 'website'],
-      ['property', 'og:image', selectedService?.image || selectedArticle?.image || data.hero?.image],
-    ];
-    const previousMeta = managedMeta.map(([attribute, name]) => {
-      const selector = `meta[${attribute}="${name}"]`;
-      const element = document.head.querySelector(selector);
-      return { selector, element, content: element?.getAttribute('content') };
-    });
-    const canonical = document.head.querySelector('link[rel="canonical"]');
-    const previousCanonical = canonical?.getAttribute('href');
-    const canonicalElement = canonical || document.createElement('link');
-    canonicalElement.rel = 'canonical';
-    canonicalElement.href = new URL(path, window.location.origin).href;
-    if (!canonical) document.head.appendChild(canonicalElement);
-
-    managedMeta.forEach(([attribute, name, content]) => {
-      const selector = `meta[${attribute}="${name}"]`;
-      let element = document.head.querySelector(selector);
-      if (!element) {
-        element = document.createElement('meta');
-        element.setAttribute(attribute, name);
-        document.head.appendChild(element);
-      }
-      element.content = content;
-    });
-    document.title = detailTitle
-      ? `${detailTitle} | ${data.siteName}`
-      : data.seo?.title || `${data.siteName} | Wedding Planner`;
-
+    const canonicalHref = new URL(path, window.location.origin).href;
     const structuredData = document.createElement('script');
     structuredData.type = 'application/ld+json';
     structuredData.dataset.nunuySeo = 'true';
@@ -115,31 +106,21 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
       image: selectedArticle.image,
       author: { '@type': 'Organization', name: data.siteName },
       publisher: { '@type': 'Organization', name: data.siteName },
-      mainEntityOfPage: canonicalElement.href,
+      mainEntityOfPage: canonicalHref,
     } : {
       '@context': 'https://schema.org',
       '@type': 'LocalBusiness',
       name: data.siteName,
       description: detailDescription,
-      url: canonicalElement.href,
+      url: canonicalHref,
       telephone: phoneNumber || whatsappNumber,
       email: data.contact?.email || undefined,
       image: selectedService?.image || data.hero?.image,
     });
     document.head.appendChild(structuredData);
 
-    return () => {
-      document.title = previousTitle;
-      previousMeta.forEach(({ selector, element, content }) => {
-        const current = document.head.querySelector(selector);
-        if (element && current === element) current.setAttribute('content', content || '');
-        else current?.remove();
-      });
-      if (previousCanonical === undefined) canonicalElement.remove();
-      else canonicalElement.href = previousCanonical;
-      structuredData.remove();
-    };
-  }, [data.about?.description, data.contact?.email, data.hero?.image, data.seo?.description, data.seo?.title, data.siteName, detailDescription, detailTitle, path, phoneNumber, selectedArticle, selectedService, whatsappNumber]);
+    return () => structuredData.remove();
+  }, [data.contact?.email, data.siteName, detailDescription, path, phoneNumber, selectedArticle, selectedService, whatsappNumber]);
 
   useEffect(() => {
     if (!lightboxImage) return undefined;
@@ -227,6 +208,19 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
 
   return (
     <div className="nunuy-site" style={siteStyle}>
+      <SeoHead
+        siteId="nunuy"
+        siteBasePath={nunuyBasePath}
+        title={seoTitle}
+        description={detailDescription || data.seo?.description || data.about?.description || ''}
+        keywords={data.seo?.keywords || ''}
+        image={selectedService?.image || selectedArticle?.image || data.hero?.image || ''}
+        siteName={data.siteName}
+        type={selectedArticle ? 'article' : 'website'}
+        noIndex={data.seo?.noIndex}
+        canonicalUrl={data.seo?.canonicalUrl}
+        isHomePage={!detailTitle && selectedMenuPage === 'home'}
+      />
       <header className="nunuy-header">
         <a className="nunuy-brand" href={path === nunuyBasePath ? '#home' : nunuyBasePath} aria-label={data.uiLabels?.brandHomeLabel}>
           {data.logoImage ? <img className="nunuy-logo-image" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="nunuy-brand-flower" aria-hidden="true">✿</span>}
@@ -237,13 +231,14 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
         </button>
         <nav className={`nunuy-nav${menuOpen ? ' is-open' : ''}`} aria-label={data.uiLabels?.primaryNavigationLabel}>
           {(data.navigation || []).map((item, index) => {
-            const href = item.href.startsWith('#') && path !== nunuyBasePath ? `${nunuyBasePath}${item.href}` : item.href;
-            return <a href={href} key={`${item.href}-${index}`} onClick={() => setMenuOpen(false)}>{item.label}</a>;
+            const href = menuHref(item.href);
+            return <a href={href} key={`${item.href}-${index}`} aria-current={href === path ? 'page' : undefined} onClick={() => setMenuOpen(false)}>{item.label}</a>;
           })}
+          <a href="/" onClick={() => setMenuOpen(false)}>Portal.id</a>
         </nav>
         <a
           className="nunuy-nav-cta"
-          href={selectedService ? serviceConsultationLink : path === nunuyBasePath ? '#consultation' : `${nunuyBasePath}#consultation`}
+          href={selectedService ? serviceConsultationLink : `${nunuyBasePath}/kontak#consultation`}
           target={selectedService ? '_blank' : undefined}
           rel={selectedService ? 'noopener noreferrer' : undefined}
         >
@@ -254,7 +249,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
       <main>
         {selectedDetail ? (
           <section className="nunuy-detail-page">
-            <nav className="nunuy-breadcrumb" aria-label="Breadcrumb"><a href={nunuyBasePath}>Beranda</a><span>/</span><a href={`${nunuyBasePath}#${selectedArticle ? 'journal' : 'services'}`}>{selectedArticle ? 'Inspirasi' : 'Layanan'}</a><span>/</span><span>{detailTitle}</span></nav>
+            <nav className="nunuy-breadcrumb" aria-label="Breadcrumb"><a href={nunuyBasePath}>Beranda</a><span>/</span><a href={menuHref(selectedArticle ? '#journal' : '#services')}>{selectedArticle ? 'Inspirasi' : 'Layanan'}</a><span>/</span><span>{detailTitle}</span></nav>
             <div className="nunuy-detail-layout">
               <div className="nunuy-detail-copy">
                 <p className="nunuy-section-label">{selectedArticle ? 'WEDDING JOURNAL' : 'LAYANAN WEDDING' } <span /></p>
@@ -269,7 +264,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
                 )}
                 <a
                   className="nunuy-button nunuy-button-primary"
-                  href={selectedService ? serviceConsultationLink : `${nunuyBasePath}#consultation`}
+                  href={selectedService ? serviceConsultationLink : `${nunuyBasePath}/kontak#consultation`}
                   target={selectedService ? '_blank' : undefined}
                   rel={selectedService ? 'noopener noreferrer' : undefined}
                 >
@@ -281,7 +276,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
           </section>
         ) : (
         <>
-        <section className="nunuy-hero" id="home">
+        {showMenuPage('home') ? <section className="nunuy-hero" id="home">
           <div className="nunuy-hero-image" role="img" aria-label={`${data.siteName} — ${data.hero?.title}`} style={{ backgroundImage: `url("${data.hero?.image}")` }} />
           <div className="nunuy-hero-overlay" />
           <span className="nunuy-sparkle nunuy-sparkle-one" aria-hidden="true">✦</span>
@@ -295,19 +290,19 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
             <h1>{(data.hero?.title || '').split(' ').slice(0, -1).join(' ')} <em>{(data.hero?.title || '').split(' ').slice(-1)[0]}</em></h1>
             <p className="nunuy-hero-description">{data.hero?.subtitle}</p>
             <div className="nunuy-hero-actions">
-              <a className="nunuy-button nunuy-button-light" href="#consultation">{data.hero?.cta} <span aria-hidden="true">↗</span></a>
-              <a className="nunuy-button nunuy-button-glass" href="#gallery">{data.hero?.secondaryCta} <span aria-hidden="true">↓</span></a>
+              <a className="nunuy-button nunuy-button-light" href={`${nunuyBasePath}/kontak#consultation`}>{data.hero?.cta} <span aria-hidden="true">↗</span></a>
+              <a className="nunuy-button nunuy-button-glass" href={menuHref('#gallery')}>{data.hero?.secondaryCta} <span aria-hidden="true">↓</span></a>
             </div>
             <div className="nunuy-hero-note"><span aria-hidden="true">✿</span> {data.hero?.note}</div>
             <div className="nunuy-hero-stats" aria-label="Komitmen layanan">
               {(data.hero?.stats || []).map((stat, index) => <div key={`${stat.label}-${index}`}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}
             </div>
           </div>
-          <a className="nunuy-scroll-cue" href="#about" aria-label={data.uiLabels?.scrollLabel}><span /> {data.uiLabels?.scrollCue}</a>
+          <a className="nunuy-scroll-cue" href={menuHref('#about')} aria-label={data.uiLabels?.scrollLabel}><span /> {data.uiLabels?.scrollCue}</a>
           <div className="nunuy-hero-index">01 <span /> 04</div>
-        </section>
+        </section> : null}
 
-        <section className="nunuy-intro nunuy-section" id="about">
+        {showMenuPage('about') ? <section className="nunuy-intro nunuy-section" id="about">
           <div className="nunuy-intro-art" aria-hidden="true"><span>✿</span><span>✧</span></div>
           <div className="nunuy-section-label">{data.about?.label} <span /></div>
           <div className="nunuy-intro-grid">
@@ -315,7 +310,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
             <div>
               <p className="nunuy-lead">{data.about?.tagline}</p>
               <p>{data.about?.description}</p>
-              <a className="nunuy-text-link" href="#consultation">{data.about?.linkText} <span aria-hidden="true">↗</span></a>
+              <a className="nunuy-text-link" href={`${nunuyBasePath}/kontak#consultation`}>{data.about?.linkText} <span aria-hidden="true">↗</span></a>
             </div>
           </div>
           {data.about?.image ? <figure className="nunuy-about-image"><img src={data.about.image} alt={data.about.imageAlt || 'Inspirasi suasana pernikahan Nunuy Nadhifa Wedding'} loading="lazy" /><figcaption>Inspirasi visual · foto tim dan dokumentasi aktual dapat dikelola melalui panel admin.</figcaption></figure> : null}
@@ -328,9 +323,9 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
           <div className="nunuy-values">
             {(data.about?.values || []).map((value, index) => <article key={`${value.title}-${index}`}><span>{String(index + 1).padStart(2, '0')}</span><h3>{value.title}</h3><p>{value.description}</p></article>)}
           </div>
-        </section>
+        </section> : null}
 
-        <section className="nunuy-services nunuy-section" id="services">
+        {showMenuPage('services') ? <section className="nunuy-services nunuy-section" id="services">
           <div className="nunuy-section-heading">
             <div><div className="nunuy-section-label">{data.serviceSection?.label} <span /></div><h2>{data.serviceSection?.title}<br /><em>{data.serviceSection?.emphasis}</em></h2></div>
             <p>{data.serviceSection?.description}</p>
@@ -343,9 +338,9 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
               </article>
             ))}
           </div>
-        </section>
+        </section> : null}
 
-        <section className="nunuy-packages nunuy-section" id="packages">
+        {showMenuPage('packages') ? <section className="nunuy-packages nunuy-section" id="packages">
           <div className="nunuy-section-heading">
             <div><div className="nunuy-section-label">{data.packageSection?.label} <span /></div><h2>{data.packageSection?.title}<br /><em>{data.packageSection?.emphasis}</em></h2></div>
             <p>{data.packageSection?.description}</p>
@@ -365,7 +360,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
                 </dl>
                 <strong className="nunuy-package-price">{item.price || data.packageSection?.priceLabel}</strong>
                 <a
-                  href={whatsappNumber ? getPackageWhatsAppLink(item.name) : '#consultation'}
+                  href={whatsappNumber ? getPackageWhatsAppLink(item.name) : `${nunuyBasePath}/kontak#consultation`}
                   className="nunuy-package-link"
                   target={whatsappNumber ? '_blank' : undefined}
                   rel={whatsappNumber ? 'noopener noreferrer' : undefined}
@@ -380,9 +375,9 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
               </article>
             ))}
           </div>
-        </section>
+        </section> : null}
 
-        <section className="nunuy-gallery nunuy-section" id="gallery">
+        {showMenuPage('gallery') ? <section className="nunuy-gallery nunuy-section" id="gallery">
           <div className="nunuy-section-heading">
             <div><div className="nunuy-section-label">{data.gallery?.label} <span /></div><h2>{data.gallery?.title}<br /><em>{data.gallery?.emphasis}</em></h2></div>
             <p>{data.gallery?.description}</p>
@@ -398,14 +393,14 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
             ))}
           </div>
           <p className="nunuy-disclaimer">{data.gallery?.disclaimer}</p>
-        </section>
+        </section> : null}
 
-        <section className="nunuy-portfolio nunuy-section">
-          <div className="nunuy-portfolio-copy"><div className="nunuy-section-label">{data.portfolio?.label} <span /></div><h2>{data.portfolio?.title}<br /><em>{data.portfolio?.emphasis}</em></h2><p>{data.portfolio?.description}</p><a className="nunuy-button nunuy-button-light" href="#consultation">{data.portfolio?.cta} <span aria-hidden="true">↗</span></a></div>
+        {showMenuPage('gallery') ? <section className="nunuy-portfolio nunuy-section">
+          <div className="nunuy-portfolio-copy"><div className="nunuy-section-label">{data.portfolio?.label} <span /></div><h2>{data.portfolio?.title}<br /><em>{data.portfolio?.emphasis}</em></h2><p>{data.portfolio?.description}</p><a className="nunuy-button nunuy-button-light" href={`${nunuyBasePath}/kontak#consultation`}>{data.portfolio?.cta} <span aria-hidden="true">↗</span></a></div>
           {projects.length ? <div className="nunuy-project-grid">{projects.map((project, index) => <article className="nunuy-project-card" key={`${project.name}-${index}`}>{project.image ? <img src={project.image} alt={project.name} loading="lazy" /> : null}<h3>{project.name}</h3><p>{[project.theme, project.location].filter(Boolean).join(' · ')}</p><p>{project.description}</p></article>)}</div> : <div className="nunuy-portfolio-image"><img src={data.portfolio?.image} alt={data.portfolio?.imageAlt} loading="lazy" /><span>{data.portfolio?.caption}</span></div>}
-        </section>
+        </section> : null}
 
-        <PublicTestimonials
+        {showMenuPage('testimonials') ? <PublicTestimonials
           site="nunuy"
           initialItems={testimonials}
           eyebrow={data.testimonials?.label}
@@ -414,9 +409,9 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
           className="nunuy-testimonials nunuy-section"
           carousel
           sectionId="testimonials"
-        />
+        /> : null}
 
-        <section className="nunuy-journal nunuy-section" id="journal">
+        {showMenuPage('journal') ? <section className="nunuy-journal nunuy-section" id="journal">
           <div className="nunuy-section-heading">
             <div><div className="nunuy-section-label">{data.journal?.label} <span /></div><h2>{data.journal?.title}<br /><em>{data.journal?.emphasis}</em></h2></div>
             <p>{data.journal?.description}</p>
@@ -428,14 +423,14 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
               </article>
             ))}
           </div>
-        </section>
+        </section> : null}
 
-        <section className="nunuy-faq nunuy-section" id="faq">
-          <div><div className="nunuy-section-label">{data.faq?.label} <span /></div><h2>{data.faq?.title}<br /><em>{data.faq?.emphasis}</em></h2><p>{data.faq?.description}</p><a href="#consultation" className="nunuy-text-link">{data.faq?.consultationCta} <span aria-hidden="true">↗</span></a></div>
+        {showMenuPage('faq') ? <section className="nunuy-faq nunuy-section" id="faq">
+          <div><div className="nunuy-section-label">{data.faq?.label} <span /></div><h2>{data.faq?.title}<br /><em>{data.faq?.emphasis}</em></h2><p>{data.faq?.description}</p><a href={`${nunuyBasePath}/kontak#consultation`} className="nunuy-text-link">{data.faq?.consultationCta} <span aria-hidden="true">↗</span></a></div>
           <div className="nunuy-faq-list">{faqs.map((item, index) => <details key={`${item.question}-${index}`}><summary>{item.question}<span aria-hidden="true">+</span></summary><p>{item.answer}</p></details>)}</div>
-        </section>
+        </section> : null}
 
-        <section className="nunuy-consultation nunuy-section" id="contact">
+        {showMenuPage('contact') ? <section className="nunuy-consultation nunuy-section" id="contact">
           <div className="nunuy-consult-copy"><div className="nunuy-section-label">{data.consultation?.label} <span /></div><h2>{data.consultation?.title}<br /><em>{data.consultation?.emphasis}</em></h2><p>{data.consultation?.description}</p>
             {contactLink ? <a className="nunuy-contact-direct" href={contactLink} target="_blank" rel="noopener noreferrer"><span aria-hidden="true">◉</span> {data.consultation?.directLinkLabel}</a> : <p className="nunuy-contact-direct">{data.consultation?.missingWhatsApp}</p>}
           </div>
@@ -454,7 +449,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
             {whatsappFallbackHref ? <a className="nunuy-form-fallback-link" href={whatsappFallbackHref} target="_blank" rel="noopener noreferrer">Lanjutkan ke WhatsApp</a> : null}
             <small>{data.consultation?.privacyNote}</small>
           </form>
-        </section>
+        </section> : null}
         </>
         )}
       </main>
@@ -469,6 +464,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
         {data.contact?.facebook ? <a href={data.contact.facebook} target="_blank" rel="noopener noreferrer">Facebook</a> : null}
         {data.contact?.tiktok ? <a href={data.contact.tiktok} target="_blank" rel="noopener noreferrer">TikTok</a> : null}
         {whatsappNumber ? <a className="whatsapp-contact-link" href={contactLink} target="_blank" rel="noopener noreferrer">{whatsappNumber}</a> : null}
+        <a href="/">Portal.id</a>
         <a href={path === nunuyBasePath ? '#home' : nunuyBasePath}>{data.footer?.backToTop} ↑</a>
         <small>© {new Date().getFullYear()} {data.siteName}</small>
       </footer>

@@ -126,7 +126,7 @@ class PlanConfig(BaseModel):
 class PaymentMethodConfig(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9-]{2,32}$")
     name: str = Field(min_length=2, max_length=60)
-    provider: Literal["mayar", "manual"]
+    provider: Literal["midtrans", "manual"]
     enabled: bool = True
     bank_name: str | None = Field(default=None, max_length=60)
     account_name: str | None = Field(default=None, max_length=80)
@@ -157,6 +157,42 @@ class BillingConfigUpdate(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("ID kombinasi affiliate harus unik.")
         return self
+
+
+class SeoConfigUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=320)
+    keywords: str = Field(default="", max_length=500)
+    canonicalUrl: str = Field(default="", max_length=2048)
+    ogImage: str = Field(default="", max_length=2048)
+    noIndex: bool = False
+
+    @field_validator("title", "description")
+    @classmethod
+    def require_nonempty_text(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("Field SEO tidak boleh kosong.")
+        return value
+
+    @field_validator("keywords")
+    @classmethod
+    def normalize_keywords(cls, value):
+        return ", ".join(keyword.strip() for keyword in value.split(",") if keyword.strip())
+
+    @field_validator("canonicalUrl", "ogImage")
+    @classmethod
+    def validate_secure_url(cls, value):
+        value = value.strip()
+        if not value:
+            return value
+        parsed = urlparse(value)
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError("URL SEO harus menggunakan HTTPS.")
+        return value
+
+
+SEO_SITE_IDS = {"portal", "gibrig", "nunuy", "invitation"}
 
 
 class DashboardAdminCreate(BaseModel):
@@ -405,7 +441,7 @@ DEFAULT_BILLING_CONFIG = {
         {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": True, "features": ["100 undangan aktif", "Link otomatis dan dapat diedit", "Statistik lengkap"], "bulk_upload_enabled": True, "max_recipients": 1000, "reseller_enabled": True, "max_resellers": 100, "max_reseller_customers": 1000, "reseller_max_markup_percent": 100, "reseller_commission_percent": 10},
     ],
     "payment_methods": [
-        {"id": "mayar", "name": "Mayar checkout", "provider": "mayar", "enabled": True},
+        {"id": "midtrans", "name": "Midtrans checkout", "provider": "midtrans", "enabled": True},
         {"id": "bank-transfer", "name": "Transfer bank", "provider": "manual", "enabled": False, "bank_name": "", "account_name": "", "account_number": "", "instructions": "Pembayaran diverifikasi oleh admin."},
     ],
     "dashboard_admin_limit": 3,
@@ -415,7 +451,7 @@ DEFAULT_BILLING_CONFIG = {
         {"id": "premium-3", "name": "3 Premium", "basic": 0, "premium": 3},
         {"id": "basic-8", "name": "8 Basic", "basic": 8, "premium": 0},
     ],
-    "schema_version": 3,
+    "schema_version": 4,
 }
 
 def get_jwt_secret():
@@ -527,19 +563,18 @@ async def get_billing_config():
                     for feature in plan.get("features", [])
                 ]
         for method in saved.get("payment_methods", []):
-            if method.get("provider") == "midtrans":
-                if method.get("id") == "bank-transfer" or any(
-                    method.get(field) for field in ("bank_name", "account_name", "account_number")
-                ):
+                if method.get("provider") == "mayar":
+                    method["provider"] = "midtrans"
+                    method["name"] = "Midtrans checkout"
+                elif method.get("provider") == "midtrans":
+                    method["name"] = "Midtrans checkout"
+                if method.get("provider") == "manual" or method.get("id") == "bank-transfer":
                     method["provider"] = "manual"
-                else:
-                    method["provider"] = "mayar"
-                    if method.get("name") in {"GoPay", "QRIS", "GoPay / QRIS"}:
-                        method["name"] = "Mayar checkout"
                 method.pop("payment_code", None)
+                method.pop("gateway", None)
         saved.setdefault("dashboard_admin_limit", DEFAULT_BILLING_CONFIG["dashboard_admin_limit"])
         saved.setdefault("affiliate_combinations", DEFAULT_BILLING_CONFIG["affiliate_combinations"])
-        saved["schema_version"] = 3
+        saved["schema_version"] = 4
         return saved
     await db.platform_settings.update_one(
         {"key": "billing"},
@@ -829,69 +864,86 @@ def public_payment(payment):
     }
 
 
-def mayar_api_base_url():
-    return "https://api.mayar.io/hl/v2" if os.environ.get("MAYAR_IS_SANDBOX", "false").lower() == "true" else "https://api.mayar.id/hl/v2"
+def midtrans_api_base_url():
+    return "https://api.sandbox.midtrans.com" if os.environ.get("MIDTRANS_IS_SANDBOX", "false").lower() == "true" else "https://api.midtrans.com"
 
 
-async def mayar_request(method, path, **kwargs):
-    api_key = os.environ.get("MAYAR_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="MAYAR_API_KEY belum dikonfigurasi.")
+def midtrans_snap_base_url():
+    return "https://app.sandbox.midtrans.com" if os.environ.get("MIDTRANS_IS_SANDBOX", "false").lower() == "true" else "https://app.midtrans.com"
+
+
+async def midtrans_request(method, path, **kwargs):
+    server_key = os.environ.get("MIDTRANS_SERVER_KEY", "").strip()
+    if not server_key:
+        raise HTTPException(status_code=503, detail="MIDTRANS_SERVER_KEY belum dikonfigurasi.")
+    base_url = midtrans_snap_base_url() if path.startswith("/snap/") else midtrans_api_base_url()
     try:
         async with httpx.AsyncClient(timeout=20) as client_http:
             response = await client_http.request(
                 method,
-                f"{mayar_api_base_url()}{path}",
-                headers={"Authorization": api_key},
+                f"{base_url}{path}",
+                auth=(server_key, ""),
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
                 **kwargs,
             )
         response.raise_for_status()
     except httpx.HTTPStatusError as error:
-        logger.warning("Mayar API rejected request with status %s", error.response.status_code)
-        raise HTTPException(status_code=502, detail="Mayar menolak permintaan pembayaran. Periksa konfigurasi API Key.") from None
+        logger.warning("Midtrans API rejected request with status %s", error.response.status_code)
+        raise HTTPException(status_code=502, detail="Midtrans menolak permintaan pembayaran. Periksa konfigurasi Server Key.") from None
     except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="API Mayar tidak dapat dihubungi.") from None
+        raise HTTPException(status_code=502, detail="API Midtrans tidak dapat dihubungi.") from None
     try:
         result = response.json()
     except ValueError:
-        raise HTTPException(status_code=502, detail="Mayar mengirim respons yang tidak valid.") from None
-    if not isinstance(result, dict) or not isinstance(result.get("data"), dict):
-        raise HTTPException(status_code=502, detail="Mayar mengirim format respons yang tidak dikenal.")
-    if result.get("statusCode") not in {None, 200}:
-        logger.warning("Mayar API returned status %s", result["statusCode"])
-        raise HTTPException(status_code=502, detail="Mayar tidak berhasil memproses permintaan.")
-    return result["data"]
+        raise HTTPException(status_code=502, detail="Midtrans mengirim respons yang tidak valid.") from None
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=502, detail="Midtrans mengirim format respons yang tidak dikenal.")
+    return result
 
 
-async def create_mayar_invoice(payment, user, mobile):
-    now = datetime.now(timezone.utc)
-    invoice = await mayar_request(
+async def create_midtrans_transaction(payment, user, mobile=None):
+    full_name = " ".join(str(user.get("full_name") or "").split()) or "Pengguna Undangan.id"
+    name_parts = full_name.split(" ", 1)
+    customer_details = {
+        "first_name": name_parts[0][:50],
+        "email": user["email"],
+    }
+    if len(name_parts) > 1:
+        customer_details["last_name"] = name_parts[1][:50]
+    if mobile:
+        customer_details["phone"] = mobile
+    transaction = await midtrans_request(
         "POST",
-        "/invoices/create",
+        "/snap/v1/transactions",
         json={
-            "name": user["full_name"],
-            "email": user["email"],
-            "mobile": mobile,
-            "description": f"Nuansa Invite {payment['plan_name']} · {payment['order_id']}",
-            "expiredAt": (now + timedelta(hours=24)).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-            "items": [{
-                "quantity": 1,
-                "rate": payment["amount"],
-                "description": f"Paket {payment['plan_name']} - Nuansa Invite",
-            }],
-            "extraData": {
-                "noCustomer": payment["id"],
-                "idProd": payment["plan_id"],
+            "transaction_details": {
+                "order_id": payment["order_id"],
+                "gross_amount": payment["amount"],
             },
+            "item_details": [{
+                "id": payment["plan_id"][:50],
+                "price": payment["amount"],
+                "quantity": 1,
+                "name": f"Paket {payment['plan_name']} - Undangan.id"[:50],
+            }],
+            "customer_details": customer_details,
         },
     )
-    invoice_id = invoice.get("id")
-    redirect_url = invoice.get("link") or invoice.get("paymentUrl")
-    if not isinstance(invoice_id, str) or not isinstance(redirect_url, str) or not redirect_url.startswith("https://"):
-        raise HTTPException(status_code=502, detail="Mayar tidak mengembalikan ID invoice dan tautan pembayaran yang valid.")
-    payment["mayar_invoice_id"] = invoice_id
-    if isinstance(invoice.get("transactionId"), str):
-        payment["mayar_transaction_id"] = invoice["transactionId"]
+    token = transaction.get("token")
+    redirect_url = transaction.get("redirect_url")
+    parsed_url = urlparse(redirect_url) if isinstance(redirect_url, str) else None
+    allowed_hosts = {"app.midtrans.com", "app.sandbox.midtrans.com"}
+    if (
+        not isinstance(token, str)
+        or not token
+        or parsed_url is None
+        or parsed_url.scheme != "https"
+        or parsed_url.hostname not in allowed_hosts
+    ):
+        raise HTTPException(status_code=502, detail="Midtrans tidak mengembalikan token dan tautan checkout yang valid.")
+    payment["midtrans_token"] = token
+    if isinstance(transaction.get("transaction_id"), str):
+        payment["midtrans_transaction_id"] = transaction["transaction_id"]
     return redirect_url
 
 
@@ -973,6 +1025,42 @@ async def root():
     return {"message": "Nuansa Invite API is running"}
 
 
+@api_router.get("/public/seo/{site}")
+async def get_public_seo_config(site: str):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website SEO tidak ditemukan.")
+    saved = await db.platform_settings.find_one({"key": f"seo:{site}"}, {"_id": 0, "key": 0})
+    if saved is None:
+        return {"site": site, "seo": None}
+    return {"site": site, "seo": {key: value for key, value in saved.items() if key != "key"}}
+
+
+@api_router.get("/admin/seo/{site}")
+async def get_admin_seo_config(site: str, _admin=Depends(require_admin)):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website SEO tidak ditemukan.")
+    saved = await db.platform_settings.find_one({"key": f"seo:{site}"}, {"_id": 0, "key": 0})
+    seo = None if saved is None else {key: value for key, value in saved.items() if key != "key"}
+    return {"site": site, "seo": seo}
+
+
+@api_router.put("/admin/seo/{site}")
+async def update_admin_seo_config(site: str, payload: SeoConfigUpdate, _admin=Depends(require_admin)):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website SEO tidak ditemukan.")
+    config = payload.model_dump()
+    await db.platform_settings.update_one(
+        {"key": f"seo:{site}"},
+        {"$set": {"key": f"seo:{site}", **config}},
+        upsert=True,
+    )
+    await write_audit_log(_admin, "seo.config.updated", "seo_config", site, {
+        "title": config["title"],
+        "no_index": config["noIndex"],
+    })
+    return {"site": site, "seo": config}
+
+
 @api_router.post("/admin/login")
 async def admin_login(payload: AdminLogin):
     get_jwt_secret()
@@ -1007,13 +1095,13 @@ async def get_public_billing_config():
 @api_router.get("/admin/billing/config")
 async def get_admin_billing_config(_admin=Depends(require_admin)):
     config = await get_billing_config()
-    return {**config, "gateway_ready": bool(os.environ.get("MAYAR_API_KEY"))}
+    return {**config, "gateway_ready": bool(os.environ.get("MIDTRANS_SERVER_KEY", "").strip())}
 
 
 @api_router.put("/admin/billing/config")
 async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depends(require_admin)):
     config = payload.model_dump()
-    config["schema_version"] = 3
+    config["schema_version"] = 4
     previous_config = await get_billing_config()
     previous_plans = {plan["id"]: plan for plan in previous_config["plans"]}
     default_plans = {plan["id"]: plan for plan in DEFAULT_BILLING_CONFIG["plans"]}
@@ -1063,7 +1151,7 @@ async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depen
             "reseller_commission_percent": plan["reseller_commission_percent"],
         } for plan in config["plans"]],
     })
-    return {**config, "gateway_ready": bool(os.environ.get("MAYAR_API_KEY"))}
+    return {**config, "gateway_ready": bool(os.environ.get("MIDTRANS_SERVER_KEY"))}
 
 
 @api_router.get("/admin/demo-accounts")
@@ -1680,10 +1768,10 @@ async def create_reseller_order(payload: ResellerOrderCreate, current_user=Depen
             status_code=422,
             detail=f"Harga jual harus di antara Rp {plan['price']:,} dan Rp {max_price:,}.",
         )
-    if not os.environ.get("MAYAR_API_KEY"):
-        raise HTTPException(status_code=503, detail="Checkout penjualan reseller belum tersedia: konfigurasi Mayar belum lengkap.")
-    if not any(method.get("provider") == "mayar" and method.get("enabled") for method in billing["payment_methods"]):
-        raise HTTPException(status_code=503, detail="Checkout Mayar sedang dinonaktifkan oleh Super Admin.")
+    if not os.environ.get("MIDTRANS_SERVER_KEY"):
+        raise HTTPException(status_code=503, detail="Checkout penjualan reseller belum tersedia: konfigurasi Midtrans belum lengkap.")
+    if not any(method.get("provider") == "midtrans" and method.get("enabled") for method in billing["payment_methods"]):
+        raise HTTPException(status_code=503, detail="Checkout Midtrans sedang dinonaktifkan oleh Super Admin.")
 
     order_id = f"RS-{uuid.uuid4().hex[:18].upper()}"
     payment_id = str(uuid.uuid4())
@@ -1712,8 +1800,8 @@ async def create_reseller_order(payload: ResellerOrderCreate, current_user=Depen
         "duration_days": plan["duration_days"],
         "amount": payload.selling_price,
         "base_amount": plan["price"],
-        "payment_method": "Mayar checkout reseller",
-        "provider": "mayar",
+        "payment_method": "Midtrans checkout reseller",
+        "provider": "midtrans",
         "order_type": "reseller",
         "reseller_order_id": reseller_order_id,
         "status": "pending",
@@ -1739,7 +1827,7 @@ async def create_reseller_order(payload: ResellerOrderCreate, current_user=Depen
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
-    redirect_url = await create_mayar_invoice(
+    redirect_url = await create_midtrans_transaction(
         payment,
         {"full_name": payload.customer_name.strip(), "email": customer_email},
         f"+{phone_digits}",
@@ -2456,6 +2544,8 @@ async def create_invitation_payment_locked(invitation_id: str, payload: PaymentC
             "instructions": method.get("instructions"),
         }
     else:
+        if not os.environ.get("MIDTRANS_SERVER_KEY"):
+            raise HTTPException(status_code=503, detail="Checkout Midtrans belum dikonfigurasi.")
         mobile = re.sub(r"[\s()-]", "", payload.mobile or "")
         if mobile.startswith("0"):
             mobile = f"+62{mobile[1:]}"
@@ -2464,9 +2554,9 @@ async def create_invitation_payment_locked(invitation_id: str, payload: PaymentC
         elif mobile.startswith("62"):
             mobile = f"+{mobile}"
         digits = re.sub(r"\D", "", mobile)
-        if not 8 <= len(digits) <= 15:
-            raise HTTPException(status_code=422, detail="Masukkan nomor ponsel yang valid untuk pembayaran Mayar.")
-        redirect_url = await create_mayar_invoice(payment, current_user, mobile)
+        if mobile and not 8 <= len(digits) <= 15:
+            raise HTTPException(status_code=422, detail="Nomor ponsel untuk pembayaran Midtrans tidak valid.")
+        redirect_url = await create_midtrans_transaction(payment, current_user, mobile or None)
         payment["redirect_url"] = redirect_url
     await db.payment_orders.insert_one(payment)
     await db.invitations.update_one(
@@ -2502,55 +2592,47 @@ async def submit_transfer_reference(payment_id: str, payload: PaymentProof, curr
     return {"status": "pending", "message": "Referensi transfer terkirim untuk diverifikasi admin."}
 
 
-@api_router.post("/payments/mayar/webhook")
-async def mayar_webhook(payload: dict):
-    if not os.environ.get("MAYAR_API_KEY"):
-        raise HTTPException(status_code=503, detail="Gateway Mayar belum dikonfigurasi.")
-    if payload.get("event") != "payment.received":
-        return {"status": "ignored"}
-    data = payload.get("data")
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=400, detail="Notifikasi Mayar tidak lengkap.")
+@api_router.post("/payments/midtrans/webhook")
+async def midtrans_webhook(payload: dict):
+    server_key = os.environ.get("MIDTRANS_SERVER_KEY", "").strip()
+    if not server_key:
+        raise HTTPException(status_code=503, detail="Gateway Midtrans belum dikonfigurasi.")
+    required_fields = ("order_id", "status_code", "gross_amount", "signature_key")
+    if any(not isinstance(payload.get(field), str) or not payload[field] for field in required_fields):
+        raise HTTPException(status_code=400, detail="Notifikasi Midtrans tidak lengkap.")
 
-    identifiers = {
-        str(data[key])
-        for key in ("id", "transactionId", "paymentLinkTransactionId", "productId", "paymentLinkId")
-        if data.get(key)
-    }
-    extra_data = data.get("extraData")
-    if isinstance(extra_data, dict) and extra_data.get("noCustomer"):
-        identifiers.add(str(extra_data["noCustomer"]))
-    if not identifiers:
-        raise HTTPException(status_code=400, detail="ID transaksi Mayar tidak ditemukan.")
+    signature_source = f"{payload['order_id']}{payload['status_code']}{payload['gross_amount']}{server_key}"
+    expected_signature = hashlib.sha512(signature_source.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(expected_signature, payload["signature_key"].lower()):
+        raise HTTPException(status_code=401, detail="Tanda tangan notifikasi Midtrans tidak valid.")
 
     payment = await db.payment_orders.find_one(
-        {
-            "provider": "mayar",
-            "$or": [
-                {"id": {"$in": list(identifiers)}},
-                {"order_id": {"$in": list(identifiers)}},
-                {"mayar_invoice_id": {"$in": list(identifiers)}},
-                {"mayar_transaction_id": {"$in": list(identifiers)}},
-            ],
-        },
+        {"provider": "midtrans", "order_id": payload["order_id"]},
         {"_id": 0},
     )
     if payment is None:
-        raise HTTPException(status_code=404, detail="Order Mayar tidak ditemukan.")
+        raise HTTPException(status_code=404, detail="Order Midtrans tidak ditemukan.")
 
-    invoice_id = payment.get("mayar_invoice_id")
-    if not invoice_id:
-        raise HTTPException(status_code=409, detail="Order belum memiliki ID invoice Mayar.")
-    invoice = await mayar_request("GET", f"/invoices/{invoice_id}")
+    transaction = await midtrans_request("GET", f"/v2/{payment['order_id']}/status")
     try:
-        invoice_amount = Decimal(str(invoice["amount"]))
+        transaction_amount = Decimal(str(transaction["gross_amount"]))
     except (KeyError, InvalidOperation, TypeError):
-        raise HTTPException(status_code=502, detail="Detail invoice Mayar tidak lengkap.") from None
-    if invoice.get("id") != invoice_id or invoice_amount != Decimal(payment["amount"]):
-        raise HTTPException(status_code=400, detail="Invoice Mayar tidak sesuai dengan order.")
+        raise HTTPException(status_code=502, detail="Detail transaksi Midtrans tidak lengkap.") from None
+    if (
+        transaction.get("order_id") != payment["order_id"]
+        or transaction_amount != Decimal(payment["amount"])
+        or transaction.get("currency", "IDR") != "IDR"
+    ):
+        raise HTTPException(status_code=400, detail="Transaksi Midtrans tidak sesuai dengan order.")
 
-    if str(invoice.get("status", "")).lower() == "paid":
-        await set_payment_status(payment, "paid", "paid")
+    transaction_status = str(transaction.get("transaction_status", "")).lower()
+    fraud_status = str(transaction.get("fraud_status", "")).lower()
+    if transaction_status == "settlement" or (transaction_status == "capture" and fraud_status == "accept"):
+        if str(transaction.get("status_code")) != "200":
+            raise HTTPException(status_code=400, detail="Status transaksi Midtrans belum berhasil.")
+        await set_payment_status(payment, "paid", transaction_status)
+    elif transaction_status in {"deny", "cancel", "expire", "failure"}:
+        await set_payment_status(payment, "failed", transaction_status)
     return {"status": "ok"}
 
 

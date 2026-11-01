@@ -11,17 +11,20 @@ import Templates, { createPreviewInvitation, slugify } from './pages/Templates';
 import Dashboard from './pages/Dashboard';
 import AdminBilling from './pages/AdminBilling';
 import SuperAdminHome from './pages/SuperAdminHome';
+import SuperAdminSeo from './pages/SuperAdminSeo';
 import PublicInvitation from './pages/PublicInvitation';
 import GuestTicket from './pages/GuestTicket';
 import NunuyWedding from './pages/NunuyWedding';
 import NunuyConsultationAdmin from './components/NunuyConsultationAdmin';
 import { PublicTestimonials, TestimonialModeration } from './components/PublicTestimonials';
 import SuperAdminNav from './components/SuperAdminNav';
+import SeoHead from './components/SeoHead';
 import StructuredEditor from './components/StructuredEditor';
 import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
 import { advertisementsApi, nunuyConsultationsApi, testimonialsApi } from './lib/api';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
 import { createDefaultTheme, getThemeCatalog, themeStyle } from './lib/themeCatalog';
+import { SEO_DEFAULTS } from './lib/seoSites';
 
 const storage = {
   portal: 'portal-cms',
@@ -194,10 +197,7 @@ const defaultPortalData = {
     description: 'Jadikan Portal.id sebagai ruang untuk memperkenalkan brand, memperluas jangkauan, dan membangun kolaborasi kreatif.',
     button: 'Mulai Kerja Sama',
   },
-  seo: {
-    title: 'Portal.id — Creative Collective',
-    description: 'Temukan partner wedding, musik, hiburan, dan undangan digital pilihan untuk momen istimewa Anda bersama Portal.id.',
-  },
+  seo: SEO_DEFAULTS.portal,
   theme: {
     ...createDefaultTheme('admin'),
     primary: '#59416F',
@@ -288,6 +288,7 @@ const defaultGibrigData = {
   },
   footer: '© 2026 Official Gibrig Entertainment. All rights reserved.',
   whatsapp: { number: '6285524752102', message: 'Halo Gibrig Entertainment, saya ingin booking acara.' },
+  seo: SEO_DEFAULTS.gibrig,
 };
 
 const defaultNunuyData = {
@@ -426,10 +427,7 @@ const defaultNunuyData = {
     description: 'Testimoni pelanggan asli akan ditampilkan di sini setelah tersedia dan mendapat persetujuan untuk dipublikasikan.',
     items: [{ active: false, name: '', text: '', image: '' }],
   },
-  seo: {
-    title: 'Nunuy Nadhifa Wedding | Wedding Planner & Organizer',
-    description: 'Rencanakan pernikahan personal bersama Nunuy Nadhifa Wedding. Konsultasikan layanan, paket, dan kebutuhan acara Anda.',
-  },
+  seo: SEO_DEFAULTS.nunuy,
   journal: {
     label: 'THE WEDDING JOURNAL',
     title: 'Little notes for',
@@ -550,6 +548,7 @@ const defaultInvitationData = {
     { name: 'Business', price: 'Rp 599.000', features: ['Bulk undangan', 'Bulk tamu', 'Bulk template', 'Statistik lengkap', 'Branding & API'], highlight: false },
   ],
   testimonials: [],
+  seo: SEO_DEFAULTS.invitation,
   contact: { phone: '+62 812-3456-7890', email: 'hello@undangan.id' },
   whatsapp: { number: '+6281234567890', message: 'Halo, saya ingin bertanya tentang Nuansa Invite.' },
   articles: [
@@ -695,8 +694,8 @@ const WhatsAppContact = ({ siteName, number, message }) => {
     >
       <strong aria-hidden="true">
         <svg className="whatsapp-contact-icon" viewBox="0 0 24 24" fill="none" focusable="false">
-          <path d="M20.2 11.6a8.2 8.2 0 0 1-12.1 7.2L3 20l1.2-4.9a8.2 8.2 0 1 1 16-3.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-          <path d="M8.2 7.7c-.2-.4-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.4-.2.2-.8.8-.8 1.8s.8 2.1.9 2.2c.1.2 1.6 2.5 3.8 3.4 1.9.8 2.2.6 2.6.6.4-.1 1.4-.6 1.6-1.1.2-.5.2-.9.1-1-.1-.1-.3-.2-.7-.4l-1.6-.7c-.2-.1-.4-.1-.6.1l-.8.9c-.2.2-.3.2-.6.1-.3-.1-1.2-.4-2.2-1.4-.8-.7-1.3-1.6-1.5-1.9-.2-.3 0-.4.1-.6l.5-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.1-.6-1.5-.8-1.9Z" fill="currentColor" />
+          <path d="M12 2.25a9.75 9.75 0 0 0-8.4 14.69l-1.35 4.81 4.97-1.3A9.75 9.75 0 1 0 12 2.25Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M8.15 7.05c-.28 0-.59.08-.8.34-.28.33-.95 1.02-.95 2.42s.97 2.75 1.1 2.94c.14.19 1.88 3.01 4.64 4.1 2.29.91 2.76.73 3.25.68.5-.05 1.59-.65 1.81-1.29.23-.63.23-1.17.16-1.28-.06-.12-.25-.19-.53-.34l-1.86-.91c-.25-.12-.43-.19-.61.1-.18.28-.7.91-.86 1.1-.16.19-.32.21-.59.07-.28-.14-1.17-.43-2.22-1.36-.82-.73-1.37-1.64-1.53-1.91-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.19-.28.28-.47.1-.19.05-.35-.02-.5-.07-.14-.61-1.57-.84-2.15-.22-.55-.45-.55-.62-.56h-.55Z" fill="currentColor" />
         </svg>
       </strong>
       <span>{number}</span>
@@ -1088,10 +1087,8 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             </section>
 
             <section className="admin-panel-block">
-              <h3>SEO & social media Portal.id</h3>
+              <h3>Social media Portal.id</h3>
               <div className="form-grid">
-                <label>SEO title<input value={formData.seo?.title || ''} onChange={(event) => updateField('seo.title', event.target.value)} /></label>
-                <label className="portal-form-wide">SEO description<input value={formData.seo?.description || ''} onChange={(event) => updateField('seo.description', event.target.value)} /></label>
                 <label>Instagram<input value={formData.socialLinks?.instagram || ''} onChange={(event) => updateField('socialLinks.instagram', event.target.value)} placeholder="https://instagram.com/..." /></label>
                 <label>TikTok<input value={formData.socialLinks?.tiktok || ''} onChange={(event) => updateField('socialLinks.tiktok', event.target.value)} placeholder="https://tiktok.com/@..." /></label>
                 <label>YouTube<input value={formData.socialLinks?.youtube || ''} onChange={(event) => updateField('socialLinks.youtube', event.target.value)} placeholder="https://youtube.com/..." /></label>
@@ -1180,7 +1177,11 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
         <section className="admin-panel-block">
           <h3>Pengaturan semua konten</h3>
           <p className="muted">Edit teks, data kontak, daftar layanan, paket, FAQ, tema, ukuran, dan seluruh data website.</p>
-          <StructuredEditor data={formData} onChange={updateField} onImageUpload={handleImageUpload} />
+          <StructuredEditor
+            data={Object.fromEntries(Object.entries(formData).filter(([key]) => key !== 'seo'))}
+            onChange={updateField}
+            onImageUpload={handleImageUpload}
+          />
           <div className="admin-custom-theme">
             <label>Nama tema kustom<input value={customThemeName} onChange={(event) => setCustomThemeName(event.target.value)} placeholder="Tema baru saya" /></label>
             <button type="button" className="secondary-btn" onClick={saveCustomTheme}>Simpan warna sebagai tema</button>
@@ -1435,37 +1436,6 @@ const PortalHome = () => {
     };
   }, [theme.animations]);
 
-  useEffect(() => {
-    const originalTitle = document.title;
-    const metaDefinitions = [
-      ['name', 'description', portalData.seo.description],
-      ['property', 'og:title', portalData.seo.title],
-      ['property', 'og:description', portalData.seo.description],
-      ['property', 'og:type', 'website'],
-    ];
-    const originalMeta = metaDefinitions.map(([attribute, key, content]) => {
-      let element = document.head.querySelector(`meta[${attribute}="${key}"]`);
-      const created = !element;
-      if (!element) {
-        element = document.createElement('meta');
-        element.setAttribute(attribute, key);
-        document.head.appendChild(element);
-      }
-      const previousContent = element.getAttribute('content');
-      element.setAttribute('content', content || '');
-      return { element, created, previousContent };
-    });
-    document.title = portalData.seo.title;
-    return () => {
-      document.title = originalTitle;
-      originalMeta.forEach(({ element, created, previousContent }) => {
-        if (created) element.remove();
-        else if (previousContent === null) element.removeAttribute('content');
-        else element.setAttribute('content', previousContent);
-      });
-    };
-  }, [portalData.seo.description, portalData.seo.title]);
-
   const presetClass = `portal-preset-${(theme.preset || portalPresets[5].id).replace(/[^a-z0-9-]/g, '')}`;
   const navLinks = [
     { href: '/', label: 'Beranda', icon: 'home' },
@@ -1500,6 +1470,7 @@ const PortalHome = () => {
 
   return (
     <div ref={portalRef} className={`site-shell theme-portal portal-home ${presetClass} ${theme.animations === false ? 'portal-motion-off' : ''} ${theme.elementAnimations?.hero === false ? 'portal-hero-motion-off' : ''} ${theme.elementAnimations?.brandCards === false ? 'portal-card-motion-off' : ''} ${theme.elementAnimations?.ads === false ? 'portal-ad-motion-off' : ''}`} style={portalStyle} data-preset={theme.preset}>
+      <SeoHead siteId="portal" title={portalData.seo.title} description={portalData.seo.description} keywords={portalData.seo.keywords} image={portalData.hero.image} siteName={portalData.siteName} noIndex={portalData.seo.noIndex} canonicalUrl={portalData.seo.canonicalUrl} />
       <header className="topbar portal-topbar">
         <div className="container nav-wrap portal-nav-wrap">
           <a className="brand portal-brand" href="/">
@@ -1670,25 +1641,9 @@ const PortalInfoPage = ({ page }) => {
   ].filter(([, href]) => isValidPortalPartnerHref(href) && /^https?:\/\//i.test(href));
   const phoneHref = `tel:${String(portalData.contact.phone || '').replace(/[^\d+]/g, '')}`;
 
-  useEffect(() => {
-    const originalTitle = document.title;
-    const descriptionMeta = document.head.querySelector('meta[name="description"]');
-    const createdDescriptionMeta = !descriptionMeta;
-    const meta = descriptionMeta || document.head.appendChild(document.createElement('meta'));
-    if (createdDescriptionMeta) meta.setAttribute('name', 'description');
-    const originalDescription = meta.getAttribute('content');
-    document.title = title;
-    meta.setAttribute('content', description || '');
-    return () => {
-      document.title = originalTitle;
-      if (createdDescriptionMeta) meta.remove();
-      else if (originalDescription === null) meta.removeAttribute('content');
-      else meta.setAttribute('content', originalDescription);
-    };
-  }, [description, title]);
-
   return (
     <div className={`site-shell theme-portal portal-home portal-info-page portal-preset-${(theme.preset || portalPresets[5].id).replace(/[^a-z0-9-]/g, '')}`} style={portalStyle}>
+      <SeoHead siteId="portal" isHomePage={false} title={title} description={description || portalData.seo.description} keywords={portalData.seo.keywords} image={portalData.hero.image} siteName={portalData.siteName} noIndex={portalData.seo.noIndex} canonicalUrl={portalData.seo.canonicalUrl} />
       <header className="topbar portal-topbar">
         <div className="container nav-wrap portal-nav-wrap">
           <a className="brand portal-brand" href="/">
@@ -2039,11 +1994,6 @@ const GibrigHome = ({ path }) => {
   const previewCloseRef = useRef(null);
   const activePage = gibrigPages.find((page) => page.slug === path.replace(/^\/gibrig\/?/, '')) || gibrigPages[0];
   useEffect(() => {
-    const previousTitle = document.title;
-    document.title = activePage.slug ? `${activePage.title} | ${data.siteName}` : `${data.siteName} | Music & Entertainment`;
-    return () => { document.title = previousTitle; };
-  }, [activePage, data.siteName]);
-  useEffect(() => {
     if (!previewImage) return undefined;
     const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event) => {
@@ -2092,6 +2042,7 @@ const GibrigHome = ({ path }) => {
 
   return (
     <div className={`site-shell gibrig-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
+      <SeoHead siteId="gibrig" siteBasePath="/gibrig" isHomePage={!activePage.slug} title={activePage.slug ? `${activePage.title} | ${data.siteName}` : data.seo.title} description={data.seo.description} keywords={data.seo.keywords} image={data.hero.image} siteName={data.siteName} noIndex={data.seo.noIndex} canonicalUrl={data.seo.canonicalUrl} />
       <header className="topbar gibrig-topbar">
         <div className="container nav-wrap gibrig-nav-wrap">
           <a className="brand gibrig-brand" href="/gibrig" aria-label={`${data.siteName}, beranda`}>
@@ -2109,6 +2060,7 @@ const GibrigHome = ({ path }) => {
               </a>
             ))}
             <a href="#social-media">Sosial Media</a>
+            <a href="/">Portal.id</a>
           </nav>
           <a
             className="gibrig-contact-cta"
@@ -2270,6 +2222,7 @@ const GibrigHome = ({ path }) => {
             <nav className="gibrig-footer-nav" aria-label="Navigasi footer">
               <strong>Navigasi</strong>
               {gibrigPages.map((page) => <a key={page.slug || 'home'} href={page.slug ? `/gibrig/${page.slug}` : '/gibrig'}>{page.label}</a>)}
+              <a href="/">Portal.id</a>
             </nav>
             <div className="gibrig-footer-contact">
               <strong>Hubungi Kami</strong>
@@ -2279,7 +2232,7 @@ const GibrigHome = ({ path }) => {
               {whatsappNumber ? <a href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`} target="_blank" rel="noopener noreferrer">◉ <span>WhatsApp</span></a> : null}
             </div>
           </div>
-          <div className="container gibrig-copyright"><p>{data.footer}</p><a href="/gibrig" aria-label="Kembali ke beranda">↑</a></div>
+          <div className="container gibrig-copyright"><p>{data.footer}</p><a href="/" aria-label="Kembali ke Portal.id">↑</a></div>
         </section>
       </main>
       {previewImage ? (
@@ -2315,11 +2268,6 @@ const InvitationHome = () => {
   const openAuth = (mode) => navigate(`/undangan-auth?mode=${mode}`);
 
   useEffect(() => {
-    document.title = `${data.siteName} | Undangan Digital`;
-    return () => { document.title = 'Nuansa Invite | Undangan Digital'; };
-  }, [data.siteName]);
-
-  useEffect(() => {
     let active = true;
     advertisementsApi.listPublic()
       .then((items) => { if (active) setAdvertisements(items); })
@@ -2329,6 +2277,7 @@ const InvitationHome = () => {
 
   return (
     <div className={`site-shell invitation-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
+      <SeoHead siteId="invitation" siteBasePath="/undangan" title={data.seo.title} description={data.seo.description} keywords={data.seo.keywords} image={data.hero.image} siteName={data.siteName} noIndex={data.seo.noIndex} canonicalUrl={data.seo.canonicalUrl} />
       <Navbar
         siteName={data.siteName}
         logo={data.logo}
@@ -2526,6 +2475,11 @@ function App() {
   }
   if (path.startsWith('/undangan-ticket/')) return <GuestTicket ticketToken={path.slice('/undangan-ticket/'.length)} />;
   if (path === '/setia-creative-admin') return <SuperAdminHome />;
+  if (path === '/setia-creative-admin/seo') {
+    return superAdminAuthenticated
+      ? <SuperAdminSeo />
+      : <SuperAdminHome onLogin={() => navigate(path)} />;
+  }
   if (path === '/undangan-website-admin') {
     if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
     return (
@@ -2605,7 +2559,7 @@ function App() {
   }
 
   if (path === '/gibrig' || path.startsWith('/gibrig/')) return <GibrigHome path={path} />;
-  if (path === '/nunuy-nadhifa-wedding' || path.startsWith('/nunuy-nadhifa-wedding/layanan/') || path.startsWith('/nunuy-nadhifa-wedding/inspirasi/')) return <NunuyHome path={path} />;
+  if (path === '/nunuy-nadhifa-wedding' || path.startsWith('/nunuy-nadhifa-wedding/')) return <NunuyHome path={path} />;
   if (path === '/undangan') return <InvitationHome />;
   if (path === '/beriklan') return <PortalInfoPage page="advertise" />;
   if (path === '/kontak') return <PortalInfoPage page="contact" />;

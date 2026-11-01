@@ -962,15 +962,15 @@
 
 .gibrig-shell > .whatsapp-contact-link strong {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   place-items: center;
 }
 
 .gibrig-shell > .whatsapp-contact-link .whatsapp-contact-icon {
   display: block;
-  width: 27px;
-  height: 27px;
+  width: 32px;
+  height: 32px;
 }
 
 .gibrig-shell > .whatsapp-contact-link span {

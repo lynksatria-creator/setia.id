@@ -4,6 +4,7 @@ import { adminApi } from '../lib/api';
 import { SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
 
 const adminPanels = [
+  { title: 'SEO Semua Website', description: 'Atur judul, deskripsi, frasa pencarian, dan metadata untuk setiap website.', href: '/setia-creative-admin/seo' },
   { title: 'Portal Admin', description: 'Kelola konten dan pengaturan website utama.', href: '/portal-admin' },
   { title: 'Gibrig Admin', description: 'Kelola konten Gibrig Entertainment.', href: '/gibrig-admin' },
   { title: 'Nunuy Wedding Admin', description: 'Kelola paket dan konten wedding.', href: '/nunuy-admin' },
