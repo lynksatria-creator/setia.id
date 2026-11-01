@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import SuperAdminNav from '../components/SuperAdminNav';
 import { adminApi } from '../lib/api';
-import { SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
+import { getAdminScope, SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
 
 const adminPanels = [
   { title: 'SEO Semua Website', description: 'Atur judul, deskripsi, frasa pencarian, dan metadata untuk setiap website.', href: '/setia-creative-admin/seo' },
@@ -19,12 +19,19 @@ const websites = [
   { title: 'Nuansa Invite', href: '/undangan' },
 ];
 
+const scopedPanels = {
+  nunuy: { title: 'Nunuy Wedding Admin', href: '/nunuy-admin' },
+  gibrig: { title: 'Entertainment Musik Admin', href: '/gibrig-admin' },
+  invitation: { title: 'Nuansa Invite Website Admin', href: '/undangan-website-admin' },
+};
+
 export default function SuperAdminHome({ onLogin }) {
   const [token, setToken] = useState(() => sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const scope = getAdminScope(token);
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -48,18 +55,38 @@ export default function SuperAdminHome({ onLogin }) {
     setToken(null);
   };
 
-  if (!token) {
+  if (token && scope && scope !== 'all') {
+    const panel = scopedPanels[scope];
+    return (
+      <main className="super-admin-home">
+        <header className="billing-admin-header">
+          <a className="brand" href="/"><span className="logo-mark">A</span>Aurora Media</a>
+          <div><span>Akses panel terbatas</span><button onClick={logout}>Keluar</button></div>
+        </header>
+        <div className="super-admin-content">
+          <section className="super-admin-intro">
+            <p className="eyebrow">Akun admin situs</p>
+            <h1>{panel?.title || 'Panel admin'}</h1>
+            <p>Akun ini hanya dapat mengelola website yang ditetapkan.</p>
+            {panel ? <a className="primary-btn" href={panel.href}>Buka panel</a> : null}
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (!token || !scope) {
     return (
       <main className="billing-admin-login super-admin-login">
         <a className="brand" href="/"><span className="logo-mark">S</span>Setia Creative</a>
         <form className="billing-admin-login-card" onSubmit={handleLogin}>
           <p className="eyebrow">Satu akses untuk semua panel</p>
-          <h1>Super Admin</h1>
-          <p>Masuk dengan akun admin backend untuk mengelola semua panel.</p>
+          <h1>Admin</h1>
+          <p>Masuk dengan akun admin situs atau Super Admin.</p>
           <label>Email admin<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label>Kata sandi<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
-          <button className="primary-btn" disabled={isLoading}>{isLoading ? 'Memeriksa…' : 'Masuk ke super admin'}</button>
+          <button className="primary-btn" disabled={isLoading}>{isLoading ? 'Memeriksa…' : 'Masuk'}</button>
           <a className="super-admin-public-link" href="/undangan">Kunjungi website Nuansa Invite</a>
         </form>
       </main>

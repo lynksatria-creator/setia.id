@@ -925,6 +925,7 @@ def test_admin_login_requires_server_configuration(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
     monkeypatch.delenv("ADMIN_EMAIL", raising=False)
     monkeypatch.delenv("ADMIN_PASSWORD_HASH", raising=False)
+    monkeypatch.delenv("SITE_ADMIN_CREDENTIALS_JSON", raising=False)
     response = TestClient(server.app).post(
         "/api/admin/login",
         json={"email": "admin@example.com", "password": "not-a-real-password"},
@@ -932,6 +933,30 @@ def test_admin_login_requires_server_configuration(monkeypatch):
 
     assert response.status_code == 503
     assert "ADMIN_EMAIL" in response.json()["detail"]
+
+
+def test_site_admin_login_is_limited_to_its_configured_site(monkeypatch):
+    secret = "test-secret-that-is-at-least-32-characters-long"
+    monkeypatch.setenv("JWT_SECRET", secret)
+    monkeypatch.setenv("ADMIN_EMAIL", "super@example.com")
+    monkeypatch.setenv("ADMIN_PASSWORD_HASH", server.bcrypt.hashpw(b"SuperPassword123", server.bcrypt.gensalt()).decode())
+    nunuy_hash = server.bcrypt.hashpw(b"NunuyPassword123", server.bcrypt.gensalt()).decode()
+    monkeypatch.setenv("SITE_ADMIN_CREDENTIALS_JSON", server.json.dumps({
+        "nunuy": {"email": "nunuy@example.com", "password_hash": nunuy_hash},
+    }))
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=FakeEmptySettings()))
+    client = TestClient(server.app)
+
+    login = client.post("/api/admin/login", json={"email": "nunuy@example.com", "password": "NunuyPassword123"})
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    claims = server.jwt.decode(token, secret, algorithms=["HS256"])
+    assert claims["scope"] == "nunuy"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert client.get("/api/admin/seo/nunuy", headers=headers).status_code == 200
+    assert client.get("/api/admin/seo/gibrig", headers=headers).status_code == 403
+    assert client.get("/api/admin/billing/config", headers=headers).status_code == 403
 
 
 def midtrans_notification(order_id, status_code, gross_amount, server_key):

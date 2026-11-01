@@ -25,8 +25,8 @@ const Booking = () => {
       toast.error('Mohon lengkapi semua field wajib');
       return;
     }
-    const msg = `Halo Gibrig Entertainment, saya ingin booking acara.%0A%0A*Nama:* ${form.name}%0A*No. HP:* ${form.phone}%0A*Jenis Acara:* ${form.eventType}%0A*Tanggal:* ${form.eventDate}%0A*Lokasi:* ${form.location}%0A*Paket:* ${form.packageChoice}%0A*Catatan:* ${form.notes || '-'}`;
-    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+    const msg = `Halo Gibrig Entertainment, saya ingin booking acara.\n\n*Nama:* ${form.name}\n*No. HP:* ${form.phone}\n*Jenis Acara:* ${form.eventType}\n*Tanggal:* ${form.eventDate}\n*Lokasi:* ${form.location}\n*Paket:* ${form.packageChoice}\n*Catatan:* ${form.notes || '-'}\n\nWebsite: Entertainment Musik\nMenu: Form booking`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
     toast.success('Membuka WhatsApp...');
   };
 

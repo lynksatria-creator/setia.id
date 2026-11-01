@@ -115,7 +115,7 @@ const Packages = () => {
                   </div>
 
                   <a
-                    href={`https://wa.me/${phone}?text=${encodeURIComponent(`Halo Gibrig, saya ingin booking *${p.name}* (${p.label}).`)}`}
+                    href={`https://wa.me/${phone}?text=${encodeURIComponent(`Halo Gibrig, saya ingin booking *${p.name}* (${p.label}).\n\nWebsite: Entertainment Musik\nMenu: Paket > ${p.name}`)}`}
                     target="_blank"
                     rel="noreferrer"
                     className="btn-primary mt-5 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm"

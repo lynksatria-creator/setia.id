@@ -3038,3 +3038,62 @@
     right: 22px;
   }
 }
+
+@media (max-width: 640px) {
+  .nunuy-site .nunuy-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 42px auto;
+    gap: 8px;
+    padding-right: 5%;
+    padding-left: 5%;
+  }
+
+  .nunuy-site .nunuy-header .nunuy-brand {
+    min-width: 0;
+    gap: 6px;
+  }
+
+  .nunuy-site .nunuy-header .nunuy-brand-copy {
+    min-width: 0;
+  }
+
+  .nunuy-site .nunuy-header .nunuy-brand-copy strong {
+    overflow: hidden;
+    font-size: 11px;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .nunuy-site .nunuy-header .nunuy-brand-copy small {
+    overflow: hidden;
+    font-size: 6px;
+    letter-spacing: .14em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nunuy-site .nunuy-header .nunuy-logo-image {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+  }
+
+  .nunuy-site .nunuy-header .nunuy-menu-toggle {
+    margin-left: 0;
+  }
+
+  .nunuy-site .nunuy-header .nunuy-nav-cta {
+    min-width: 0;
+    max-width: 39vw;
+    padding: 8px;
+    font-size: 8px;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .nunuy-site .nunuy-header .nunuy-nav-cta span {
+    margin-left: 3px;
+  }
+}

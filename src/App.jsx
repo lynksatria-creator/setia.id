@@ -21,11 +21,12 @@ import { PublicTestimonials, TestimonialModeration } from './components/PublicTe
 import SuperAdminNav from './components/SuperAdminNav';
 import SeoHead from './components/SeoHead';
 import StructuredEditor from './components/StructuredEditor';
-import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
+import { getAdminScope, SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
 import { advertisementsApi, nunuyConsultationsApi, testimonialsApi } from './lib/api';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
 import { createDefaultTheme, getThemeCatalog, themeStyle } from './lib/themeCatalog';
 import { SEO_DEFAULTS } from './lib/seoSites';
+import { createWhatsAppUrl } from './lib/whatsapp';
 
 const storage = {
   portal: 'portal-cms',
@@ -138,7 +139,7 @@ const defaultPortalData = {
       active: true,
     },
     {
-      name: 'Musik.id',
+      name: 'Entertainment Musik',
       category: 'MUSIC & ENTERTAINMENT',
       description: 'Menghadirkan pengalaman musik dan hiburan untuk menghidupkan suasana di setiap perayaan dan acara spesial.',
       button: 'Kunjungi Website',
@@ -314,7 +315,7 @@ const defaultNunuyData = {
     closeImageLabel: 'Tutup gambar',
   },
   hero: {
-    eyebrow: 'WEDDING PLANNER · BANDUNG',
+    eyebrow: 'WEDDING PLANNER · GARUT',
     title: 'Make Your Wedding Unforgettable',
     subtitle: 'Kami hadir untuk mewujudkan pernikahan impian Anda dengan sentuhan kreativitas, keindahan, dan cinta.',
     cta: 'Konsultasi Sekarang',
@@ -686,20 +687,21 @@ const navigate = (path) => {
   }
 };
 
-const openWhatsApp = (number, message) => {
-  if (typeof window !== 'undefined') {
-    window.open(`https://wa.me/${number.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+const openWhatsApp = (number, message, website, menu) => {
+  const url = createWhatsAppUrl(number, message, website, menu);
+  if (typeof window !== 'undefined' && url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 };
 
-const WhatsAppContact = ({ siteName, number, message }) => {
+const WhatsAppContact = ({ siteName, number, message, menuName = 'Kontak cepat' }) => {
   const digits = String(number || '').replace(/\D/g, '');
   if (!digits) return null;
 
   return (
     <a
       className="whatsapp-contact-link"
-      href={`https://wa.me/${digits}?text=${encodeURIComponent(message || '')}`}
+      href={createWhatsAppUrl(digits, message, siteName, menuName)}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`Hubungi ${siteName} via WhatsApp: ${number}`}
@@ -767,9 +769,11 @@ const AdminLogin = ({ site, label, onLogin, credentials }) => {
   );
 };
 
-const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], description, superAdminAuthenticated = false, onSuperAdminLogout }) => {
+const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], description, adminScope = null, superAdminAuthenticated = false, onSuperAdminLogout }) => {
+  const scope = adminScope || (superAdminAuthenticated ? 'all' : null);
+  const hasScopedAccess = scope === 'all' || scope === site;
   const [credentials, setCredentials] = useState({ username: defaultAdmins[site].username, passwordHash: '' });
-  const [loggedIn, setLoggedIn] = useState(superAdminAuthenticated);
+  const [loggedIn, setLoggedIn] = useState(hasScopedAccess);
   const [formData, setFormData] = useState(() => site === 'admin'
     ? normalizeInvitationBrand(normalizePortalData(loadData(dataKey, defaultData)))
     : normalizeInvitationBrand(mergeDataDefaults(defaultData, loadData(dataKey, defaultData))));
@@ -790,10 +794,10 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     const loadCreds = async () => {
       const current = await readCredentials(site);
       setCredentials(current);
-      setLoggedIn(superAdminAuthenticated || Boolean(loadData(`${site}-session`, null)));
+      setLoggedIn(hasScopedAccess || Boolean(loadData(`${site}-session`, null)));
     };
     loadCreds();
-  }, [site, superAdminAuthenticated]);
+  }, [hasScopedAccess, site]);
 
   const updateField = (path, value) => {
     const pathSegments = Array.isArray(path) ? path : path.split('.');
@@ -908,7 +912,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
   };
 
   const logout = () => {
-    if (onSuperAdminLogout) {
+    if (scope && onSuperAdminLogout) {
       onSuperAdminLogout();
       return;
     }
@@ -931,7 +935,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
           <a href="#">Media</a>
           <a href="#">SEO</a>
         </nav>
-        <button className="logout-button" onClick={logout}>{superAdminAuthenticated ? 'Keluar super admin' : 'Logout'}</button>
+        <button className="logout-button" onClick={logout}>{scope ? 'Keluar' : 'Logout'}</button>
       </aside>
 
       <main className="admin-main">
@@ -1180,10 +1184,10 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             </div>
           </section>
         ) : null}
-        {superAdminAuthenticated ? (
+        {superAdminAuthenticated || scope === (site === 'admin' ? 'portal' : site) ? (
           <TestimonialModeration site={site === 'admin' ? 'portal' : site} token={sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY)} />
         ) : null}
-        {site === 'nunuy' && superAdminAuthenticated ? (
+        {site === 'nunuy' && (superAdminAuthenticated || scope === 'nunuy') ? (
           <NunuyConsultationAdmin token={sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY)} />
         ) : null}
         <section className="admin-panel-block">
@@ -1387,11 +1391,11 @@ const LegacyPortalHome = () => {
           </div>
           <div>
             <h4>WhatsApp</h4>
-            <a href={`https://wa.me/${portalData.whatsapp.number.replace(/\D/g, '')}?text=${encodeURIComponent(portalData.whatsapp.message)}`} target="_blank" rel="noopener noreferrer">Chat sekarang</a>
+            <a href={createWhatsAppUrl(portalData.whatsapp.number, portalData.whatsapp.message, portalData.siteName, 'Footer > WhatsApp')} target="_blank" rel="noopener noreferrer">Chat sekarang</a>
           </div>
         </div>
       </footer>
-      <WhatsAppContact siteName={portalData.siteName} number={portalData.whatsapp.number} message={portalData.whatsapp.message} />
+      <WhatsAppContact siteName={portalData.siteName} number={portalData.whatsapp.number} message={portalData.whatsapp.message} menuName="Beranda > Kontak cepat" />
     </div>
   );
 };
@@ -1460,7 +1464,7 @@ const PortalHome = () => {
     ['TikTok', portalData.socialLinks.tiktok, '♪'],
     ['YouTube', portalData.socialLinks.youtube, '▶'],
   ].filter(([, href]) => isValidPortalPartnerHref(href) && /^https?:\/\//i.test(href));
-  const whatsappHref = `https://wa.me/${String(portalData.whatsapp.number || '').replace(/\D/g, '')}?text=${encodeURIComponent(portalData.whatsapp.message || '')}`;
+  const whatsappHref = createWhatsAppUrl(portalData.whatsapp.number, portalData.whatsapp.message, portalData.siteName, 'Beranda > Kontak');
 
   const renderAd = (key, className) => {
     const slot = portalData.ads[key];
@@ -1591,7 +1595,7 @@ const portalFaqSections = [
   {
     title: 'B. Partner Aurora Media',
     questions: [
-      ['Brand apa saja yang tersedia di Aurora Media?', 'Saat ini Aurora Media menghadirkan beberapa partner pilihan, antara lain Nunuy Nadhifa Wedding – Wedding Organizer dan layanan pernikahan; Musik.id – musik, hiburan, dan kebutuhan entertainment; serta Undangan Digital – layanan undangan digital modern. Daftar partner dapat berkembang sesuai kolaborasi terbaru.'],
+      ['Brand apa saja yang tersedia di Aurora Media?', 'Saat ini Aurora Media menghadirkan beberapa partner pilihan, antara lain Nunuy Nadhifa Wedding – Wedding Organizer dan layanan pernikahan; Entertainment Musik – musik, hiburan, dan kebutuhan entertainment; serta Undangan Digital – layanan undangan digital modern. Daftar partner dapat berkembang sesuai kolaborasi terbaru.'],
       ['Bagaimana cara mengunjungi website partner?', 'Anda cukup memilih kartu brand yang tersedia, kemudian klik tombol "Kunjungi Website". Anda akan diarahkan ke website resmi partner yang bersangkutan.'],
       ['Apakah saya bisa menghubungi partner secara langsung?', 'Ya. Setiap partner memiliki informasi kontak atau kanal komunikasi masing-masing. Anda dapat menghubungi mereka untuk mendapatkan informasi layanan, harga, dan pemesanan.'],
       ['Apakah harga layanan partner ditentukan oleh Aurora Media?', 'Tidak. Harga, paket layanan, promo, dan ketentuan pemesanan ditentukan langsung oleh masing-masing partner.'],
@@ -1629,7 +1633,9 @@ const PortalInfoPage = ({ page }) => {
   const { theme } = portalData;
   const isAdvertisePage = page === 'advertise';
   const isContactPage = page === 'contact';
-  const whatsappHref = `https://wa.me/${String(portalData.whatsapp.number || '').replace(/\D/g, '')}?text=${encodeURIComponent(isAdvertisePage ? 'Halo, saya tertarik untuk bekerja sama dan beriklan di Aurora Media.' : portalData.whatsapp.message || '')}`;
+  const menuName = isAdvertisePage ? 'Beriklan' : isContactPage ? 'Kontak' : 'FAQ';
+  const whatsappMessage = isAdvertisePage ? 'Halo, saya tertarik untuk bekerja sama dan beriklan di Aurora Media.' : portalData.whatsapp.message;
+  const whatsappHref = createWhatsAppUrl(portalData.whatsapp.number, whatsappMessage, portalData.siteName, menuName);
   const title = isAdvertisePage ? `Beriklan — ${portalData.siteName}` : isContactPage ? `Kontak — ${portalData.siteName}` : `FAQ — ${portalData.siteName}`;
   const description = isAdvertisePage
     ? portalData.promotion.description
@@ -1793,7 +1799,7 @@ const PortalInfoPage = ({ page }) => {
 const portalTestimonialSources = [
   { site: 'portal', label: 'Aurora Media', href: '/', key: storage.portal, defaults: defaultPortalData },
   { site: 'nunuy', label: 'Nunuy Nadhifa Wedding', href: '/nunuy-nadhifa-wedding', key: storage.nunuy, defaults: defaultNunuyData },
-  { site: 'gibrig', label: 'Musik.id', href: '/gibrig', key: storage.gibrig, defaults: defaultGibrigData },
+  { site: 'gibrig', label: 'Entertainment Musik', href: '/gibrig', key: storage.gibrig, defaults: defaultGibrigData },
   { site: 'invitation', label: 'Undangan Digital', href: '/undangan', key: storage.invitation, defaults: defaultInvitationData },
 ];
 
@@ -2057,6 +2063,7 @@ const GibrigHome = ({ path }) => {
   const phoneDigits = String(data.contact?.phone || data.whatsapp?.number || '').replace(/\D/g, '');
   const whatsappNumber = String(data.whatsapp?.number || phoneDigits).replace(/\D/g, '');
   const whatsappMessage = data.whatsapp?.message || `Halo ${data.siteName}, saya ingin bertanya mengenai hiburan untuk acara.`;
+  const whatsappMenuName = activePage.label || 'Beranda';
 
   return (
     <div className={`site-shell gibrig-shell theme-layout-${data.theme?.layout || 'editorial'} theme-preset-${data.theme?.preset || 'default'}`} style={themeStyle(data.theme)}>
@@ -2064,8 +2071,8 @@ const GibrigHome = ({ path }) => {
       <header className="topbar gibrig-topbar">
         <div className="container nav-wrap gibrig-nav-wrap">
           <a className="brand gibrig-brand" href="/gibrig" aria-label={`${data.siteName}, beranda`}>
-            {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt="Logo Musik.id — Neng Syelfi Oktora Official Music" /> : <span className="logo-mark">{data.logo || 'G'}</span>}
-            <span className="gibrig-brand-copy"><strong>Musik.id</strong><small>{data.siteName}</small></span>
+            {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt="Logo Entertainment Musik — Neng Syelfi Oktora Official Music" /> : <span className="logo-mark">{data.logo || 'G'}</span>}
+            <span className="gibrig-brand-copy"><strong>Entertainment Musik</strong><small>{data.siteName}</small></span>
           </a>
           <nav className="nav-links gibrig-nav" aria-label="Navigasi utama">
             {gibrigPages.map((page) => (
@@ -2082,7 +2089,7 @@ const GibrigHome = ({ path }) => {
           </nav>
           <a
             className="gibrig-contact-cta"
-            href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`}
+            href={createWhatsAppUrl(whatsappNumber, whatsappMessage, 'Entertainment Musik', `${whatsappMenuName} > Hubungi Kami`)}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -2140,7 +2147,7 @@ const GibrigHome = ({ path }) => {
                     <p>{artist.description}</p>
                     {!activePage.slug && data.about ? <p className="gibrig-about-summary">{data.about}</p> : null}
                     {artist.price && String(artist.price).trim().toLowerCase() !== 'menyesuaikan lokasi' ? <p className="gibrig-artist-price">{artist.price}</p> : null}
-                    <button className="gibrig-pill-button" onClick={() => openWhatsApp(whatsappNumber, `${whatsappMessage} Saya ingin berkonsultasi tentang penampilan ${artist.name}. Mohon informasikan pilihan paket dan harga.`)}>
+                    <button className="gibrig-pill-button" onClick={() => openWhatsApp(whatsappNumber, `${whatsappMessage} Saya ingin berkonsultasi tentang penampilan ${artist.name}. Mohon informasikan pilihan paket dan harga.`, 'Entertainment Musik', `${whatsappMenuName} > Artis ${artist.name}`)}>
                       Mengenal Lebih Dekat <span aria-hidden="true">›</span>
                     </button>
                   </div>
@@ -2185,7 +2192,7 @@ const GibrigHome = ({ path }) => {
                   {pkg.price && String(pkg.price).trim().toLowerCase() !== 'menyesuaikan lokasi' ? <strong>{pkg.price}</strong> : null}
                   <p>{pkg.description}</p>
                   {Array.isArray(pkg.items) && <ul>{pkg.items.map((item, itemIndex) => <li key={`${item}-${itemIndex}`}>{item}</li>)}</ul>}
-                  <button className="gibrig-pill-button" onClick={() => openWhatsApp(whatsappNumber, `${whatsappMessage} Saya ingin menanyakan harga ${pkg.name}${pkg.label ? ` (${pkg.label})` : ''}. Mohon kirimkan rincian fasilitas paket tersebut.`)}>Tanya Paket <span aria-hidden="true">→</span></button>
+                  <button className="gibrig-pill-button" onClick={() => openWhatsApp(whatsappNumber, `${whatsappMessage} Saya ingin menanyakan harga ${pkg.name}${pkg.label ? ` (${pkg.label})` : ''}. Mohon kirimkan rincian fasilitas paket tersebut.`, 'Entertainment Musik', `${whatsappMenuName} > Tanya Paket ${pkg.name}`)}>Tanya Paket <span aria-hidden="true">→</span></button>
                 </article>
               ))}
             </div>
@@ -2218,7 +2225,7 @@ const GibrigHome = ({ path }) => {
             <div className="gibrig-footer-brand">
               <a className="brand gibrig-brand" href="/gibrig">
                 {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt="" /> : <span className="logo-mark">{data.logo || 'G'}</span>}
-                <span className="gibrig-brand-copy"><strong>Musik.id</strong><small>{data.siteName}</small></span>
+                <span className="gibrig-brand-copy"><strong>Entertainment Musik</strong><small>{data.siteName}</small></span>
               </a>
               <p>{data.about}</p>
               <div className="gibrig-social-links" id="social-media">
@@ -2247,7 +2254,7 @@ const GibrigHome = ({ path }) => {
               {data.contact?.phone ? <a href={`tel:${String(data.contact.phone).replace(/[^\d+]/g, '')}`}>◉ <span>{data.contact.phone}</span></a> : null}
               {data.contact?.email ? <a href={`mailto:${data.contact.email}`}>✉ <span>{data.contact.email}</span></a> : null}
               {data.contact?.address ? <p>{data.contact.address}</p> : null}
-              {whatsappNumber ? <a href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`} target="_blank" rel="noopener noreferrer">◉ <span>WhatsApp</span></a> : null}
+              {whatsappNumber ? <a href={createWhatsAppUrl(whatsappNumber, whatsappMessage, 'Entertainment Musik', 'Footer > WhatsApp')} target="_blank" rel="noopener noreferrer">◉ <span>WhatsApp</span></a> : null}
             </div>
           </div>
           <div className="container gibrig-copyright"><p>{data.footer}</p><a href="/" aria-label="Kembali ke Aurora Media">↑</a></div>
@@ -2261,7 +2268,7 @@ const GibrigHome = ({ path }) => {
           <img src={previewImage.src} alt={previewImage.alt} />
         </div>
       ) : null}
-      <WhatsAppContact siteName={data.siteName} number={whatsappNumber} message={whatsappMessage} />
+      <WhatsAppContact siteName="Entertainment Musik" number={whatsappNumber} message={whatsappMessage} menuName={`${whatsappMenuName} > Kontak cepat`} />
     </div>
   );
 };
@@ -2544,7 +2551,7 @@ const InvitationHome = ({ path = '/undangan' }) => {
                 <p className="eyebrow">FAQ</p>
                 <h2>Jawaban untuk persiapan Anda.</h2>
                 <p>Belum menemukan jawaban? Hubungi kami melalui WhatsApp.</p>
-                <a href={`https://wa.me/${String(data.whatsapp.number || '').replace(/\D/g, '')}?text=${encodeURIComponent(data.whatsapp.message || '')}`} target="_blank" rel="noopener noreferrer">Tanya melalui WhatsApp ↗</a>
+                <a href={createWhatsAppUrl(data.whatsapp.number, data.whatsapp.message, data.siteName, 'FAQ > Tanya melalui WhatsApp')} target="_blank" rel="noopener noreferrer">Tanya melalui WhatsApp ↗</a>
               </div>
               <div className="faq-list">
                 {data.faq.map((item, index) => (
@@ -2570,14 +2577,16 @@ const InvitationHome = ({ path = '/undangan' }) => {
         whatsappNumber={data.whatsapp.number}
         whatsappMessage={data.whatsapp.message}
       />
-      <WhatsAppContact siteName={data.siteName} number={data.whatsapp.number} message={data.whatsapp.message} />
+      <WhatsAppContact siteName={data.siteName} number={data.whatsapp.number} message={data.whatsapp.message} menuName="Nuansa Invite > Kontak cepat" />
     </div>
   );
 };
 
 function App() {
   const path = useWindowPath().replace(/\/+$/, '') || '/';
-  const superAdminAuthenticated = Boolean(sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY));
+  const adminScope = getAdminScope();
+  const superAdminAuthenticated = adminScope === 'all';
+  const canManageSite = (site) => superAdminAuthenticated || adminScope === site;
   const logoutSuperAdmin = () => {
     sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
     navigate('/setia-creative-admin');
@@ -2613,7 +2622,7 @@ function App() {
       : <SuperAdminHome onLogin={() => navigate(path)} />;
   }
   if (path === '/undangan-website-admin') {
-    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
+    if (!canManageSite('invitation')) return <SuperAdminHome onLogin={() => navigate(path)} />;
     return (
       <AdminPanel
         site="invitation"
@@ -2621,7 +2630,8 @@ function App() {
         dataKey={storage.invitation}
         defaultData={defaultInvitationData}
         description="Kelola konten website publik Nuansa Invite, nomor kontak, logo, hero, tema, template, dan media."
-        superAdminAuthenticated
+        adminScope={adminScope}
+        superAdminAuthenticated={superAdminAuthenticated}
         onSuperAdminLogout={logoutSuperAdmin}
       />
     );
@@ -2661,7 +2671,7 @@ function App() {
   }
 
   if (path === '/gibrig-admin') {
-    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
+    if (!canManageSite('gibrig')) return <SuperAdminHome onLogin={() => navigate(path)} />;
     return (
       <AdminPanel
         site="gibrig"
@@ -2669,14 +2679,15 @@ function App() {
         dataKey={storage.gibrig}
         defaultData={defaultGibrigData}
         description="Ubah isi utama Gibrig Entertainment, artist, event, testimonial, contact, SEO, dan media."
-        superAdminAuthenticated
+        adminScope={adminScope}
+        superAdminAuthenticated={superAdminAuthenticated}
         onSuperAdminLogout={logoutSuperAdmin}
       />
     );
   }
 
   if (path === '/nunuy-admin') {
-    if (!superAdminAuthenticated) return <SuperAdminHome onLogin={() => navigate(path)} />;
+    if (!canManageSite('nunuy')) return <SuperAdminHome onLogin={() => navigate(path)} />;
     return (
       <AdminPanel
         site="nunuy"
@@ -2684,7 +2695,8 @@ function App() {
         dataKey={storage.nunuy}
         defaultData={defaultNunuyData}
         description="Kelola layanan, paket, galeri, artikel, testimoni, FAQ, konsultasi, kontak, SEO, dan gambar Nunuy Nadhifa Wedding."
-        superAdminAuthenticated
+        adminScope={adminScope}
+        superAdminAuthenticated={superAdminAuthenticated}
         onSuperAdminLogout={logoutSuperAdmin}
       />
     );

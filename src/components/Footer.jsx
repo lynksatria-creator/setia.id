@@ -1,4 +1,5 @@
 import { invitationNavigation } from './Navbar';
+import { createWhatsAppUrl } from '../lib/whatsapp';
 
 export default function Footer({ siteName, phone, email, whatsappNumber, whatsappMessage }) {
   const whatsappDigits = String(whatsappNumber || '').replace(/\D/g, '');
@@ -26,7 +27,7 @@ export default function Footer({ siteName, phone, email, whatsappNumber, whatsap
         <div>
           <h4>Temukan kami</h4>
           <p>Instagram</p>
-          {whatsappDigits ? <p><a href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent(whatsappMessage || '')}`} target="_blank" rel="noopener noreferrer">Chat WhatsApp</a></p> : null}
+          {whatsappDigits ? <p><a href={createWhatsAppUrl(whatsappDigits, whatsappMessage, siteName, 'Footer > Kontak > WhatsApp')} target="_blank" rel="noopener noreferrer">Chat WhatsApp</a></p> : null}
         </div>
         <div>
           <h4>Jelajahi</h4>

@@ -5,6 +5,7 @@ import { billingApi, dashboardManagementApi, guestbookApi, invitationsApi, payme
 import GuestbookScanner from '../components/GuestbookScanner';
 import PublicInvitation from './PublicInvitation';
 import { createOwnerGuestbookUrl } from '../lib/ownerGuestbookUrl';
+import { createWhatsAppUrl } from '../lib/whatsapp';
 import { regionalInvitationTemplates } from '../lib/regionalInvitationTemplates';
 import { createTicketCheckInMessage } from '../lib/ticketCheckInMessage';
 
@@ -170,7 +171,7 @@ const normalizeWhatsAppPhone = (phone) => {
 const buildWhatsAppUrl = (phone, message, invitationUrl) => {
   const digits = normalizeWhatsAppPhone(phone);
   if (!digits || !message.trim() || !invitationUrl) return '';
-  return `https://wa.me/${digits}?text=${encodeURIComponent(`${message.trim()}\n\n${invitationUrl}`)}`;
+  return createWhatsAppUrl(digits, `${message.trim()}\n\n${invitationUrl}`, 'Nuansa Invite', 'Dashboard Undangan > Bagikan undangan');
 };
 const buildTicketUrl = (ticketToken) => `${window.location.origin}/undangan-ticket/${encodeURIComponent(ticketToken)}`;
 const getPackageEntitlements = (invitation, plan) => {

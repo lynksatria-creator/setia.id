@@ -6,6 +6,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 import hashlib
 import hmac
+import json
 import logging
 import os
 from pathlib import Path
@@ -530,9 +531,12 @@ async def send_registration_code_email(email, full_name, code):
         raise HTTPException(status_code=502, detail="Email OTP gagal dikirim. Coba lagi beberapa saat.") from error
 
 
-def create_access_token(user_id: str, role: str = "user"):
+def create_access_token(user_id: str, role: str = "user", scope: str | None = None):
     expires_at = datetime.now(timezone.utc) + timedelta(hours=12)
-    return jwt.encode({"sub": user_id, "role": role, "exp": expires_at}, get_jwt_secret(), algorithm="HS256")
+    payload = {"sub": user_id, "role": role, "exp": expires_at}
+    if role == "admin":
+        payload["scope"] = scope or "all"
+    return jwt.encode(payload, get_jwt_secret(), algorithm="HS256")
 
 
 async def get_billing_config():
@@ -658,7 +662,7 @@ async def write_audit_log(actor: dict, action: str, target_type: str, target_id:
     })
 
 
-async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+def decode_admin_credentials(credentials: HTTPAuthorizationCredentials):
     if credentials is None:
         raise HTTPException(status_code=401, detail="Admin harus login.")
     try:
@@ -667,7 +671,63 @@ async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(bear
         raise HTTPException(status_code=401, detail="Sesi admin tidak valid.") from None
     if payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Akses admin diperlukan.")
-    return {"email": payload["sub"]}
+    return {"email": payload["sub"], "scope": payload.get("scope", "all")}
+
+
+async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    admin = decode_admin_credentials(credentials)
+    if admin["scope"] != "all":
+        raise HTTPException(status_code=403, detail="Akses Super Admin diperlukan.")
+    return admin
+
+
+async def require_authenticated_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    return decode_admin_credentials(credentials)
+
+
+async def require_super_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    return await require_admin(credentials)
+
+
+async def require_site_admin(
+    site: str,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    admin = decode_admin_credentials(credentials)
+    if admin["scope"] not in {"all", site}:
+        raise HTTPException(status_code=403, detail="Akun admin tidak memiliki akses ke website ini.")
+    return admin
+
+
+async def require_nunuy_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    admin = decode_admin_credentials(credentials)
+    if admin["scope"] not in {"all", "nunuy"}:
+        raise HTTPException(status_code=403, detail="Akun admin tidak memiliki akses ke website ini.")
+    return admin
+
+
+def verify_admin_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except (TypeError, ValueError):
+        return False
+
+
+def get_site_admin_accounts():
+    raw_accounts = os.environ.get("SITE_ADMIN_CREDENTIALS_JSON", "").strip()
+    if not raw_accounts:
+        return {}
+    try:
+        accounts = json.loads(raw_accounts)
+    except ValueError:
+        raise HTTPException(status_code=503, detail="SITE_ADMIN_CREDENTIALS_JSON tidak valid.") from None
+    allowed_sites = {"nunuy", "gibrig", "invitation"}
+    if not isinstance(accounts, dict) or set(accounts) - allowed_sites:
+        raise HTTPException(status_code=503, detail="Konfigurasi akun admin situs tidak valid.")
+    for site, account in accounts.items():
+        if not isinstance(account, dict) or not account.get("email") or not account.get("password_hash"):
+            raise HTTPException(status_code=503, detail=f"Kredensial admin {site} belum lengkap.")
+    return accounts
 
 
 def slugify(value: str):
@@ -1039,7 +1099,7 @@ async def get_public_seo_config(site: str):
 
 
 @api_router.get("/admin/seo/{site}")
-async def get_admin_seo_config(site: str, _admin=Depends(require_admin)):
+async def get_admin_seo_config(site: str, _admin=Depends(require_site_admin)):
     if site not in SEO_SITE_IDS:
         raise HTTPException(status_code=404, detail="Website SEO tidak ditemukan.")
     saved = await db.platform_settings.find_one({"key": f"seo:{site}"}, {"_id": 0, "key": 0})
@@ -1048,7 +1108,7 @@ async def get_admin_seo_config(site: str, _admin=Depends(require_admin)):
 
 
 @api_router.put("/admin/seo/{site}")
-async def update_admin_seo_config(site: str, payload: SeoConfigUpdate, _admin=Depends(require_admin)):
+async def update_admin_seo_config(site: str, payload: SeoConfigUpdate, _admin=Depends(require_site_admin)):
     if site not in SEO_SITE_IDS:
         raise HTTPException(status_code=404, detail="Website SEO tidak ditemukan.")
     config = payload.model_dump()
@@ -1069,20 +1129,26 @@ async def admin_login(payload: AdminLogin):
     get_jwt_secret()
     admin_email = os.environ.get("ADMIN_EMAIL", "").lower()
     password_hash = os.environ.get("ADMIN_PASSWORD_HASH", "")
-    if not admin_email or not password_hash:
+    site_accounts = get_site_admin_accounts()
+    if not (admin_email and password_hash) and not site_accounts:
         raise HTTPException(status_code=503, detail="ADMIN_EMAIL dan ADMIN_PASSWORD_HASH belum dikonfigurasi.")
 
-    try:
-        valid_password = bcrypt.checkpw(payload.password.encode("utf-8"), password_hash.encode("utf-8"))
-    except ValueError:
-        valid_password = False
-    if payload.email.lower() != admin_email or not valid_password:
+    email = payload.email.lower()
+    if admin_email and password_hash and email == admin_email and verify_admin_password(payload.password, password_hash):
+        scope = "all"
+    else:
+        scope = next((
+            site
+            for site, account in site_accounts.items()
+            if email == account["email"].lower() and verify_admin_password(payload.password, account["password_hash"])
+        ), None)
+    if scope is None:
         raise HTTPException(status_code=401, detail="Email atau kata sandi admin salah.")
 
     return {
-        "access_token": create_access_token(admin_email, role="admin"),
+        "access_token": create_access_token(email, role="admin", scope=scope),
         "token_type": "bearer",
-        "user": {"email": admin_email, "role": "admin"},
+        "user": {"email": email, "role": "admin", "scope": scope},
     }
 
 
@@ -2199,8 +2265,10 @@ async def create_public_testimonial(payload: PublicTestimonialCreate):
 @api_router.get("/admin/testimonials")
 async def list_admin_testimonials(
     site: Literal["portal", "gibrig", "nunuy", "invitation"] | None = None,
-    _admin=Depends(require_admin),
+    _admin=Depends(require_authenticated_admin),
 ):
+    if _admin["scope"] != "all" and site != _admin["scope"]:
+        raise HTTPException(status_code=403, detail="Akun admin tidak memiliki akses ke testimoni website ini.")
     query = {"status": {"$in": ["pending", "visible"]}}
     if site:
         query["site"] = site
@@ -2212,8 +2280,13 @@ async def list_admin_testimonials(
 async def moderate_testimonial(
     testimonial_id: str,
     payload: TestimonialModeration,
-    _admin=Depends(require_admin),
+    _admin=Depends(require_authenticated_admin),
 ):
+    entry = await db.testimonials.find_one({"id": testimonial_id}, {"_id": 0, "site": 1})
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Testimoni tidak ditemukan.")
+    if _admin["scope"] != "all" and entry.get("site") != _admin["scope"]:
+        raise HTTPException(status_code=403, detail="Akun admin tidak memiliki akses ke testimoni website ini.")
     result = await db.testimonials.update_one(
         {"id": testimonial_id},
         {"$set": {"status": payload.status}},
@@ -2241,7 +2314,7 @@ async def create_public_nunuy_consultation(payload: PublicNunuyConsultationCreat
 
 
 @api_router.get("/admin/nunuy-consultations")
-async def list_nunuy_consultations(_admin=Depends(require_admin)):
+async def list_nunuy_consultations(_admin=Depends(require_nunuy_admin)):
     entries = await db.nunuy_consultations.find({}, {"_id": 0}).sort("created_at", -1).to_list(length=500)
     return entries
 
@@ -2250,7 +2323,7 @@ async def list_nunuy_consultations(_admin=Depends(require_admin)):
 async def update_nunuy_consultation_status(
     consultation_id: str,
     payload: NunuyConsultationStatusUpdate,
-    _admin=Depends(require_admin),
+    _admin=Depends(require_nunuy_admin),
 ):
     result = await db.nunuy_consultations.update_one(
         {"id": consultation_id},

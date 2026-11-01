@@ -15,6 +15,7 @@ import { PublicTestimonials, TestimonialModeration } from './components/PublicTe
 import NunuyConsultationAdmin from './components/NunuyConsultationAdmin';
 
 const renderApp = () => render(<AuthProvider><App /></AuthProvider>);
+const SUPER_ADMIN_TEST_TOKEN = 'header.eyJyb2xlIjoiYWRtaW4iLCJzY29wZSI6ImFsbCJ9.signature';
 
 test('renders the Aurora Media reference landing page with working partner links', () => {
   window.history.pushState({}, '', '/');
@@ -24,7 +25,7 @@ test('renders the Aurora Media reference landing page with working partner links
   expect(screen.getByRole('heading', { name: /temukan partner terbaik/i })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Kolaborasi untuk Momen Berkesan' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Nunuy Nadhifa Wedding' })).toBeDefined();
-  expect(screen.getByRole('heading', { name: 'Musik.id' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Entertainment Musik' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Undangan Digital' })).toBeDefined();
   expect(screen.getByRole('navigation', { name: 'Navigasi utama' }).querySelectorAll('a')).toHaveLength(4);
   expect(screen.getByRole('link', { name: 'Beriklan' }).getAttribute('href')).toBe('/beriklan');
@@ -55,7 +56,7 @@ test('super admin SEO dashboard saves independent website metadata to the backen
       json: async () => payload,
     };
   }));
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'seo-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/setia-creative-admin/seo');
   renderApp();
 
@@ -211,7 +212,7 @@ test('replaces the previous brand in saved invitation website content', () => {
 });
 
 test('portal admin can add, edit, publish, and remove advertised websites', async () => {
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/admin');
   render(<App />);
 
@@ -1046,6 +1047,8 @@ test('Basic package sends to one WhatsApp recipient at a time', async () => {
   expect(whatsappMessage).toContain('Yth. Dewi Lestari,');
   expect(whatsappMessage).toContain('Sampai bertemu di hari bahagia kami.');
   expect(whatsappMessage).toContain('/i/hari-bahagia?ticket=');
+  expect(whatsappMessage).toContain('Website: Nuansa Invite');
+  expect(whatsappMessage).toContain('Menu: Dashboard Undangan > Bagikan undangan');
   expect(whatsappMessage).not.toContain('/undangan-ticket/');
   expect(whatsappMessage.match(/https?:\/\//g)).toHaveLength(1);
   openSpy.mockRestore();
@@ -1117,6 +1120,8 @@ test('personalized invitation sharing creates a unique guestbook QR before Whats
   const whatsappMessage = decodeURIComponent(whatsappUrl.searchParams.get('text'));
   expect(whatsappUrl.pathname).toBe('/6281234567890');
   expect(whatsappMessage).toContain('/i/hari-bahagia?ticket=');
+  expect(whatsappMessage).toContain('Website: Nuansa Invite');
+  expect(whatsappMessage).toContain('Menu: Dashboard Undangan > Bagikan undangan');
   expect(whatsappMessage).not.toContain(ticketLink.href);
   expect(whatsappMessage.match(/https?:\/\//g)).toHaveLength(1);
   const ticketRequest = globalThis.fetch.mock.calls.find(([url]) => new URL(url, window.location.origin).pathname.endsWith('/invitations/invitation-1/tickets'));
@@ -1269,7 +1274,7 @@ test('super admin can review affiliate history, manage ads, and deactivate witho
     json: async () => responses[new URL(url, window.location.origin).pathname] ?? {},
   }));
   vi.stubGlobal('fetch', fetchMock);
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
 
   render(<AdminBilling />);
   fireEvent.click(await screen.findByRole('button', { name: /affiliate & iklan/i }));
@@ -1319,7 +1324,7 @@ test('keeps the unified super admin login page on a trailing-slash route', () =>
 });
 
 test('super admin home links to all admin panels and public websites', () => {
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/setia-creative-admin');
   renderApp();
 
@@ -1333,7 +1338,7 @@ test('super admin home links to all admin panels and public websites', () => {
 });
 
 test('opens Nuansa Invite admin from its own direct link after one super admin login', () => {
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/undangan-admin');
   renderApp();
 
@@ -1345,7 +1350,7 @@ test('opens Nuansa Invite admin from its own direct link after one super admin l
 
 test('keeps the previous Portal admin URL as an alias', () => {
   sessionStorage.clear();
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/admin');
   renderApp();
 
@@ -1364,7 +1369,7 @@ test('legacy admin routes require the unified super admin session', () => {
 });
 
 test('one super admin session opens the Portal admin link', () => {
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/portal-admin');
   renderApp();
 
@@ -1384,7 +1389,7 @@ test.each(['admin', 'gibrig', 'nunuy', 'invitation'])('provides exactly 100 orig
 test('admin edits content and applies theme settings to the public site', () => {
   sessionStorage.clear();
   localStorage.removeItem('gibrig-cms');
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/gibrig-admin');
   const admin = render(<App />);
 
@@ -1421,7 +1426,7 @@ test('admin edits content and applies theme settings to the public site', () => 
 
 test('portal theme presets update the actual public website theme', () => {
   localStorage.removeItem('portal-cms');
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/portal-admin');
   render(<App />);
 
@@ -1450,7 +1455,7 @@ test.each([
   const whatsapp = '+62 811-9988-7766';
   localStorage.removeItem(storageKey);
   sessionStorage.clear();
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', adminPath);
   const admin = render(<App />);
 
@@ -1467,11 +1472,21 @@ test.each([
   admin.unmount();
   window.history.pushState({}, '', publicPath);
   const publicSite = render(<App />);
-  const contactLink = publicSite.container.querySelector('.whatsapp-contact-link');
-  expect(contactLink.getAttribute('href')).toBe('https://wa.me/6281199887766?text=Halo%20dari%20' + site);
-  expect(contactLink.querySelector('.whatsapp-contact-icon')).not.toBeNull();
-  expect(contactLink.textContent).toContain(whatsapp);
-  expect(publicSite.getByText(phone)).toBeDefined();
+  const contactLink = publicSite.container.querySelector('a[href^="https://wa.me/"]');
+  expect(contactLink).not.toBeNull();
+  const contactUrl = new URL(contactLink.getAttribute('href'));
+  const contactMessage = new URL(contactLink.getAttribute('href')).searchParams.get('text');
+  const siteName = {
+    admin: 'Aurora Media',
+    gibrig: 'Entertainment Musik',
+    nunuy: 'Nunuy Nadhifa Wedding',
+    invitation: 'Nuansa Invite',
+  }[site];
+  expect(contactMessage).toContain(`Halo dari ${site}`);
+  expect(contactMessage).toContain(`Website: ${siteName}`);
+  expect(contactMessage).toContain('Menu:');
+  expect(contactUrl.pathname).toBe(`/${whatsapp.replace(/\D/g, '')}`);
+  expect(publicSite.container.textContent.replace(/\D/g, '')).toContain(phone.replace(/\D/g, ''));
 
   publicSite.unmount();
   localStorage.removeItem(storageKey);
@@ -1506,8 +1521,11 @@ test('renders the Nunuy wedding experience with real-data disclaimers and consul
     const packageUrl = new URL(packageLinks[index].getAttribute('href'));
     expect(packageUrl.hostname).toBe('wa.me');
     expect(packageUrl.pathname).toBe('/6281277881122');
-    expect(packageUrl.searchParams.get('text')).toContain(`paket ${packageName}`);
-    expect(packageUrl.searchParams.get('text')).toContain('menanyakan harga');
+    const packageMessage = packageUrl.searchParams.get('text');
+    expect(packageMessage).toContain(`paket ${packageName}`);
+    expect(packageMessage).toContain('menanyakan harga');
+    expect(packageMessage).toContain('Website: Nunuy Nadhifa Wedding');
+    expect(packageMessage).toContain(`Menu: Paket Wedding > ${packageName}`);
     expect(packageLinks[index].getAttribute('target')).toBe('_blank');
   });
   expect(screen.getByText(/testimoni pelanggan asli akan ditampilkan/i)).toBeDefined();
@@ -1583,9 +1601,12 @@ test.each([
     const url = new URL(link.getAttribute('href'));
     expect(url.hostname).toBe('wa.me');
     expect(url.pathname).toBe('/6281277881122');
-    expect(url.searchParams.get('text')).toContain(`layanan ${serviceTitle}`);
-    expect(url.searchParams.get('text')).toContain(`menu: Layanan > ${serviceTitle}`);
-    expect(url.searchParams.get('text')).toContain('pilihan paket');
+    const serviceMessage = url.searchParams.get('text');
+    expect(serviceMessage).toContain(`layanan ${serviceTitle}`);
+    expect(serviceMessage).toContain(`menu: Layanan > ${serviceTitle}`);
+    expect(serviceMessage).toContain('pilihan paket');
+    expect(serviceMessage).toContain('Website: Nunuy Nadhifa Wedding');
+    expect(serviceMessage).toContain(`Menu: Layanan > ${serviceTitle}`);
     expect(link.getAttribute('target')).toBe('_blank');
   });
   await waitFor(() => expect(document.title).toBe(`${serviceTitle} | Nunuy Nadhifa Wedding`));
@@ -1684,7 +1705,10 @@ test('stores Nunuy consultation details and provides the WhatsApp follow-up afte
   expect(confirmSpy).toHaveBeenCalledOnce();
   expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank');
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/permintaan tersimpan/i));
+  const fallbackMessage = new URL(screen.getByRole('link', { name: 'Lanjutkan ke WhatsApp' }).getAttribute('href')).searchParams.get('text');
   expect(screen.getByRole('link', { name: 'Lanjutkan ke WhatsApp' }).getAttribute('href')).toContain('wa.me/6281277881122');
+  expect(fallbackMessage).toContain('Website: Nunuy Nadhifa Wedding');
+  expect(fallbackMessage).toContain('Menu: Kontak > Form konsultasi');
   const submission = fetchMock.mock.calls.find(([url, options]) => String(url).includes('/public/nunuy-consultations') && options.method === 'POST');
   expect(JSON.parse(submission[1].body)).toMatchObject({
     couple: 'Alya & Bima',
@@ -1861,7 +1885,7 @@ test('Aurora Media displays published testimonials attributed to their connected
     expect(screen.getByText(/Musiknya membuat acara kami semakin meriah\./)).toBeDefined();
     expect(screen.getByText(/Undangan digitalnya mudah dibagikan kepada keluarga\./)).toBeDefined();
     expect(screen.getByRole('link', { name: 'Nunuy Nadhifa Wedding ↗' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
-    expect(screen.getByRole('link', { name: 'Musik.id ↗' }).getAttribute('href')).toBe('/gibrig');
+    expect(screen.getByRole('link', { name: 'Entertainment Musik ↗' }).getAttribute('href')).toBe('/gibrig');
     expect(screen.getByRole('link', { name: 'Undangan Digital ↗' }).getAttribute('href')).toBe('/undangan');
     expect(screen.queryByText('Bagikan cerita Anda')).toBeNull();
     expect(screen.getAllByText('5.0').length).toBeGreaterThan(0);
@@ -1915,7 +1939,7 @@ test('renders the Gibrig public homepage and connects booking inquiry', async ()
   const { container } = render(<App />);
 
   expect(container.querySelector('.gibrig-topbar .gibrig-brand-logo').getAttribute('src')).toBe('/musik-id-logo.webp');
-  expect(container.querySelector('.gibrig-topbar .gibrig-brand-copy strong')).toHaveTextContent('Musik.id');
+  expect(container.querySelector('.gibrig-topbar .gibrig-brand-copy strong')).toHaveTextContent('Entertainment Musik');
   expect(container.querySelector('.gibrig-footer-brand .gibrig-brand-logo').getAttribute('src')).toBe('/musik-id-logo.webp');
   expect(await waitFor(() => document.head.querySelector('link[rel="icon"]').getAttribute('href'))).toBe('/musik-id-favicon.png');
   expect(screen.getByRole('heading', { name: 'Hiburan Berkualitas, Momen Tak Terlupakan' })).toBeDefined();
@@ -1937,7 +1961,11 @@ test('renders the Gibrig public homepage and connects booking inquiry', async ()
   expect(container.textContent.toLowerCase()).not.toContain('menyesuaikan lokasi');
   expect(container.querySelector('.whatsapp-contact-link .whatsapp-contact-icon')).not.toBeNull();
   fireEvent.click(screen.getByRole('link', { name: /hubungi kami/i }));
-  expect(screen.getByRole('link', { name: /hubungi kami/i }).getAttribute('href')).toContain('wa.me/6285524752102');
+  const contactLink = screen.getByRole('link', { name: /hubungi kami/i });
+  const contactMessage = new URL(contactLink.getAttribute('href')).searchParams.get('text');
+  expect(contactLink.getAttribute('href')).toContain('wa.me/6285524752102');
+  expect(contactMessage).toContain('Website: Entertainment Musik');
+  expect(contactMessage).toContain('Menu: Beranda > Hubungi Kami');
   openSpy.mockRestore();
 });
 
@@ -1960,7 +1988,7 @@ test.each([
   ['/gibrig/paket', 'Event packages', 'Paket 1', '.gibrig-package-card'],
   ['/gibrig/galeri', 'Momen di atas panggung', 'Pertunjukan live di panggung', '.gibrig-gallery-item'],
   ['/gibrig/testimoni', 'Kesan pelanggan', 'Penilaian website', '.gibrig-testimonials'],
-])('renders the standalone Musik.id page %s without replacing its source data', (path, heading, content, selector) => {
+])('renders the standalone Entertainment Musik page %s without replacing its source data', (path, heading, content, selector) => {
   window.history.pushState({}, '', path);
   const { container } = render(<App />);
 
@@ -1992,7 +2020,12 @@ test('Gibrig package pages keep all saved package details and link the selected 
   expect(cards[1].textContent).toContain('Kentrung');
   expect(cards[1].textContent).toContain('Terompet');
   fireEvent.click(screen.getAllByRole('button', { name: /tanya paket/i })[1]);
-  expect(openSpy).toHaveBeenCalledWith(expect.stringContaining('Paket%202'), '_blank', 'noopener,noreferrer');
+  const [whatsappUrl] = openSpy.mock.calls[0];
+  const message = new URL(whatsappUrl).searchParams.get('text');
+  expect(whatsappUrl).toContain('Paket%202');
+  expect(message).toContain('Website: Entertainment Musik');
+  expect(message).toContain('Menu: Paket > Tanya Paket Paket 2');
+  expect(openSpy).toHaveBeenCalledWith(whatsappUrl, '_blank', 'noopener,noreferrer');
   openSpy.mockRestore();
 });
 

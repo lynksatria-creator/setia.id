@@ -2,12 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PublicTestimonials } from '../components/PublicTestimonials';
 import SeoHead from '../components/SeoHead';
 import { nunuyConsultationsApi } from '../lib/api';
+import { createWhatsAppUrl } from '../lib/whatsapp';
 import './NunuyWedding.css';
 
-const whatsappLink = (number, message) => {
-  const normalizedNumber = String(number || '').replace(/\D/g, '');
-  return normalizedNumber ? `https://wa.me/${normalizedNumber}?text=${encodeURIComponent(message)}` : '';
-};
+const whatsappLink = (number, message, menu) => createWhatsAppUrl(number, message, 'Nunuy Nadhifa Wedding', menu);
 
 const defaultWhatsAppMessage = 'Halo Nunuy Nadhifa Wedding, saya ingin berkonsultasi mengenai paket dan layanan pernikahan. Mohon informasi lebih lanjut.';
 const nunuyBasePath = '/nunuy-nadhifa-wedding';
@@ -25,6 +23,17 @@ const nunuyMenuPaths = {
 const nunuyMenuPages = Object.fromEntries(
   Object.entries(nunuyMenuPaths).map(([section, pagePath]) => [pagePath, section.slice(1)]),
 );
+const nunuyMenuLabels = {
+  home: 'Beranda',
+  about: 'Tentang Kami',
+  services: 'Layanan',
+  packages: 'Paket Wedding',
+  gallery: 'Galeri',
+  journal: 'Inspirasi',
+  testimonials: 'Testimoni',
+  faq: 'FAQ',
+  contact: 'Kontak',
+};
 const createSlug = (value) => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -61,6 +70,11 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
   const selectedService = services.find((item) => createSlug(item.slug || item.title) === serviceSlug);
   const selectedArticle = articles.find((item) => createSlug(item.slug || item.title) === articleSlug);
   const selectedMenuPage = nunuyMenuPages[path] || 'home';
+  const activeMenuName = selectedService
+    ? `Layanan > ${selectedService.title}`
+    : selectedArticle
+      ? `Inspirasi > ${selectedArticle.title}`
+      : nunuyMenuLabels[selectedMenuPage] || 'Beranda';
   const showMenuPage = (page) => path === nunuyBasePath || selectedMenuPage === page;
   const menuHref = (section) => nunuyMenuPaths[section] || (section.startsWith('#') ? `${nunuyBasePath}${section}` : section);
   const detailTitle = selectedService?.title || selectedArticle?.title;
@@ -72,15 +86,17 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
       ? `${menuTitle} | ${data.siteName}`
       : data.seo?.title || `${data.siteName} | Wedding Planner`;
   const contactMessage = whatsappMessage || defaultWhatsAppMessage;
-  const contactLink = whatsappLink(whatsappNumber, contactMessage);
+  const contactLink = whatsappLink(whatsappNumber, contactMessage, `${activeMenuName} > Hubungi Kami`);
   const getPackageWhatsAppLink = (packageName) => whatsappLink(
     whatsappNumber,
     `${contactMessage}\n\nSaya ingin menanyakan harga paket ${packageName}. Mohon informasikan harga dan rincian fasilitas paket tersebut.`,
+    `Paket Wedding > ${packageName}`,
   );
   const serviceConsultationLink = selectedService
     ? whatsappLink(
       whatsappNumber,
       `${contactMessage}\n\nSaya ingin berkonsultasi mengenai layanan ${selectedService.title} (menu: Layanan > ${selectedService.title}). Mohon informasikan pilihan paket, rekomendasi paket yang sesuai, dan harganya.`,
+      `Layanan > ${selectedService.title}`,
     )
     : '';
   const colors = data.brandColors || {};
@@ -171,7 +187,7 @@ const NunuyWedding = ({ data, whatsappNumber = '', whatsappMessage = '', phoneNu
     ].join('\n');
 
     if (!window.confirm(data.consultation?.confirmation || 'Detail konsultasi akan dibuka di WhatsApp. Lanjutkan?')) return;
-    const whatsappUrl = whatsappLink(whatsappNumber, details);
+    const whatsappUrl = whatsappLink(whatsappNumber, details, 'Kontak > Form konsultasi');
     const whatsappWindow = window.open('about:blank', '_blank');
     setFormMessage('Menyimpan permintaan konsultasi…');
     try {

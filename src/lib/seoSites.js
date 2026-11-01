@@ -18,7 +18,7 @@ export const SEO_DEFAULTS = {
   nunuy: {
     title: 'Nunuy Nadhifa Wedding | Wedding Planner & Organizer',
     description: 'Rencanakan pernikahan personal bersama Nunuy Nadhifa Wedding. Konsultasikan layanan, paket, dan kebutuhan acara Anda.',
-    keywords: 'Nunuy Nadhifa Wedding, wedding organizer Bandung, wedding planner Bandung, dekorasi pernikahan, paket wedding',
+    keywords: 'Nunuy Nadhifa Wedding, wedding organizer Garut, wedding planner Garut, dekorasi pernikahan, paket wedding',
     canonicalUrl: '',
     ogImage: '',
     noIndex: false,
@@ -35,7 +35,7 @@ export const SEO_DEFAULTS = {
 
 export const SEO_WEBSITES = [
   { id: 'portal', name: 'Aurora Media', href: '/', cmsKey: 'portal-cms' },
-  { id: 'gibrig', name: 'Gibrig Entertainment / Musik.id', href: '/gibrig', cmsKey: 'gibrig-cms' },
+  { id: 'gibrig', name: 'Gibrig Entertainment / Entertainment Musik', href: '/gibrig', cmsKey: 'gibrig-cms' },
   { id: 'nunuy', name: 'Nunuy Nadhifa Wedding', href: '/nunuy-nadhifa-wedding', cmsKey: 'nunuy-cms' },
   { id: 'invitation', name: 'Nuansa Invite', href: '/undangan', cmsKey: 'invitation-cms' },
 ].map((website) => ({ ...website, defaults: SEO_DEFAULTS[website.id] }));
