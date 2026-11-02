@@ -97,16 +97,29 @@ const optimizeImageFile = async (file) => {
   if (typeof createImageBitmap !== 'function') throw new Error('Browser ini tidak mendukung pemrosesan gambar.');
 
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
+  let scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
+  let quality = 0.82;
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Gambar tidak dapat diproses di browser ini.');
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+  let blob = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', quality));
+    if (!blob) break;
+    if (blob.size <= 1_800_000) break;
+    if (quality > 0.52) quality = Math.max(0.52, quality - 0.1);
+    else {
+      scale *= 0.82;
+      quality = 0.76;
+    }
+  }
   bitmap.close();
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.82));
   if (!blob) throw new Error('Gambar gagal dikompresi.');
+  if (blob.size > 1_800_000) throw new Error('Poster terlalu besar setelah dikompresi. Pilih gambar yang lebih sederhana.');
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
@@ -1266,7 +1279,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
                     {formData.ads[key].image ? <div className="admin-media-preview portal-ad-poster-preview"><span>Pratinjau poster</span><img src={formData.ads[key].image} alt={`Pratinjau poster ${title}`} /></div> : null}
                     <label>Lebar poster (%)<input type="number" min="20" max="100" value={formData.ads[key].imageWidth ?? 40} onChange={(event) => updateField(`ads.${key}.imageWidth`, Number(event.target.value))} /></label>
                     <label>Tinggi poster (px)<input type="number" min="120" max="600" value={formData.ads[key].imageHeight ?? 240} onChange={(event) => updateField(`ads.${key}.imageHeight`, Number(event.target.value))} /></label>
-                    <label>URL tujuan<input value={formData.ads[key].href || ''} onChange={(event) => updateField(`ads.${key}.href`, event.target.value)} /></label>
+                    <label>URL website tujuan<input type="url" value={formData.ads[key].href || ''} onChange={(event) => updateField(`ads.${key}.href`, event.target.value)} placeholder="https://website-brand.com" /></label>
                     <label>Format iklan
                       <select value={formData.ads[key].format || 'card'} onChange={(event) => updateField(`ads.${key}.format`, event.target.value)}>
                         <option value="banner">Banner</option>

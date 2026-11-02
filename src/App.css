@@ -10447,7 +10447,9 @@ input {
 }
 
 .portal-ad-listing > img {
+  flex: 0 1 var(--portal-ad-image-width, 40%);
   width: var(--portal-ad-image-width, 40%);
+  max-width: calc(100% - 280px);
   height: var(--portal-ad-image-height, 240px);
   min-height: 0;
   object-fit: cover;
@@ -10460,7 +10462,7 @@ input {
   align-items: flex-start;
   justify-content: center;
   gap: 12px;
-  min-width: 0;
+  min-width: 280px;
   padding: 30px;
 }
 
@@ -10522,6 +10524,7 @@ input {
 }
 
 .portal-ad-format-card > img {
+  flex: 0 1 auto;
   width: var(--portal-ad-image-width, 100%);
   max-width: 100%;
   height: var(--portal-ad-image-height, 245px);
@@ -10678,6 +10681,7 @@ input {
   .portal-ad-layout-list .portal-ad-listing > img,
   .portal-ad-layout-featured .portal-ad-listing > img {
     width: var(--portal-ad-image-width, 36%);
+    max-width: calc(100% - 180px);
   }
 
   .portal-ad-format-card {
@@ -10690,6 +10694,7 @@ input {
   }
 
   .portal-ad-listing-copy {
+    min-width: 180px;
     padding: 22px;
   }
 

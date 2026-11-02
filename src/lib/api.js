@@ -31,6 +31,13 @@ export async function apiRequest(path, { token, ...options } = {}) {
 
   if (!response.ok) {
     if (typeof payload?.detail === 'string' && payload.detail) throw new Error(payload.detail);
+    if (Array.isArray(payload?.detail)) {
+      const details = payload.detail.map((issue) => {
+        const location = Array.isArray(issue.loc) ? issue.loc.filter((part) => part !== 'body').join('.') : '';
+        return `${location ? `${location}: ` : ''}${issue.msg || 'Data tidak valid.'}`;
+      }).join('; ');
+      if (details) throw new Error(details);
+    }
     if (response.status >= 500) {
       throw new Error(`API Nuansa Invite mengalami gangguan (HTTP ${response.status}). Pastikan backend dan MongoDB aktif.`);
     }
