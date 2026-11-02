@@ -545,6 +545,60 @@ def test_seo_config_is_per_site_public_and_admin_managed(monkeypatch):
     assert audit_logs.document["action"] == "seo.config.updated"
 
 
+def test_portal_ads_config_is_saved_and_limited_to_super_admin(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+
+    class SettingsCollection:
+        def __init__(self):
+            self.documents = {}
+
+        async def find_one(self, query, _projection=None):
+            return copy.deepcopy(self.documents.get(query["key"]))
+
+        async def update_one(self, query, update, upsert=False):
+            assert upsert is True
+            self.documents[query["key"]] = copy.deepcopy(update["$set"])
+
+    settings = SettingsCollection()
+    audit_logs = FakeCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=settings, audit_logs=audit_logs))
+    client = TestClient(server.app)
+    config = {
+        "page": {"title": "Iklan Partner", "description": "Pilihan partner Aurora.", "layout": "featured"},
+        "top": {
+            "enabled": True,
+            "label": "PARTNER PILIHAN",
+            "title": "Studio Momen",
+            "image": "https://example.com/banner.jpg",
+            "href": "https://studio.example",
+            "format": "banner",
+            "animation": "rise",
+            "duration": 12,
+        },
+        "midFeed": {"enabled": False},
+        "sidebar": {"enabled": False},
+        "floatingBottom": {"enabled": False},
+    }
+
+    assert client.get("/api/public/portal-ads").json() == {"ads": None}
+    assert client.put("/api/admin/portal-ads", json=config).status_code == 401
+    site_admin = server.create_access_token("gibrig@example.com", role="admin", scope="gibrig")
+    assert client.put(
+        "/api/admin/portal-ads",
+        headers={"Authorization": f"Bearer {site_admin}"},
+        json=config,
+    ).status_code == 403
+
+    token = server.create_access_token("admin@example.com", role="admin", scope="all")
+    headers = {"Authorization": f"Bearer {token}"}
+    saved = client.put("/api/admin/portal-ads", headers=headers, json=config)
+
+    assert saved.status_code == 200
+    assert saved.json()["ads"]["top"]["duration"] == 12
+    assert client.get("/api/public/portal-ads").json() == saved.json()
+    assert audit_logs.document["action"] == "portal.ads.updated"
+
+
 def test_seo_config_rejects_non_https_canonical_urls(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
     token = server.create_access_token("admin@example.com", role="admin")

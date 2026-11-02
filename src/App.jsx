@@ -23,7 +23,7 @@ import SuperAdminNav from './components/SuperAdminNav';
 import SeoHead from './components/SeoHead';
 import StructuredEditor from './components/StructuredEditor';
 import { getAdminScope, SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
-import { advertisementsApi, nunuyConsultationsApi, siteContactApi, testimonialsApi } from './lib/api';
+import { advertisementsApi, nunuyConsultationsApi, portalAdsApi, siteContactApi, testimonialsApi } from './lib/api';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
 import { createDefaultTheme, getThemeCatalog, themeStyle } from './lib/themeCatalog';
 import { SEO_DEFAULTS } from './lib/seoSites';
@@ -166,10 +166,11 @@ const defaultPortalData = {
     },
   ],
   ads: {
-    top: { enabled: false, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', image: '', href: '#contact' },
-    midFeed: { enabled: false, label: 'FEATURED PARTNER', title: 'Buat momen Anda lebih istimewa', image: '', href: '/nunuy-nadhifa-wedding' },
-    sidebar: { enabled: false, label: 'DIREKOMENDASIKAN', title: 'Cerita indah dimulai dari sini', image: '', href: '/undangan' },
-    floatingBottom: { enabled: false, label: 'Punya acara dalam waktu dekat?', title: 'Mari rencanakan bersama', image: '', href: '/nunuy-nadhifa-wedding' },
+    page: { title: 'Pilihan Iklan', description: 'Temukan brand dan layanan pilihan dari partner Aurora Media.', layout: 'grid' },
+    top: { enabled: false, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', image: '', href: '#contact', format: 'banner', animation: 'rise', duration: 8 },
+    midFeed: { enabled: false, label: 'FEATURED PARTNER', title: 'Buat momen Anda lebih istimewa', image: '', href: '/nunuy-nadhifa-wedding', format: 'card', animation: 'fade', duration: 8 },
+    sidebar: { enabled: false, label: 'DIREKOMENDASIKAN', title: 'Cerita indah dimulai dari sini', image: '', href: '/undangan', format: 'card', animation: 'fade', duration: 8 },
+    floatingBottom: { enabled: false, label: 'Punya acara dalam waktu dekat?', title: 'Mari rencanakan bersama', image: '', href: '/nunuy-nadhifa-wedding', format: 'link', animation: 'float', duration: 8 },
   },
   gallery: [
     'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1100&q=85',
@@ -867,6 +868,19 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     return () => { active = false; };
   }, [contactSite]);
 
+  useEffect(() => {
+    if (site !== 'admin') return undefined;
+    let active = true;
+    portalAdsApi.adminConfig(sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY))
+      .then((result) => {
+        if (active && result?.ads) {
+          setFormData((current) => normalizePortalData({ ...current, ads: result.ads }));
+        }
+      })
+      .catch((error) => { console.error('Konfigurasi iklan Aurora Media gagal dimuat:', error); });
+    return () => { active = false; };
+  }, [site]);
+
   const updateField = (path, value) => {
     const pathSegments = Array.isArray(path) ? path : path.split('.');
     if (pathSegments[0] === 'contact' || pathSegments[0] === 'whatsapp') {
@@ -905,11 +919,16 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
         whatsappNumber: nextData.whatsapp?.number ?? '',
         whatsappMessage: nextData.whatsapp?.message ?? '',
       });
+      if (site === 'admin') {
+        await portalAdsApi.updateConfig(sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY), nextData.ads);
+      }
       setFormData(nextData);
       setEditorError('');
-      setEditorMessage('Perubahan dipublikasikan; nomor telepon dan WhatsApp tersinkron ke semua domain situs ini.');
+      setEditorMessage(site === 'admin'
+        ? 'Konten dan konfigurasi iklan berhasil dipublikasikan; nomor telepon dan WhatsApp tersinkron ke semua domain situs ini.'
+        : 'Perubahan dipublikasikan; nomor telepon dan WhatsApp tersinkron ke semua domain situs ini.');
     } catch (error) {
-      setEditorError(`Perubahan lokal tersimpan, tetapi sinkronisasi kontak gagal: ${error.message}`);
+      setEditorError(`Perubahan lokal tersimpan, tetapi sinkronisasi konfigurasi gagal: ${error.message}`);
     }
   };
 
@@ -1200,6 +1219,18 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             <section className="admin-panel-block">
               <h3>Ad Slot Manager</h3>
               <p className="muted">Aktifkan, ubah materi, dan atur tautan setiap slot iklan.</p>
+              <div className="form-grid portal-ad-page-settings">
+                <label>Judul halaman iklan<input value={formData.ads.page.title || ''} onChange={(event) => updateField('ads.page.title', event.target.value)} /></label>
+                <label className="portal-form-wide">Deskripsi halaman iklan<input value={formData.ads.page.description || ''} onChange={(event) => updateField('ads.page.description', event.target.value)} /></label>
+                <label>Layout halaman iklan
+                  <select value={formData.ads.page.layout || 'grid'} onChange={(event) => updateField('ads.page.layout', event.target.value)}>
+                    <option value="grid">Grid</option>
+                    <option value="list">Daftar</option>
+                    <option value="featured">Unggulan</option>
+                  </select>
+                </label>
+                <a className="portal-ad-preview-link" href="/iklan" target="_blank" rel="noopener noreferrer">Pratinjau halaman iklan ↗</a>
+              </div>
               <div className="portal-admin-ad-grid">
                 {[
                   ['top', 'Top Banner'],
@@ -1214,6 +1245,22 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
                     <label>Judul<input value={formData.ads[key].title || ''} onChange={(event) => updateField(`ads.${key}.title`, event.target.value)} /></label>
                     <label>URL gambar<input value={formData.ads[key].image || ''} onChange={(event) => updateField(`ads.${key}.image`, event.target.value)} /></label>
                     <label>URL tujuan<input value={formData.ads[key].href || ''} onChange={(event) => updateField(`ads.${key}.href`, event.target.value)} /></label>
+                    <label>Format iklan
+                      <select value={formData.ads[key].format || 'card'} onChange={(event) => updateField(`ads.${key}.format`, event.target.value)}>
+                        <option value="banner">Banner</option>
+                        <option value="card">Kartu</option>
+                        <option value="link">Tautan</option>
+                      </select>
+                    </label>
+                    <label>Animasi iklan
+                      <select value={formData.ads[key].animation || 'fade'} onChange={(event) => updateField(`ads.${key}.animation`, event.target.value)}>
+                        <option value="none">Tanpa animasi</option>
+                        <option value="fade">Fade</option>
+                        <option value="rise">Naik</option>
+                        <option value="float">Mengambang</option>
+                      </select>
+                    </label>
+                    <label>Durasi tayang (detik)<input type="number" min="1" max="120" value={formData.ads[key].duration ?? 8} onChange={(event) => updateField(`ads.${key}.duration`, Number(event.target.value))} /></label>
                   </fieldset>
                 ))}
               </div>
@@ -1486,6 +1533,60 @@ const LegacyPortalHome = () => {
   );
 };
 
+const PortalHomeAdCarousel = ({ ads, animationsEnabled }) => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [rotationPaused, setRotationPaused] = useState(false);
+  const advertisements = useMemo(() => Object.entries(ads).filter(([key, ad]) => key !== 'page' && ad.enabled), [ads]);
+  const activeAdvertisement = advertisements.length ? advertisements[activeIndex % advertisements.length] : null;
+  const page = ads.page;
+
+  useEffect(() => {
+    if (rotationPaused || advertisements.length < 2 || !activeAdvertisement) return undefined;
+    const duration = Math.min(120, Math.max(1, Number(activeAdvertisement[1].duration) || 8));
+    const timer = window.setTimeout(() => setActiveIndex((index) => (index + 1) % advertisements.length), duration * 1000);
+    return () => window.clearTimeout(timer);
+  }, [activeAdvertisement, advertisements.length, rotationPaused]);
+
+  if (!activeAdvertisement) return null;
+
+  const [key, ad] = activeAdvertisement;
+  const href = resolveBrandHref(isValidPortalPartnerHref(ad.href) ? ad.href : '#');
+  const external = /^https?:\/\//i.test(href);
+
+  return (
+    <section className="portal-home-ad-section" aria-labelledby="portal-home-ad-title">
+      <div className="container">
+        <div className="portal-home-ad-heading">
+          <p className="eyebrow">PROMOSI PILIHAN</p>
+          <h2 id="portal-home-ad-title">{page.title}</h2>
+          <p>{page.description}</p>
+        </div>
+        <div className={`portal-ad-display${animationsEnabled ? '' : ' portal-ad-motion-off'}`} aria-label="Iklan partner Aurora Media">
+          <div className={`portal-ad-listings portal-ad-layout-${page.layout || 'grid'}`}>
+            <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>
+              {ad.image ? <img src={ad.image} alt="" loading="lazy" /> : null}
+              <span className="portal-ad-listing-copy">
+                <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>
+                <strong>{ad.title || 'Jelajahi website partner'}</strong>
+                <span>Lihat website <span aria-hidden="true">↗</span></span>
+              </span>
+              <span className="portal-ad-listing-index">{String(activeIndex + 1).padStart(2, '0')} / {String(advertisements.length).padStart(2, '0')}</span>
+            </a>
+          </div>
+          {advertisements.length > 1 ? (
+            <div className="portal-ads-controls">
+              <button type="button" onClick={() => setActiveIndex((activeIndex + advertisements.length - 1) % advertisements.length)} aria-label="Iklan sebelumnya">←</button>
+              <span>{String(activeIndex + 1).padStart(2, '0')} / {String(advertisements.length).padStart(2, '0')}</span>
+              <button type="button" onClick={() => setActiveIndex((activeIndex + 1) % advertisements.length)} aria-label="Iklan berikutnya">→</button>
+              <button type="button" onClick={() => setRotationPaused((paused) => !paused)}>{rotationPaused ? 'Lanjutkan rotasi' : 'Jeda rotasi'}</button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const PortalHome = () => {
   const [portalData, setPortalData] = useState(() => normalizePortalData(loadData(storage.portal, defaultPortalData)));
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1502,6 +1603,18 @@ const PortalHome = () => {
         }
       })
       .catch((error) => { console.error('Kontak publik portal gagal dimuat dari API:', error); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    portalAdsApi.publicConfig()
+      .then((result) => {
+        if (active && result?.ads) {
+          setPortalData((current) => normalizePortalData({ ...current, ads: result.ads }));
+        }
+      })
+      .catch((error) => { console.error('Konfigurasi iklan Aurora Media gagal dimuat:', error); });
     return () => { active = false; };
   }, []);
 
@@ -1556,6 +1669,7 @@ const PortalHome = () => {
   const navLinks = [
     { href: '/', label: 'Beranda', icon: 'home' },
     { href: '/beriklan', label: 'Beriklan', icon: 'advertise' },
+    { href: '/iklan', label: 'Iklan', icon: 'advertise' },
     { href: '/kontak', label: 'Kontak', icon: 'contact' },
     { href: '/faq', label: 'FAQ', icon: 'faq' },
   ];
@@ -1663,6 +1777,7 @@ const PortalHome = () => {
             </div>
           </div>
         </section>
+        <PortalHomeAdCarousel ads={portalData.ads} animationsEnabled={theme.animations !== false && theme.elementAnimations?.ads !== false} />
         <PortalPartnerTestimonials />
       </main>
 
@@ -1777,6 +1892,7 @@ const PortalInfoPage = ({ page }) => {
           <nav id="portal-navigation" className={`nav-links portal-nav-links ${menuOpen ? 'is-open' : ''}`} aria-label="Navigasi utama">
             <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>Beranda</a>
             <a href="/beriklan" aria-current={isAdvertisePage ? 'page' : undefined} onClick={(event) => { event.preventDefault(); setMenuOpen(false); navigate('/beriklan'); }}>Beriklan</a>
+            <a href="/iklan" onClick={(event) => { event.preventDefault(); setMenuOpen(false); navigate('/iklan'); }}>Iklan</a>
             <a href="/kontak" aria-current={isContactPage ? 'page' : undefined} onClick={(event) => { event.preventDefault(); setMenuOpen(false); navigate('/kontak'); }}>Kontak</a>
             <a href="/faq" aria-current={!isAdvertisePage && !isContactPage ? 'page' : undefined} onClick={(event) => { event.preventDefault(); setMenuOpen(false); navigate('/faq'); }}>FAQ</a>
           </nav>
@@ -1893,6 +2009,122 @@ const PortalInfoPage = ({ page }) => {
             <a href={`mailto:${portalData.contact.email}`} aria-label={`Email ${portalData.contact.email}`}>✉</a>
             <a href={whatsappHref} target="_blank" rel="noopener noreferrer" aria-label="Hubungi melalui WhatsApp">◉</a>
           </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+const PortalAdsPage = () => {
+  const [portalData, setPortalData] = useState(() => normalizePortalData(loadData(storage.portal, defaultPortalData)));
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [rotationPaused, setRotationPaused] = useState(false);
+  const { theme } = portalData;
+  const page = portalData.ads.page;
+  const advertisements = useMemo(() => Object.entries(portalData.ads).filter(([key, ad]) => key !== 'page' && ad.enabled), [portalData.ads]);
+  const activeAdvertisement = advertisements.length ? advertisements[activeIndex % advertisements.length] : null;
+  const portalStyle = {
+    '--primary': theme.primary,
+    '--accent': theme.accent,
+    '--portal-surface': theme.secondary,
+    '--portal-background': theme.background,
+    '--portal-radius': `${theme.radius}px`,
+    '--portal-gap': `${theme.spacing}px`,
+    '--portal-heading-font': `'${theme.headingFont}', Georgia, serif`,
+    '--portal-body-font': `'${theme.bodyFont}', sans-serif`,
+  };
+
+  useEffect(() => {
+    let active = true;
+    portalAdsApi.publicConfig()
+      .then((result) => {
+        if (active && result?.ads) {
+          setPortalData((current) => normalizePortalData({ ...current, ads: result.ads }));
+        }
+      })
+      .catch((error) => { console.error('Konfigurasi iklan Aurora Media gagal dimuat:', error); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (rotationPaused || advertisements.length < 2 || !activeAdvertisement) return undefined;
+    const duration = Math.min(120, Math.max(1, Number(activeAdvertisement[1].duration) || 8));
+    const timer = window.setTimeout(() => setActiveIndex((index) => (index + 1) % advertisements.length), duration * 1000);
+    return () => window.clearTimeout(timer);
+  }, [activeAdvertisement, advertisements.length, rotationPaused]);
+
+  const showAdvertisement = (index) => {
+    setActiveIndex((index + advertisements.length) % advertisements.length);
+  };
+
+  return (
+    <div className={`site-shell theme-portal portal-home portal-info-page portal-ads-page portal-preset-${(theme.preset || portalPresets[5].id).replace(/[^a-z0-9-]/g, '')} ${theme.animations === false || theme.elementAnimations?.ads === false ? 'portal-ad-motion-off' : ''}`} style={portalStyle}>
+      <SeoHead siteId="portal" isHomePage={false} title={`${page.title} | ${portalData.siteName}`} description={page.description || portalData.seo.description} keywords={portalData.seo.keywords} image={portalData.hero.image} siteName={portalData.siteName} noIndex={portalData.seo.noIndex} canonicalUrl={portalData.seo.canonicalUrl} />
+      <header className="topbar portal-topbar">
+        <div className="container nav-wrap portal-nav-wrap">
+          <a className="brand portal-brand" href="/">
+            <span className="logo-mark">{portalData.logoImage ? <img src={portalData.logoImage} alt="" /> : portalData.logo}</span>
+            <span>{portalData.siteName}<small>CREATIVE COLLECTIVE</small></span>
+          </a>
+          <button className="portal-menu-toggle" type="button" aria-label={menuOpen ? 'Tutup menu' : 'Buka menu'} aria-expanded={menuOpen} aria-controls="portal-navigation" onClick={() => setMenuOpen((open) => !open)}>
+            <span /><span /><span />
+          </button>
+          <nav id="portal-navigation" className={`nav-links portal-nav-links ${menuOpen ? 'is-open' : ''}`} aria-label="Navigasi utama">
+            <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>Beranda</a>
+            <a href="/beriklan" onClick={(event) => { event.preventDefault(); navigate('/beriklan'); }}>Beriklan</a>
+            <a href="/iklan" aria-current="page">Iklan</a>
+            <a href="/kontak" onClick={(event) => { event.preventDefault(); navigate('/kontak'); }}>Kontak</a>
+            <a href="/faq" onClick={(event) => { event.preventDefault(); navigate('/faq'); }}>FAQ</a>
+          </nav>
+        </div>
+      </header>
+      <main className="portal-ads-main">
+        <section className="portal-ads-hero">
+          <div className="container">
+            <p className="eyebrow">PARTNER &amp; REKOMENDASI</p>
+            <h1>{page.title}</h1>
+            <p>{page.description}</p>
+          </div>
+        </section>
+        <section className="container portal-ad-display" aria-label="Iklan Aurora Media">
+          {activeAdvertisement ? (
+            <>
+              <div className={`portal-ad-listings portal-ad-layout-${page.layout || 'grid'}`}>
+                {(() => {
+                  const [key, ad] = activeAdvertisement;
+                  const rawHref = isValidPortalPartnerHref(ad.href) ? ad.href : '#';
+                  const href = resolveBrandHref(rawHref);
+                  const external = /^https?:\/\//i.test(href);
+                  return (
+                    <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>
+                      {ad.image ? <img src={ad.image} alt="" loading="lazy" /> : null}
+                      <span className="portal-ad-listing-copy">
+                        <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>
+                        <strong>{ad.title || 'Jelajahi website partner'}</strong>
+                        <span>Lihat website <span aria-hidden="true">↗</span></span>
+                      </span>
+                      <span className="portal-ad-listing-index">{String(activeIndex + 1).padStart(2, '0')} / {String(advertisements.length).padStart(2, '0')}</span>
+                    </a>
+                  );
+                })()}
+              </div>
+              {advertisements.length > 1 ? (
+                <div className="portal-ads-controls">
+                  <button type="button" onClick={() => showAdvertisement(activeIndex - 1)} aria-label="Iklan sebelumnya">←</button>
+                  <span>{String(activeIndex + 1).padStart(2, '0')} / {String(advertisements.length).padStart(2, '0')}</span>
+                  <button type="button" onClick={() => showAdvertisement(activeIndex + 1)} aria-label="Iklan berikutnya">→</button>
+                  <button type="button" onClick={() => setRotationPaused((paused) => !paused)}>{rotationPaused ? 'Lanjutkan rotasi' : 'Jeda rotasi'}</button>
+                </div>
+              ) : null}
+            </>
+          ) : <p className="portal-ads-empty">Belum ada iklan aktif saat ini.</p>}
+        </section>
+      </main>
+      <footer className="portal-home-footer">
+        <div className="container portal-footer-inner">
+          <a className="brand portal-brand" href="/">{portalData.siteName}</a>
+          <a className="portal-ads-footer-link" href="/beriklan">Promosikan brand Anda ↗</a>
         </div>
       </footer>
     </div>
@@ -2854,6 +3086,7 @@ function App() {
   if (path === '/nunuy-nadhifa-wedding' || path.startsWith('/nunuy-nadhifa-wedding/')) return <NunuyHome path={path} />;
   if (Object.hasOwn(invitationPages, path)) return <InvitationHome path={path} />;
   if (path === '/beriklan') return <PortalInfoPage page="advertise" />;
+  if (path === '/iklan') return <PortalAdsPage />;
   if (path === '/kontak') return <PortalInfoPage page="contact" />;
   if (path === '/faq') return <PortalInfoPage page="faq" />;
 

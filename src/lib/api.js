@@ -171,6 +171,16 @@ export const siteContactApi = {
   }),
 };
 
+export const portalAdsApi = {
+  publicConfig: () => apiRequest('/public/portal-ads'),
+  adminConfig: (token) => apiRequest('/admin/portal-ads', { token }),
+  updateConfig: (token, ads) => apiRequest('/admin/portal-ads', {
+    token,
+    method: 'PUT',
+    body: JSON.stringify(ads),
+  }),
+};
+
 export const seoApi = {
   publicConfig: (site) => apiRequest(`/public/seo/${encodeURIComponent(site)}`),
 };

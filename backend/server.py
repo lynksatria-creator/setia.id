@@ -201,6 +201,53 @@ class SiteContactConfigUpdate(BaseModel):
     whatsapp_message: str = Field(default="", alias="whatsappMessage", max_length=1000)
 
 
+class PortalAdPageConfig(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+    layout: Literal["grid", "list", "featured"] = "grid"
+
+
+class PortalAdSlotConfig(BaseModel):
+    enabled: bool = False
+    label: str = Field(default="", max_length=120)
+    title: str = Field(default="", max_length=180)
+    image: str = Field(default="", max_length=4_000_000)
+    href: str = Field(default="", max_length=2048)
+    format: Literal["banner", "card", "link"] = "card"
+    animation: Literal["none", "fade", "rise", "float"] = "fade"
+    duration: int = Field(default=8, ge=1, le=120)
+
+    @field_validator("href")
+    @classmethod
+    def validate_ad_href(cls, value):
+        value = value.strip()
+        if not value or value.startswith("#") or (value.startswith("/") and not value.startswith("//")):
+            return value
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("Tautan iklan harus berupa URL HTTP atau HTTPS yang valid.")
+        return value
+
+    @field_validator("image")
+    @classmethod
+    def validate_ad_image(cls, value):
+        value = value.strip()
+        if not value or value.startswith("data:image/"):
+            return value
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("Gambar iklan harus berupa URL HTTP atau HTTPS yang valid.")
+        return value
+
+
+class PortalAdsConfigUpdate(BaseModel):
+    page: PortalAdPageConfig
+    top: PortalAdSlotConfig
+    midFeed: PortalAdSlotConfig
+    sidebar: PortalAdSlotConfig
+    floatingBottom: PortalAdSlotConfig
+
+
 SEO_SITE_IDS = {"portal", "gibrig", "nunuy", "invitation"}
 
 
@@ -1159,6 +1206,39 @@ async def update_site_contact(
         upsert=True,
     )
     return {"site": site, "contact": config}
+
+
+@api_router.get("/public/portal-ads")
+async def get_public_portal_ads():
+    saved = await db.platform_settings.find_one({"key": "portal-ads"}, {"_id": 0, "key": 0})
+    if saved is None:
+        return {"ads": None}
+    config = {key: value for key, value in saved.items() if key != "key"}
+    return {"ads": config}
+
+
+@api_router.get("/admin/portal-ads")
+async def get_admin_portal_ads(_admin=Depends(require_super_admin)):
+    saved = await db.platform_settings.find_one({"key": "portal-ads"}, {"_id": 0, "key": 0})
+    if saved is None:
+        return {"ads": None}
+    config = {key: value for key, value in saved.items() if key != "key"}
+    return {"ads": config}
+
+
+@api_router.put("/admin/portal-ads")
+async def update_admin_portal_ads(payload: PortalAdsConfigUpdate, _admin=Depends(require_super_admin)):
+    config = payload.model_dump()
+    await db.platform_settings.update_one(
+        {"key": "portal-ads"},
+        {"$set": {"key": "portal-ads", **config}},
+        upsert=True,
+    )
+    await write_audit_log(_admin, "portal.ads.updated", "portal_ads", "portal", {
+        "enabled_slots": [key for key, value in config.items() if key != "page" and value["enabled"]],
+        "layout": config["page"]["layout"],
+    })
+    return {"ads": config}
 
 
 @api_router.post("/admin/login")

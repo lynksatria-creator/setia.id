@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ExcelJS from 'exceljs';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
@@ -21,23 +21,96 @@ test('renders the Aurora Media reference landing page with working partner links
   window.history.pushState({}, '', '/');
   render(<App />);
 
-  expect(screen.getAllByText(/portal\.id/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/Aurora Media/i).length).toBeGreaterThan(0);
   expect(screen.getByRole('heading', { name: /temukan partner terbaik/i })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Kolaborasi untuk Momen Berkesan' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Nunuy Nadhifa Wedding' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Entertainment Musik' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Undangan Digital' })).toBeDefined();
-  expect(screen.getByRole('navigation', { name: 'Navigasi utama' }).querySelectorAll('a')).toHaveLength(4);
+  expect(screen.getByRole('navigation', { name: 'Navigasi utama' }).querySelectorAll('a')).toHaveLength(5);
   expect(screen.getByRole('link', { name: 'Beriklan' }).getAttribute('href')).toBe('/beriklan');
+  expect(screen.getByRole('link', { name: 'Iklan' }).getAttribute('href')).toBe('/iklan');
   expect(screen.getByRole('link', { name: 'Kontak' }).getAttribute('href')).toBe('/kontak');
   expect(screen.getByRole('link', { name: 'FAQ' }).getAttribute('href')).toBe('/faq');
   expect(screen.queryByRole('heading', { name: /menghubungkan kreativitas/i })).toBeNull();
   expect(screen.queryByRole('heading', { name: /brand anda layak dikenal lebih luas/i })).toBeNull();
   const weddingLink = screen.getAllByRole('link', { name: /kunjungi website/i })[0];
-  expect(weddingLink.getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
+  expect(weddingLink.getAttribute('href')).toBe('https://wediing.auroramedia.online/nunuy-nadhifa-wedding');
   expect(weddingLink.getAttribute('target')).toBe('_blank');
   expect(weddingLink.getAttribute('rel')).toBe('noopener noreferrer');
-  expect(document.title).toBe('Aurora Media | Rekomendasi Wedding, Musik & Undangan Digital');
+  expect(document.title).toBe('Aurora Media | Wedding, Musik & Undangan Digital');
+});
+
+test('Aurora homepage shows its rotating ad carousel immediately after partner cards', async () => {
+  const previousPortalConfig = localStorage.getItem('portal-cms');
+  localStorage.removeItem('portal-cms');
+  const ads = {
+    page: { title: 'Sponsor Beranda', description: 'Partner pilihan Aurora Media.', layout: 'featured' },
+    top: { enabled: true, label: 'SPONSOR 1', title: 'Studio Momen', href: 'https://studio.example', duration: 1, format: 'banner', animation: 'fade' },
+    midFeed: { enabled: true, label: 'SPONSOR 2', title: 'Ruang Cerita', href: 'https://cerita.example', duration: 5, format: 'card', animation: 'rise' },
+  };
+  vi.stubGlobal('fetch', vi.fn(async (url) => {
+    const path = new URL(url, window.location.origin).pathname;
+    const payload = path === '/api/public/portal-ads'
+      ? { ads }
+      : path.startsWith('/api/public/testimonials/')
+        ? []
+        : path.startsWith('/api/public/seo/')
+          ? { seo: null }
+          : { contact: null };
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => payload };
+  }));
+  window.history.pushState({}, '', '/');
+  const page = render(<App />);
+
+  expect(await screen.findByText('Studio Momen')).toBeDefined();
+  expect(page.container.querySelector('#brands').nextElementSibling.classList.contains('portal-home-ad-section')).toBe(true);
+  expect(screen.getByRole('heading', { name: 'Sponsor Beranda' })).toBeDefined();
+  expect(page.container.querySelector('.portal-home-ad-section .portal-ad-listing').getAttribute('href')).toBe('https://studio.example');
+  expect(await screen.findByText('Ruang Cerita', {}, { timeout: 2500 })).toBeDefined();
+
+  page.unmount();
+  if (previousPortalConfig === null) localStorage.removeItem('portal-cms');
+  else localStorage.setItem('portal-cms', previousPortalConfig);
+  vi.unstubAllGlobals();
+});
+
+test('Aurora Media rotates enabled advertisements after each configured duration', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ ads: null, seo: null }),
+  })));
+  localStorage.setItem('portal-cms', JSON.stringify({
+    ads: {
+      page: { title: 'Partner Pilihan', description: 'Brand untuk momen istimewa.', layout: 'featured' },
+      top: { enabled: true, label: 'PARTNER PILIHAN', title: 'Studio Momen', image: 'https://example.com/banner.jpg', href: 'https://studio.example', format: 'banner', animation: 'rise', duration: 2 },
+      midFeed: { enabled: true, label: 'REKOMENDASI', title: 'Ruang Cerita', href: 'https://cerita.example', format: 'card', animation: 'fade', duration: 5 },
+    },
+  }));
+  window.history.pushState({}, '', '/iklan');
+  const page = render(<App />);
+
+  expect(screen.getByRole('heading', { name: 'Partner Pilihan' })).toBeDefined();
+  expect(screen.getByText('Studio Momen')).toBeDefined();
+  const banner = page.container.querySelector('.portal-ad-listing');
+  expect(banner.getAttribute('href')).toBe('https://studio.example');
+  expect(banner.getAttribute('target')).toBe('_blank');
+  expect(banner.getAttribute('rel')).toBe('noopener noreferrer');
+  expect(banner.className).toContain('portal-ad-format-banner');
+  expect(banner.className).toContain('portal-ad-animation-rise');
+
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(screen.getByText('Ruang Cerita')).toBeDefined();
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+  expect(screen.getByText('Studio Momen')).toBeDefined();
+
+  page.unmount();
+  localStorage.removeItem('portal-cms');
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 test('super admin SEO dashboard saves independent website metadata to the backend', async () => {
@@ -159,9 +232,9 @@ test('FAQ page renders all five sections and provides a contact link', () => {
   expect(screen.getByRole('heading', { name: 'Frequently Asked Questions (FAQ)' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'A. Tentang Aurora Media' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'E. Kontak dan Informasi' })).toBeDefined();
-  expect(screen.getByText(/Portal\.id adalah platform creative collective yang menghubungkan berbagai brand/)).toBeDefined();
+  expect(screen.getByText(/Aurora Media adalah platform creative collective yang menghubungkan berbagai brand/)).toBeDefined();
   expect(screen.getByRole('link', { name: /hubungi tim kami/i }).getAttribute('href')).toBe('/kontak');
-  expect(screen.getByRole('navigation', { name: 'Navigasi utama' }).querySelectorAll('a')).toHaveLength(4);
+  expect(screen.getByRole('navigation', { name: 'Navigasi utama' }).querySelectorAll('a')).toHaveLength(5);
 });
 
 test('mobile navigation opens and closes from its accessible toggle', () => {
@@ -234,7 +307,7 @@ test('portal admin can add, edit, publish, and remove advertised websites', asyn
   expect(screen.getByRole('button', { name: /elastic spring motion/i })).toBeDefined();
   expect(screen.getByRole('button', { name: /ekspor json/i })).toBeDefined();
   expect(screen.getByRole('button', { name: 'Tambah website' })).toBeDefined();
-  expect(screen.getByRole('heading', { name: 'SEO & social media Aurora Media' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Social media Aurora Media' })).toBeDefined();
   expect(screen.getByText(/impor json/i)).toBeDefined();
   fireEvent.change(screen.getAllByLabelText('URL website partner')[0], { target: { value: 'https://nunuy.example' } });
   fireEvent.change(screen.getAllByLabelText('Kategori')[0], { target: { value: 'WEDDING ORGANIZER · PILIHAN' } });
@@ -1410,10 +1483,13 @@ test('legacy admin routes require the unified super admin session', () => {
 test('one super admin session opens the Portal admin link', () => {
   sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/portal-admin');
-  renderApp();
+  const admin = renderApp();
 
   expect(screen.getByRole('heading', { name: 'Portal Admin' })).toBeDefined();
   expect(screen.getByRole('navigation', { name: 'Navigasi super admin' })).toBeDefined();
+  expect(admin.container.querySelector('.portal-ad-page-settings input')).not.toBeNull();
+  expect(admin.container.querySelector('.portal-ad-page-settings select').value).toBe('grid');
+  expect(admin.container.querySelectorAll('.portal-admin-ad input[type="number"]')).toHaveLength(4);
   sessionStorage.clear();
 });
 
