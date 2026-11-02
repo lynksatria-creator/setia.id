@@ -9091,9 +9091,9 @@ input {
 
 .portal-home .portal-partner-mark {
   position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 50%;
+  z-index: 0;
+  top: 17%;
+  left: 78%;
   display: grid;
   width: 67px;
   height: 67px;
@@ -9106,7 +9106,7 @@ input {
   font-family: var(--portal-heading-font);
   font-size: 1.45rem;
   pointer-events: none;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, 0);
 }
 
 .portal-home .portal-showcase-copy {
