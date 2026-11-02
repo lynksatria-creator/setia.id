@@ -947,6 +947,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       story: form.story,
       opening_text: form.opening_text,
       music_url: form.music_url,
+      music_catalog_id: form.music_catalog_id,
       video_url: form.video_url,
       rsvp_url: form.rsvp_url,
       gallery: form.gallery.split('\n').map((url) => url.trim()).filter(Boolean),

@@ -5,6 +5,7 @@ import './pages/Invitation.css';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import InvitationUnderDevelopment from './pages/InvitationUnderDevelopment';
+import Auth from './pages/Auth';
 import Blog, { articleSlug } from './pages/Blog';
 import BlogDetail from './pages/BlogDetail';
 import Pricing from './pages/Pricing';
@@ -2123,7 +2124,12 @@ const GibrigHome = ({ path }) => {
   useEffect(() => {
     let active = true;
     siteContactApi.get('gibrig')
-      .then(({ contact }) => { if (active && contact) setData((current) => mergeSiteContact(current, contact)); })
+      .then((result) => {
+        const nextContact = result?.contact ?? result;
+        if (active && nextContact) {
+          setData((current) => mergeSiteContact(current, nextContact));
+        }
+      })
       .catch((error) => { console.error('Kontak publik Entertainment Musik gagal dimuat dari API:', error); });
     return () => { active = false; };
   }, []);
@@ -2405,9 +2411,10 @@ const NunuyHome = ({ path }) => {
   useEffect(() => {
     let active = true;
     siteContactApi.get('nunuy')
-      .then(({ contact }) => {
-        if (!active || !contact) return;
-        setData((current) => mergeSiteContact(current, contact));
+      .then((result) => {
+        const nextContact = result?.contact ?? result;
+        if (!active || !nextContact) return;
+        setData((current) => mergeSiteContact(current, nextContact));
       })
       .catch((error) => { console.error('Kontak publik Nunuy gagal dimuat dari API:', error); });
     return () => { active = false; };
@@ -2491,7 +2498,12 @@ const InvitationHome = ({ path = '/undangan' }) => {
   useEffect(() => {
     let active = true;
     siteContactApi.get('invitation')
-      .then(({ contact }) => { if (active && contact) setData((current) => mergeSiteContact(current, contact)); })
+      .then((result) => {
+        const nextContact = result?.contact ?? result;
+        if (active && nextContact) {
+          setData((current) => mergeSiteContact(current, nextContact));
+        }
+      })
       .catch((error) => { console.error('Kontak publik Nuansa Invite gagal dimuat dari API:', error); });
     return () => { active = false; };
   }, []);
@@ -2732,7 +2744,8 @@ function App() {
   };
 
   if (path === '/undangan-auth') {
-    return <InvitationUnderDevelopment />;
+    const nextPath = new URLSearchParams(window.location.search).get('next');
+    return <Auth onBack={() => navigate('/undangan')} onSuccess={() => navigate(nextPath || '/undangan-dashboard')} />;
   }
 
   if (path === '/undangan-dashboard') {
