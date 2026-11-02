@@ -9091,9 +9091,9 @@ input {
 
 .portal-home .portal-partner-mark {
   position: absolute;
-  z-index: 0;
-  top: 17%;
-  left: 78%;
+  z-index: 1;
+  top: 18%;
+  left: 38%;
   display: grid;
   width: 67px;
   height: 67px;
@@ -9116,7 +9116,7 @@ input {
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  padding: 13px 15px 13px 29px;
+  padding: 13px 24px 13px 40px;
 }
 
 .portal-home .portal-partner-category {
