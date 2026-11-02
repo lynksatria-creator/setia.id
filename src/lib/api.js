@@ -42,6 +42,8 @@ export async function apiRequest(path, { token, ...options } = {}) {
 
 export const authApi = {
   register: (data) => apiRequest('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  resendRegistrationCode: (data) => apiRequest('/auth/register/resend', { method: 'POST', body: JSON.stringify(data) }),
+  verifyRegistrationCode: (data) => apiRequest('/auth/register/verify', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => apiRequest('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   currentUser: (token) => apiRequest('/auth/me', { token }),
 };
@@ -59,6 +61,16 @@ export const testimonialsApi = {
   createPublic: (data) => apiRequest('/public/testimonials', { method: 'POST', body: JSON.stringify(data) }),
   listAdmin: (token, site) => apiRequest(`/admin/testimonials${site ? `?site=${encodeURIComponent(site)}` : ''}`, { token }),
   moderate: (token, id, status) => apiRequest(`/admin/testimonials/${encodeURIComponent(id)}`, {
+    token,
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  }),
+};
+
+export const nunuyConsultationsApi = {
+  createPublic: (data) => apiRequest('/public/nunuy-consultations', { method: 'POST', body: JSON.stringify(data) }),
+  listAdmin: (token) => apiRequest('/admin/nunuy-consultations', { token }),
+  updateStatus: (token, id, status) => apiRequest(`/admin/nunuy-consultations/${encodeURIComponent(id)}`, {
     token,
     method: 'PATCH',
     body: JSON.stringify({ status }),
@@ -108,10 +120,10 @@ export const guestbookApi = {
 };
 
 export const paymentsApi = {
-  create: (token, invitationId, paymentMethodId, mobile, planId) => apiRequest(`/invitations/${invitationId}/payments`, {
+  create: (token, invitationId, paymentMethodId, planId) => apiRequest(`/invitations/${invitationId}/payments`, {
     token,
     method: 'POST',
-    body: JSON.stringify({ payment_method_id: paymentMethodId, mobile, ...(planId ? { plan_id: planId } : {}) }),
+    body: JSON.stringify({ payment_method_id: paymentMethodId, ...(planId ? { plan_id: planId } : {}) }),
   }),
   get: (token, id) => apiRequest(`/payments/${id}`, { token }),
   submitTransferReference: (token, id, transferReference) => apiRequest(`/payments/${id}/proof`, {
@@ -125,6 +137,12 @@ export const adminApi = {
   login: (data) => apiRequest('/admin/login', { method: 'POST', body: JSON.stringify(data) }),
   billingConfig: (token) => apiRequest('/admin/billing/config', { token }),
   updateBillingConfig: (token, data) => apiRequest('/admin/billing/config', { token, method: 'PUT', body: JSON.stringify(data) }),
+  seoConfig: (token, site) => apiRequest(`/admin/seo/${encodeURIComponent(site)}`, { token }),
+  updateSeoConfig: (token, site, data) => apiRequest(`/admin/seo/${encodeURIComponent(site)}`, {
+    token,
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
   demoAccounts: (token) => apiRequest('/admin/demo-accounts', { token }),
   createDemoAccount: (token, data) => apiRequest('/admin/demo-accounts', { token, method: 'POST', body: JSON.stringify(data) }),
   affiliateAccounts: (token) => apiRequest('/admin/affiliate-accounts', { token }),
@@ -142,6 +160,19 @@ export const adminApi = {
   updateActivation: (token, id, data) => apiRequest(`/admin/invitations/${id}/activation`, { token, method: 'PATCH', body: JSON.stringify(data) }),
   payments: (token) => apiRequest('/admin/payments', { token }),
   approvePayment: (token, id) => apiRequest(`/admin/payments/${id}/approve`, { token, method: 'POST' }),
+};
+
+export const siteContactApi = {
+  get: (site) => apiRequest(`/public/site-contact/${encodeURIComponent(site)}`),
+  update: (token, site, contact) => apiRequest(`/admin/site-contact/${encodeURIComponent(site)}`, {
+    token,
+    method: 'PUT',
+    body: JSON.stringify(contact),
+  }),
+};
+
+export const seoApi = {
+  publicConfig: (site) => apiRequest(`/public/seo/${encodeURIComponent(site)}`),
 };
 
 export const statusApi = {

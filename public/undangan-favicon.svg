@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Invite</title>
+  <circle cx="256" cy="256" r="238" fill="#fffdf7" stroke="#c6a45e" stroke-width="14"/>
+  <circle cx="256" cy="256" r="216" fill="none" stroke="#102653" stroke-width="12"/>
+  <circle cx="256" cy="256" r="180" fill="#173e70"/>
+  <rect x="187" y="119" width="138" height="266" rx="22" fill="#fffdf7" stroke="#c6a45e" stroke-width="12"/>
+  <rect x="204" y="145" width="104" height="198" rx="8" fill="#f5f0e2"/>
+  <path d="M221 178h70M221 198h54M221 228h70M221 248h54" fill="none" stroke="#c6a45e" stroke-width="9" stroke-linecap="round"/>
+  <path d="m161 257 95 69 95-69v84l-95 70-95-70Z" fill="#102653" stroke="#c6a45e" stroke-width="12" stroke-linejoin="round"/>
+  <path d="m161 257 95 71 95-71" fill="none" stroke="#fffdf7" stroke-width="10" stroke-linejoin="round"/>
+  <circle cx="256" cy="366" r="7" fill="#c6a45e"/>
+</svg>

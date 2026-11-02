@@ -13,11 +13,14 @@ from backend import server
 
 
 class FakeHttpResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
     def raise_for_status(self):
         return None
 
     def json(self):
-        return {"statusCode": 200, "data": {"id": "invoice-1", "transactionId": "transaction-1", "link": "https://merchant.myr.id/invoices/invoice-1"}}
+        return self.payload
 
 
 class FakeHttpClient:
@@ -34,7 +37,11 @@ class FakeHttpClient:
 
     async def request(self, method, url, **kwargs):
         self.calls.append((method, url, kwargs))
-        return FakeHttpResponse()
+        payload = {"transaction_status": "pending"} if method == "GET" else {
+            "token": "snap-token",
+            "redirect_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/snap-token",
+        }
+        return FakeHttpResponse(payload)
 
 
 class FakeCollection:
@@ -52,6 +59,49 @@ class FakeCollection:
 
     async def insert_one(self, document):
         self.document = copy.deepcopy(document)
+
+
+class FakeRegistrationOtpCollection:
+    def __init__(self):
+        self.documents = {}
+
+    async def create_index(self, *_args, **_kwargs):
+        return None
+
+    async def find_one(self, query, _projection=None):
+        document = self.documents.get(query["email"])
+        return copy.deepcopy(document)
+
+    async def replace_one(self, query, document, upsert=False):
+        assert upsert is True
+        self.documents[query["email"]] = copy.deepcopy(document)
+
+    async def find_one_and_update(self, query, update, return_document):
+        assert return_document == server.ReturnDocument.AFTER
+        document = self.documents.get(query["email"])
+        if document is None or document["attempts"] >= query["attempts"]["$lt"]:
+            return None
+        document["attempts"] += update["$inc"]["attempts"]
+        return copy.deepcopy(document)
+
+    async def delete_one(self, query):
+        self.documents.pop(query["email"], None)
+
+
+class FakeUsersCollection:
+    def __init__(self):
+        self.documents = {}
+
+    async def create_index(self, *_args, **_kwargs):
+        return None
+
+    async def find_one(self, query, _projection=None):
+        return copy.deepcopy(self.documents.get(query["email"]))
+
+    async def insert_one(self, document):
+        if document["email"] in self.documents:
+            raise DuplicateKeyError("duplicate email")
+        self.documents[document["email"]] = copy.deepcopy(document)
 
 
 class FakePackageCapacityLocks:
@@ -172,7 +222,7 @@ class FakeTestimonialCollection:
         return SimpleNamespace(modified_count=1)
 
 
-def test_saved_midtrans_checkout_config_migrates_to_mayar(monkeypatch):
+def test_saved_midtrans_checkout_config_remains_midtrans(monkeypatch):
     config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
     config["payment_methods"][0] = {
         "id": "gopay-qris",
@@ -187,10 +237,27 @@ def test_saved_midtrans_checkout_config_migrates_to_mayar(monkeypatch):
 
     migrated = asyncio.run(server.get_billing_config())
 
-    assert migrated["payment_methods"][0]["provider"] == "mayar"
-    assert migrated["payment_methods"][0]["name"] == "Mayar checkout"
+    assert migrated["payment_methods"][0]["provider"] == "midtrans"
+    assert migrated["payment_methods"][0]["name"] == "Midtrans checkout"
     assert "payment_code" not in migrated["payment_methods"][0]
     assert migrated["payment_methods"][1]["provider"] == "manual"
+
+
+def test_saved_mayar_checkout_config_migrates_to_midtrans(monkeypatch):
+    config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    config["payment_methods"][0] = {
+        "id": "mayar",
+        "name": "Mayar checkout",
+        "provider": "mayar",
+        "enabled": True,
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=FakeCollection(config)))
+
+    migrated = asyncio.run(server.get_billing_config())
+
+    assert migrated["payment_methods"][0]["provider"] == "midtrans"
+    assert migrated["payment_methods"][0]["name"] == "Midtrans checkout"
+    assert migrated["schema_version"] == 4
 
 
 def test_legacy_billing_config_gets_package_and_reseller_entitlements(monkeypatch):
@@ -207,7 +274,7 @@ def test_legacy_billing_config_gets_package_and_reseller_entitlements(monkeypatc
     migrated = asyncio.run(server.get_billing_config())
 
     plans = {plan["id"]: plan for plan in migrated["plans"]}
-    assert migrated["schema_version"] == 3
+    assert migrated["schema_version"] == 4
     assert plans["basic"]["max_invitations"] == 1
     assert plans["basic"]["bulk_upload_enabled"] is False
     assert plans["basic"]["max_recipients"] == 1
@@ -408,11 +475,133 @@ class FakeWritableCollection:
         self.documents.append(copy.deepcopy(document))
 
 
+class FakeConsultationCollection:
+    def __init__(self):
+        self.documents = []
+
+    def find(self, _query, _projection=None):
+        return FakeCursor(self.documents)
+
+    async def insert_one(self, document):
+        self.documents.append(copy.deepcopy(document))
+
+    async def find_one(self, query, _projection=None):
+        return next((copy.deepcopy(item) for item in self.documents if item.get("id") == query.get("id")), None)
+
+    async def update_one(self, query, update):
+        item = next((entry for entry in self.documents if entry.get("id") == query.get("id")), None)
+        if item is None:
+            return SimpleNamespace(modified_count=0)
+        changed = any(item.get(key) != value for key, value in update["$set"].items())
+        item.update(update["$set"])
+        return SimpleNamespace(modified_count=int(changed))
+
+
 def test_health_endpoint_is_public():
     response = TestClient(server.app).get("/api/")
 
     assert response.status_code == 200
     assert response.json()["message"] == "Nuansa Invite API is running"
+
+
+def test_seo_config_is_per_site_public_and_admin_managed(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+
+    class SettingsCollection:
+        def __init__(self):
+            self.documents = {}
+
+        async def find_one(self, query, _projection=None):
+            return copy.deepcopy(self.documents.get(query["key"]))
+
+        async def update_one(self, query, update, upsert=False):
+            assert upsert is True
+            self.documents[query["key"]] = copy.deepcopy(update["$set"])
+
+    settings = SettingsCollection()
+    audit_logs = FakeCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=settings, audit_logs=audit_logs))
+    client = TestClient(server.app)
+
+    assert client.get("/api/public/seo/gibrig").json() == {"site": "gibrig", "seo": None}
+    assert client.put("/api/admin/seo/gibrig", json={}).status_code == 401
+
+    token = server.create_access_token("admin@example.com", role="admin")
+    headers = {"Authorization": f"Bearer {token}"}
+    config = {
+        "title": "Gibrig Entertainment | Musik Live Garut",
+        "description": "Hiburan musik live untuk pernikahan dan acara keluarga di Garut bersama Gibrig Entertainment.",
+        "keywords": "musik live Garut, hiburan wedding, Gibrig Entertainment",
+        "canonicalUrl": "https://portal.id/gibrig",
+        "ogImage": "https://portal.id/gibrig-share.jpg",
+        "noIndex": False,
+    }
+    saved = client.put("/api/admin/seo/gibrig", headers=headers, json=config)
+
+    assert saved.status_code == 200
+    assert saved.json() == {"site": "gibrig", "seo": config}
+    assert client.get("/api/public/seo/gibrig").json() == {"site": "gibrig", "seo": config}
+    assert client.get("/api/public/seo/nunuy").json() == {"site": "nunuy", "seo": None}
+    assert audit_logs.document["action"] == "seo.config.updated"
+
+
+def test_seo_config_rejects_non_https_canonical_urls(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    token = server.create_access_token("admin@example.com", role="admin")
+    response = TestClient(server.app).put(
+        "/api/admin/seo/portal",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "Portal SEO title",
+            "description": "Deskripsi SEO cukup lengkap.",
+            "canonicalUrl": "http://portal.id/",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_site_contact_config_is_shared_and_scope_protected(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+
+    class SettingsCollection:
+        def __init__(self):
+            self.documents = {}
+
+        async def find_one(self, query, _projection=None):
+            return copy.deepcopy(self.documents.get(query["key"]))
+
+        async def update_one(self, query, update, upsert=False):
+            assert upsert is True
+            self.documents[query["key"]] = copy.deepcopy(update["$set"])
+
+    settings = SettingsCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=settings))
+    client = TestClient(server.app)
+    config = {
+        "phone": "+62 811-2233-4455",
+        "whatsappNumber": "+62 811-9988-7766",
+        "whatsappMessage": "Halo Nunuy",
+    }
+
+    for site in ("portal", "gibrig", "nunuy", "invitation"):
+        assert client.get(f"/api/public/site-contact/{site}").json() == {"site": site, "contact": None}
+        assert client.put(f"/api/admin/site-contact/{site}", json=config).status_code == 401
+        scope = "all" if site == "portal" else site
+        token = server.create_access_token(f"{site}@example.com", role="admin", scope=scope)
+        headers = {"Authorization": f"Bearer {token}"}
+        saved = client.put(f"/api/admin/site-contact/{site}", headers=headers, json=config)
+
+        assert saved.status_code == 200
+        assert saved.json() == {"site": site, "contact": config}
+        assert client.get(f"/api/public/site-contact/{site}").json() == {"site": site, "contact": config}
+
+    gibrig_token = server.create_access_token("gibrig@example.com", role="admin", scope="gibrig")
+    assert client.put(
+        "/api/admin/site-contact/nunuy",
+        headers={"Authorization": f"Bearer {gibrig_token}"},
+        json=config,
+    ).status_code == 403
 
 
 def test_public_testimonial_requires_admin_approval_and_can_be_hidden(monkeypatch):
@@ -473,6 +662,89 @@ def test_public_testimonial_validates_site_and_content(monkeypatch):
     assert response.status_code == 422
 
 
+def test_website_rating_stays_pending_until_published(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    testimonials = FakeTestimonialCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(testimonials=testimonials))
+    client = TestClient(server.app)
+
+    submitted = client.post("/api/public/testimonials", json={
+        "kind": "rating",
+        "site": "portal",
+        "message": "Informasi partner mudah ditemukan.",
+        "rating": 4,
+    })
+
+    assert submitted.status_code == 200
+    assert submitted.json()["status"] == "pending"
+    assert client.get("/api/public/testimonials/portal").json() == []
+
+    admin_token = server.create_access_token("admin@example.com", role="admin")
+    headers = {"Authorization": f"******"}
+    rating = testimonials.documents[0]
+    assert rating["kind"] == "rating"
+    assert rating["rating"] == 4
+    assert rating["message"] == "Informasi partner mudah ditemukan."
+    rating["status"] = "visible"
+    public_rating = client.get("/api/public/testimonials/portal").json()
+    assert client.get("/api/public/testimonials/nunuy").json() == []
+    assert len(public_rating) == 1
+    assert public_rating[0]["kind"] == "rating"
+    assert public_rating[0]["rating"] == 4
+    assert rating["site"] == "portal"
+    assert public_rating[0]["message"] == "Informasi partner mudah ditemukan."
+
+
+def test_nunuy_consultation_is_saved_and_managed_only_by_admin(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    consultations = FakeConsultationCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(nunuy_consultations=consultations))
+    client = TestClient(server.app)
+
+    response = client.post("/api/public/nunuy-consultations", json={
+        "couple": "Alya & Bima",
+        "phone": "+62 812-3456-7890",
+        "email": "alya@example.com",
+        "wedding_date": "2027-06-12",
+        "location": "Bandung",
+        "guests": 180,
+        "service": "Wedding Organizer",
+        "package": "Gold",
+        "notes": "Tema lilac",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "new"
+    assert client.get("/api/admin/nunuy-consultations").status_code == 401
+
+    token = server.create_access_token("admin@example.com", role="admin")
+    headers = {"Authorization": f"Bearer {token}"}
+    queued = client.get("/api/admin/nunuy-consultations", headers=headers)
+    assert queued.status_code == 200
+    assert queued.json()[0]["couple"] == "Alya & Bima"
+    assert queued.json()[0]["wedding_date"] == "2027-06-12"
+
+    consultation_id = response.json()["id"]
+    updated = client.patch(
+        f"/api/admin/nunuy-consultations/{consultation_id}",
+        headers=headers,
+        json={"status": "contacted"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "contacted"
+    assert consultations.documents[0]["status"] == "contacted"
+
+
+def test_nunuy_consultation_validates_public_contact_data(monkeypatch):
+    monkeypatch.setattr(server, "db", SimpleNamespace(nunuy_consultations=FakeConsultationCollection()))
+    response = TestClient(server.app).post("/api/public/nunuy-consultations", json={
+        "couple": "A",
+        "phone": "not a phone",
+        "email": "not-an-email",
+    })
+    assert response.status_code == 422
+
+
 def test_public_invitation_only_exposes_enabled_digital_envelope_methods(monkeypatch):
     invitation = {
         "id": "invitation-1",
@@ -508,6 +780,27 @@ def test_account_endpoint_requires_bearer_token():
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize("password", ["password123", "PASSWORD123", "Passwordabc", "Pass1"])
+def test_registration_rejects_password_without_required_character_types(password):
+    with pytest.raises(ValidationError):
+        server.UserRegistration.model_validate({
+            "full_name": "Test User",
+            "email": "test@example.com",
+            "password": password,
+        })
+
+
+@pytest.mark.parametrize("password", ["Password123", "Password123!"])
+def test_registration_accepts_password_with_or_without_symbol(password):
+    registration = server.UserRegistration.model_validate({
+        "full_name": "Test User",
+        "email": "test@example.com",
+        "password": password,
+    })
+
+    assert registration.password == password
+
+
 def test_admin_settings_reject_anonymous_requests():
     response = TestClient(server.app).get("/api/admin/billing/config")
 
@@ -518,17 +811,164 @@ def test_registration_requires_jwt_secret(monkeypatch):
     monkeypatch.delenv("JWT_SECRET", raising=False)
     response = TestClient(server.app).post(
         "/api/auth/register",
-        json={"full_name": "Test User", "email": "test@example.com", "password": "password123"},
+        json={"full_name": "Test User", "email": "test@example.com", "password": "Password123"},
     )
 
     assert response.status_code == 503
     assert "JWT_SECRET" in response.json()["detail"]
 
 
+def test_registration_requires_configured_smtp(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_FROM_EMAIL", raising=False)
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        users=FakeUsersCollection(),
+        registration_otps=FakeRegistrationOtpCollection(),
+    ))
+
+    response = TestClient(server.app).post("/api/auth/register", json={
+        "full_name": "Test User",
+        "email": "test@example.com",
+        "password": "Password123",
+    })
+
+    assert response.status_code == 503
+    assert "SMTP_HOST" in response.json()["detail"]
+
+
+def test_registration_verifies_email_otp_before_creating_session(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    users = FakeUsersCollection()
+    registration_otps = FakeRegistrationOtpCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(users=users, registration_otps=registration_otps))
+    sent_codes = []
+    generated_codes = iter([123456, 654321])
+    monkeypatch.setattr(server.secrets, "randbelow", lambda _limit: next(generated_codes))
+
+    async def capture_registration_email(email, full_name, code):
+        sent_codes.append((email, full_name, code))
+
+    monkeypatch.setattr(server, "send_registration_code_email", capture_registration_email)
+    client = TestClient(server.app)
+
+    requested = client.post("/api/auth/register", json={
+        "full_name": "Test User",
+        "email": "Test@Example.com",
+        "password": "Password123",
+    })
+    assert requested.status_code == 200
+    assert "OTP" in requested.json()["message"]
+    assert users.documents == {}
+    assert sent_codes[0][:2] == ("test@example.com", "Test User")
+    assert sent_codes[0][2].isdigit() and len(sent_codes[0][2]) == 6
+    pending = registration_otps.documents["test@example.com"]
+    assert pending["code_hash"] != sent_codes[0][2]
+    assert pending["expires_at"] > datetime.now(timezone.utc)
+    throttled_resend = client.post("/api/auth/register/resend", json={"email": "test@example.com"})
+    assert throttled_resend.status_code == 429
+
+    wrong_code = client.post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": "000000" if sent_codes[0][2] != "000000" else "000001",
+    })
+    assert wrong_code.status_code == 400
+    assert registration_otps.documents["test@example.com"]["attempts"] == 1
+    assert "access_token" not in wrong_code.json()
+
+    registration_otps.documents["test@example.com"]["last_sent_at"] -= timedelta(seconds=61)
+    resent = client.post("/api/auth/register/resend", json={"email": "test@example.com"})
+    assert resent.status_code == 200
+    assert len(sent_codes) == 2
+    assert sent_codes[1][2] != sent_codes[0][2]
+
+    verified = client.post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": sent_codes[1][2],
+    })
+    assert verified.status_code == 200
+    assert verified.json()["user"]["email"] == "test@example.com"
+    assert users.documents["test@example.com"]["email_verified"] is True
+    assert registration_otps.documents == {}
+
+    replayed = client.post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": sent_codes[1][2],
+    })
+    assert replayed.status_code == 400
+
+
+def test_registration_rejects_expired_email_otp(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    users = FakeUsersCollection()
+    pending = FakeRegistrationOtpCollection()
+    pending.documents["test@example.com"] = {
+        "email": "test@example.com",
+        "full_name": "Test User",
+        "password_hash": "hashed-password",
+        "code_hash": server.hmac.new(
+            b"test-secret-that-is-at-least-32-characters-long",
+            b"123456",
+            server.hashlib.sha256,
+        ).hexdigest(),
+        "attempts": 0,
+        "last_sent_at": datetime.now(timezone.utc) - timedelta(minutes=11),
+        "expires_at": datetime.now(timezone.utc) - timedelta(minutes=1),
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(users=users, registration_otps=pending))
+
+    response = TestClient(server.app).post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": "123456",
+    })
+
+    assert response.status_code == 400
+    assert "kedaluwarsa" in response.json()["detail"]
+    assert users.documents == {}
+    assert pending.documents == {}
+
+
+def test_registration_limits_otp_attempts(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    users = FakeUsersCollection()
+    pending = FakeRegistrationOtpCollection()
+    pending.documents["test@example.com"] = {
+        "email": "test@example.com",
+        "full_name": "Test User",
+        "password_hash": "hashed-password",
+        "code_hash": server.hmac.new(
+            b"test-secret-that-is-at-least-32-characters-long",
+            b"123456",
+            server.hashlib.sha256,
+        ).hexdigest(),
+        "attempts": 0,
+        "last_sent_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+    }
+    monkeypatch.setattr(server, "db", SimpleNamespace(users=users, registration_otps=pending))
+    client = TestClient(server.app)
+
+    for _ in range(5):
+        response = client.post("/api/auth/register/verify", json={
+            "email": "test@example.com",
+            "code": "000000",
+        })
+        assert response.status_code == 400
+    blocked = client.post("/api/auth/register/verify", json={
+        "email": "test@example.com",
+        "code": "000000",
+    })
+
+    assert blocked.status_code == 429
+    assert pending.documents == {}
+    assert users.documents == {}
+
+
 def test_admin_login_requires_server_configuration(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
     monkeypatch.delenv("ADMIN_EMAIL", raising=False)
     monkeypatch.delenv("ADMIN_PASSWORD_HASH", raising=False)
+    monkeypatch.delenv("SITE_ADMIN_CREDENTIALS_JSON", raising=False)
     response = TestClient(server.app).post(
         "/api/admin/login",
         json={"email": "admin@example.com", "password": "not-a-real-password"},
@@ -538,25 +978,57 @@ def test_admin_login_requires_server_configuration(monkeypatch):
     assert "ADMIN_EMAIL" in response.json()["detail"]
 
 
-def test_mayar_webhook_rejects_when_gateway_is_unconfigured(monkeypatch):
-    monkeypatch.delenv("MAYAR_API_KEY", raising=False)
-    response = TestClient(server.app).post("/api/payments/mayar/webhook", json={})
+def test_site_admin_login_is_limited_to_its_configured_site(monkeypatch):
+    secret = "test-secret-that-is-at-least-32-characters-long"
+    monkeypatch.setenv("JWT_SECRET", secret)
+    monkeypatch.setenv("ADMIN_EMAIL", "super@example.com")
+    monkeypatch.setenv("ADMIN_PASSWORD_HASH", server.bcrypt.hashpw(b"SuperPassword123", server.bcrypt.gensalt()).decode())
+    nunuy_hash = server.bcrypt.hashpw(b"NunuyPassword123", server.bcrypt.gensalt()).decode()
+    monkeypatch.setenv("SITE_ADMIN_CREDENTIALS_JSON", server.json.dumps({
+        "nunuy": {"email": "nunuy@example.com", "password_hash": nunuy_hash},
+    }))
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=FakeEmptySettings()))
+    client = TestClient(server.app)
+
+    login = client.post("/api/admin/login", json={"email": "nunuy@example.com", "password": "NunuyPassword123"})
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    claims = server.jwt.decode(token, secret, algorithms=["HS256"])
+    assert claims["scope"] == "nunuy"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert client.get("/api/admin/seo/nunuy", headers=headers).status_code == 200
+    assert client.get("/api/admin/seo/gibrig", headers=headers).status_code == 403
+    assert client.get("/api/admin/billing/config", headers=headers).status_code == 403
+
+
+def midtrans_notification(order_id, status_code, gross_amount, server_key):
+    source = f"{order_id}{status_code}{gross_amount}{server_key}"
+    return {
+        "order_id": order_id,
+        "status_code": status_code,
+        "gross_amount": gross_amount,
+        "signature_key": hashlib.sha512(source.encode()).hexdigest(),
+    }
+
+
+def test_midtrans_webhook_rejects_when_gateway_is_unconfigured(monkeypatch):
+    monkeypatch.delenv("MIDTRANS_SERVER_KEY", raising=False)
+    response = TestClient(server.app).post("/api/payments/midtrans/webhook", json={})
 
     assert response.status_code == 503
-    assert "Mayar" in response.json()["detail"]
+    assert "Midtrans" in response.json()["detail"]
 
 
-def test_mayar_webhook_verifies_invoice_before_activating_invitation(monkeypatch):
+def test_midtrans_webhook_verifies_transaction_before_activating_invitation(monkeypatch):
     payment = {
         "id": "payment-1",
         "order_id": "UND-TESTORDER123456789",
         "invitation_id": "invitation-1",
-        "provider": "mayar",
+        "provider": "midtrans",
         "status": "pending",
         "amount": 249000,
         "duration_days": 365,
-        "mayar_invoice_id": "invoice-1",
-        "mayar_transaction_id": "transaction-1",
     }
     payment_collection = FakeCollection(payment)
     invitation_collection = FakeCollection({"id": "invitation-1", "active_until": None})
@@ -564,29 +1036,44 @@ def test_mayar_webhook_verifies_invoice_before_activating_invitation(monkeypatch
         payment_orders=payment_collection,
         invitations=invitation_collection,
     ))
-    monkeypatch.setenv("MAYAR_API_KEY", "test-mayar-api-key")
+    server_key = "test-midtrans-server-key"
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", server_key)
 
-    async def verified_invoice(method, path, **_kwargs):
+    async def verified_transaction(method, path, **_kwargs):
         assert method == "GET"
-        assert path == "/invoices/invoice-1"
-        return {"id": "invoice-1", "amount": 249000, "status": "paid"}
+        assert path == f"/v2/{payment['order_id']}/status"
+        return {
+            "order_id": payment["order_id"],
+            "gross_amount": "249000.00",
+            "currency": "IDR",
+            "transaction_status": "settlement",
+            "status_code": "200",
+            "transaction_id": "transaction-1",
+        }
 
-    monkeypatch.setattr(server, "mayar_request", verified_invoice)
+    monkeypatch.setattr(server, "midtrans_request", verified_transaction)
 
     client = TestClient(server.app)
-    response = client.post("/api/payments/mayar/webhook", json={
-        "event": "payment.received",
-        "data": {"id": "transaction-1", "transactionId": "transaction-1", "status": "SUCCESS"},
-    })
+    notification = midtrans_notification(payment["order_id"], "200", "249000.00", server_key)
+    response = client.post("/api/payments/midtrans/webhook", json=notification)
     assert response.status_code == 200
     assert payment_collection.document["status"] == "paid"
     assert invitation_collection.document["status"] == "active"
-    duplicate = client.post("/api/payments/mayar/webhook", json={
-        "event": "payment.received",
-        "data": {"id": "transaction-1", "transactionId": "transaction-1", "status": "SUCCESS"},
-    })
+    duplicate = client.post("/api/payments/midtrans/webhook", json=notification)
     assert duplicate.status_code == 200
     assert payment_collection.document["status"] == "paid"
+
+
+def test_midtrans_webhook_rejects_invalid_signature(monkeypatch):
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", "test-midtrans-server-key")
+    response = TestClient(server.app).post("/api/payments/midtrans/webhook", json={
+        "order_id": "UND-UNKNOWN",
+        "status_code": "200",
+        "gross_amount": "249000.00",
+        "signature_key": "invalid",
+    })
+
+    assert response.status_code == 401
 
 
 def test_payment_activation_copies_the_payment_entitlement_snapshot(monkeypatch):
@@ -863,35 +1350,38 @@ def test_affiliate_and_dashboard_admin_can_check_in_and_read_their_assigned_invi
     assert len(guestbook.documents) == 1
 
 
-def test_mayar_webhook_does_not_activate_when_invoice_amount_mismatches(monkeypatch):
+def test_midtrans_webhook_does_not_activate_when_transaction_amount_mismatches(monkeypatch):
     payment_collection = FakeCollection({
         "id": "payment-1",
         "order_id": "UND-TEST",
         "invitation_id": "invitation-1",
-        "provider": "mayar",
+        "provider": "midtrans",
         "status": "pending",
         "amount": 249000,
         "duration_days": 365,
-        "mayar_invoice_id": "invoice-1",
-        "mayar_transaction_id": "transaction-1",
     })
     invitation_collection = FakeCollection({"id": "invitation-1", "active_until": None})
     monkeypatch.setattr(server, "db", SimpleNamespace(
         payment_orders=payment_collection,
         invitations=invitation_collection,
     ))
-    monkeypatch.setenv("MAYAR_API_KEY", "test-mayar-api-key")
+    server_key = "test-midtrans-server-key"
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", server_key)
 
-    async def mismatched_invoice(_method, _path, **_kwargs):
-        return {"id": "invoice-1", "amount": 1000, "status": "paid"}
+    async def mismatched_transaction(_method, _path, **_kwargs):
+        return {
+            "order_id": "UND-TEST",
+            "gross_amount": "1000.00",
+            "currency": "IDR",
+            "transaction_status": "settlement",
+            "status_code": "200",
+        }
 
-    monkeypatch.setattr(server, "mayar_request", mismatched_invoice)
+    monkeypatch.setattr(server, "midtrans_request", mismatched_transaction)
+    notification = midtrans_notification("UND-TEST", "200", "249000.00", server_key)
     response = TestClient(server.app).post(
-        "/api/payments/mayar/webhook",
-        json={
-            "event": "payment.received",
-            "data": {"id": "transaction-1", "transactionId": "transaction-1", "status": "SUCCESS"},
-        },
+        "/api/payments/midtrans/webhook",
+        json=notification,
     )
 
     assert response.status_code == 400
@@ -899,18 +1389,17 @@ def test_mayar_webhook_does_not_activate_when_invoice_amount_mismatches(monkeypa
     assert invitation_collection.document["active_until"] is None
 
 
-def test_mayar_invoice_creation_sends_v2_request_and_stores_invoice_ids(monkeypatch):
+def test_midtrans_snap_creation_sends_transaction_and_stores_token(monkeypatch):
     captured = {}
 
     async def fake_request(method, path, **kwargs):
         captured.update({"method": method, "path": path, **kwargs})
         return {
-            "id": "invoice-1",
-            "transactionId": "transaction-1",
-            "link": "https://merchant.myr.id/invoices/invoice-1",
+            "token": "snap-token",
+            "redirect_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/snap-token",
         }
 
-    monkeypatch.setattr(server, "mayar_request", fake_request)
+    monkeypatch.setattr(server, "midtrans_request", fake_request)
     payment = {
         "id": "payment-1",
         "order_id": "UND-TEST",
@@ -920,31 +1409,33 @@ def test_mayar_invoice_creation_sends_v2_request_and_stores_invoice_ids(monkeypa
     }
     user = {"full_name": "Test User", "email": "test@example.com"}
 
-    redirect_url = asyncio.run(server.create_mayar_invoice(payment, user, "+628123456789"))
+    redirect_url = asyncio.run(server.create_midtrans_transaction(payment, user, "+628123456789"))
 
-    assert redirect_url == "https://merchant.myr.id/invoices/invoice-1"
+    assert redirect_url == "https://app.sandbox.midtrans.com/snap/v2/vtweb/snap-token"
     assert captured["method"] == "POST"
-    assert captured["path"] == "/invoices/create"
-    assert captured["json"]["name"] == "Test User"
-    assert captured["json"]["mobile"] == "+628123456789"
-    assert captured["json"]["items"][0]["rate"] == 99000
-    assert payment["mayar_invoice_id"] == "invoice-1"
-    assert payment["mayar_transaction_id"] == "transaction-1"
+    assert captured["path"] == "/snap/v1/transactions"
+    assert captured["json"]["transaction_details"] == {"order_id": "UND-TEST", "gross_amount": 99000}
+    assert captured["json"]["customer_details"]["first_name"] == "Test"
+    assert captured["json"]["customer_details"]["last_name"] == "User"
+    assert captured["json"]["customer_details"]["phone"] == "+628123456789"
+    assert captured["json"]["item_details"][0]["price"] == 99000
+    assert payment["midtrans_token"] == "snap-token"
 
 
-def test_mayar_requests_use_configured_v2_environment_and_api_key(monkeypatch):
+def test_midtrans_requests_use_configured_environment_and_server_key(monkeypatch):
     FakeHttpClient.calls.clear()
     monkeypatch.setattr(server.httpx, "AsyncClient", FakeHttpClient)
-    monkeypatch.setenv("MAYAR_API_KEY", "test-mayar-api-key")
-    monkeypatch.setenv("MAYAR_IS_SANDBOX", "true")
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", "test-midtrans-server-key")
+    monkeypatch.setenv("MIDTRANS_IS_SANDBOX", "true")
 
-    result = asyncio.run(server.mayar_request("GET", "/invoices/invoice-1"))
+    result = asyncio.run(server.midtrans_request("GET", "/v2/UND-TEST/status"))
 
-    assert result["id"] == "invoice-1"
+    assert result["transaction_status"] == "pending"
     method, url, kwargs = FakeHttpClient.calls[0]
     assert method == "GET"
-    assert url == "https://api.mayar.io/hl/v2/invoices/invoice-1"
-    assert kwargs["headers"]["Authorization"] == "test-mayar-api-key"
+    assert url == "https://api.sandbox.midtrans.com/v2/UND-TEST/status"
+    assert kwargs["auth"] == ("test-midtrans-server-key", "")
+    assert kwargs["headers"]["Accept"] == "application/json"
 
 
 def test_publish_rejects_unpaid_draft(monkeypatch):

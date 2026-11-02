@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ExcelJS from 'exceljs';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import Auth from './pages/Auth';
 import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
 import { getThemeCatalog } from './lib/themeCatalog';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
@@ -11,20 +12,194 @@ import AdminBilling from './pages/AdminBilling';
 import PublicInvitation from './pages/PublicInvitation';
 import { createPreviewInvitation } from './pages/Templates';
 import { PublicTestimonials, TestimonialModeration } from './components/PublicTestimonials';
+import NunuyConsultationAdmin from './components/NunuyConsultationAdmin';
 
 const renderApp = () => render(<AuthProvider><App /></AuthProvider>);
+const SUPER_ADMIN_TEST_TOKEN = 'header.eyJyb2xlIjoiYWRtaW4iLCJzY29wZSI6ImFsbCJ9.signature';
 
-test('renders the main portal marketing homepage', () => {
+test('renders the Aurora Media reference landing page with working partner links', () => {
   window.history.pushState({}, '', '/');
   render(<App />);
 
   expect(screen.getAllByText(/portal\.id/i).length).toBeGreaterThan(0);
   expect(screen.getByRole('heading', { name: /temukan partner terbaik/i })).toBeDefined();
-  expect(screen.getByRole('heading', { name: 'NUNUY NADHIFA WEDDING' })).toBeDefined();
-  expect(screen.getByRole('heading', { name: 'Musik.id' })).toBeDefined();
-  expect(screen.getByRole('heading', { name: 'Nuansa Invite' })).toBeDefined();
-  expect(screen.getByText('PARTNER SPOTLIGHT')).toBeDefined();
-  expect(screen.getByText('DIREKOMENDASIKAN')).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Kolaborasi untuk Momen Berkesan' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Nunuy Nadhifa Wedding' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Entertainment Musik' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Undangan Digital' })).toBeDefined();
+  expect(screen.getByRole('navigation', { name: 'Navigasi utama' }).querySelectorAll('a')).toHaveLength(4);
+  expect(screen.getByRole('link', { name: 'Beriklan' }).getAttribute('href')).toBe('/beriklan');
+  expect(screen.getByRole('link', { name: 'Kontak' }).getAttribute('href')).toBe('/kontak');
+  expect(screen.getByRole('link', { name: 'FAQ' }).getAttribute('href')).toBe('/faq');
+  expect(screen.queryByRole('heading', { name: /menghubungkan kreativitas/i })).toBeNull();
+  expect(screen.queryByRole('heading', { name: /brand anda layak dikenal lebih luas/i })).toBeNull();
+  const weddingLink = screen.getAllByRole('link', { name: /kunjungi website/i })[0];
+  expect(weddingLink.getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
+  expect(weddingLink.getAttribute('target')).toBe('_blank');
+  expect(weddingLink.getAttribute('rel')).toBe('noopener noreferrer');
+  expect(document.title).toBe('Aurora Media | Rekomendasi Wedding, Musik & Undangan Digital');
+});
+
+test('super admin SEO dashboard saves independent website metadata to the backend', async () => {
+  const requests = [];
+  vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+    const path = new URL(url, window.location.origin).pathname;
+    requests.push({ path, options });
+    const site = path.split('/').pop();
+    const payload = options.method === 'PUT'
+      ? { site, seo: JSON.parse(options.body) }
+      : { site, seo: site === 'portal' ? { ogImage: '' } : null };
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => payload,
+    };
+  }));
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
+  window.history.pushState({}, '', '/setia-creative-admin/seo');
+  renderApp();
+
+  expect(await screen.findByRole('heading', { name: /kelola pencarian untuk setiap website/i })).toBeDefined();
+  await waitFor(() => expect(requests.filter((request) => request.path.startsWith('/api/admin/seo/'))).toHaveLength(4));
+  await screen.findByLabelText(/^SEO title/);
+  expect(screen.getByText(/Deskripsi antara 90–160 karakter/).closest('li')).toHaveClass('is-complete');
+  expect(screen.getByText(/Gambar pratinjau sosial tersedia/).closest('li')).toHaveClass('is-complete');
+  expect(screen.getByRole('link', { name: 'Google Search Console ↗' }).getAttribute('href'))
+    .toBe('https://search.google.com/search-console?resource_id=sc-domain%3Aauroramedia.online');
+  expect(screen.getByRole('link', { name: 'https://auroramedia.online/sitemap-aurora-media.xml' }).getAttribute('href'))
+    .toBe('https://auroramedia.online/sitemap-aurora-media.xml');
+  expect(screen.getByRole('link', { name: 'https://entertainment.musik.auroramedia.online/sitemap-gibrig.xml' }).getAttribute('href'))
+    .toBe('https://entertainment.musik.auroramedia.online/sitemap-gibrig.xml');
+  expect(screen.getByRole('link', { name: 'https://wediing.auroramedia.online/sitemap-nunuy.xml' }).getAttribute('href'))
+    .toBe('https://wediing.auroramedia.online/sitemap-nunuy.xml');
+  expect(screen.getByRole('link', { name: 'https://invite.auroramedia.online/sitemap-nuansa-invite.xml' }).getAttribute('href'))
+    .toBe('https://invite.auroramedia.online/sitemap-nuansa-invite.xml');
+  fireEvent.click(screen.getByRole('button', { name: /Gibrig Entertainment \/ Entertainment Musik/i }));
+  await screen.findByLabelText(/^SEO title/);
+  fireEvent.change(screen.getByLabelText(/^SEO title/), { target: { value: 'Gibrig Entertainment | Musik Live Garut' } });
+  fireEvent.change(screen.getByLabelText(/^Meta description/), {
+    target: { value: 'Sewa musik live, penyanyi, MC, dan paket hiburan untuk wedding serta acara keluarga di Garut bersama Gibrig Entertainment.' },
+  });
+  fireEvent.change(screen.getByLabelText(/^Frasa pencarian target/), {
+    target: { value: 'musik live Garut, hiburan wedding Garut, Gibrig Entertainment' },
+  });
+  fireEvent.change(screen.getByLabelText('Gambar Open Graph (HTTPS)'), {
+    target: { value: 'https://portal.id/gibrig-share.jpg' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /simpan seo gibrig entertainment/i }));
+
+  expect(await screen.findByText(/SEO Gibrig Entertainment \/ Entertainment Musik berhasil disimpan/i)).toBeDefined();
+  const update = requests.find((request) => request.path === '/api/admin/seo/gibrig' && request.options.method === 'PUT');
+  expect(JSON.parse(update.options.body)).toMatchObject({
+    title: 'Gibrig Entertainment | Musik Live Garut',
+    ogImage: 'https://portal.id/gibrig-share.jpg',
+    noIndex: false,
+  });
+  expect(update.options.headers.get('Authorization')).toBe(`Bearer ${SUPER_ADMIN_TEST_TOKEN}`);
+  sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
+  vi.unstubAllGlobals();
+});
+
+test('public homepage applies SEO settings saved in backend', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url) => {
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => ({
+        site: 'portal',
+        seo: {
+          title: 'Portal SEO Pilihan Wedding',
+          description: 'Panduan mencari partner wedding dan acara terbaik.',
+          keywords: 'partner wedding, rekomendasi vendor acara',
+          canonicalUrl: 'https://portal.id/',
+          ogImage: 'https://portal.id/share.jpg',
+          noIndex: false,
+        },
+      }),
+    };
+  }));
+  window.history.pushState({}, '', '/');
+  render(<App />);
+
+  await waitFor(() => expect(document.title).toBe('Portal SEO Pilihan Wedding'));
+  expect(document.head.querySelector('meta[name="description"]').content).toBe('Panduan mencari partner wedding dan acara terbaik.');
+  expect(document.head.querySelector('meta[name="keywords"]').content).toBe('partner wedding, rekomendasi vendor acara');
+  expect(document.head.querySelector('meta[name="robots"]').content).toBe('index,follow');
+  expect(document.head.querySelector('meta[property="og:image"]').content).toBe('https://portal.id/share.jpg');
+  vi.unstubAllGlobals();
+});
+
+test('advertising page explains partnership options and opens a WhatsApp inquiry', () => {
+  window.history.pushState({}, '', '/beriklan');
+  render(<App />);
+
+  expect(screen.getByRole('heading', { name: 'Brand Anda Layak Dikenal Lebih Luas.' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Jangkau audiens yang tepat, bersama partner kreatif.' })).toBeDefined();
+  const whatsappLink = screen.getByRole('link', { name: /mulai kerja sama/i });
+  expect(whatsappLink.getAttribute('href')).toContain('https://wa.me/6281234567890?text=');
+  expect(whatsappLink.getAttribute('target')).toBe('_blank');
+});
+
+test('contact page exposes working email, phone, and WhatsApp links', () => {
+  window.history.pushState({}, '', '/kontak');
+  render(<App />);
+
+  expect(screen.getByRole('heading', { name: 'Mari mulai percakapan.' })).toBeDefined();
+  expect(screen.getByRole('link', { name: /^email hello@portaliklan\.com$/i }).getAttribute('href')).toBe('mailto:hello@portaliklan.com');
+  expect(screen.getByRole('link', { name: /hubungi kami langsung/i }).getAttribute('href')).toBe('tel:+6281234567890');
+  expect(screen.getByRole('link', { name: /kirim pesan kepada tim kami/i }).getAttribute('href')).toContain('https://wa.me/6281234567890?text=');
+});
+
+test('FAQ page renders all five sections and provides a contact link', () => {
+  window.history.pushState({}, '', '/faq');
+  render(<App />);
+
+  expect(screen.getByRole('heading', { name: 'Frequently Asked Questions (FAQ)' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'A. Tentang Aurora Media' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'E. Kontak dan Informasi' })).toBeDefined();
+  expect(screen.getByText(/Portal\.id adalah platform creative collective yang menghubungkan berbagai brand/)).toBeDefined();
+  expect(screen.getByRole('link', { name: /hubungi tim kami/i }).getAttribute('href')).toBe('/kontak');
+  expect(screen.getByRole('navigation', { name: 'Navigasi utama' }).querySelectorAll('a')).toHaveLength(4);
+});
+
+test('mobile navigation opens and closes from its accessible toggle', () => {
+  window.innerWidth = 390;
+  window.dispatchEvent(new Event('resize'));
+  window.history.pushState({}, '', '/');
+  render(<App />);
+
+  const toggle = screen.getByRole('button', { name: 'Buka menu' });
+  fireEvent.click(toggle);
+  expect(screen.getByRole('button', { name: 'Tutup menu' }).getAttribute('aria-expanded')).toBe('true');
+  fireEvent.click(screen.getByRole('link', { name: 'Beriklan' }));
+  expect(screen.getByRole('button', { name: 'Buka menu' }).getAttribute('aria-expanded')).toBe('false');
+  window.innerWidth = 1024;
+  window.dispatchEvent(new Event('resize'));
+});
+
+test.each([
+  ['/undangan', /ciptakan momen istimewa berkelas & elegan/i, 'Beranda'],
+  ['/undangan/keunggulan', /keunggulan yang membuat setiap undangan lebih bermakna/i, 'Keunggulan'],
+  ['/undangan/template', /pilih desain yang terasa seperti cerita anda/i, 'Katalog Template'],
+  ['/undangan/harga', /pilih paket sesuai kebutuhan acara anda/i, 'Paket Harga'],
+  ['/undangan/testimoni', /momen istimewa, cerita yang selalu dikenang/i, 'Testimoni'],
+  ['/undangan/faq', /pertanyaan seputar undangan digital/i, 'FAQ'],
+])('opens the Nuansa Invite %s page from its matching menu', (path, heading, menuLabel) => {
+  window.history.pushState({}, '', path);
+  renderApp();
+
+  expect(screen.getByRole('heading', { level: 1, name: heading })).toBeDefined();
+  const navigation = screen.getByRole('navigation', { name: 'Navigasi Nuansa Invite' });
+  const activeLink = navigation.querySelector('[aria-current="page"]');
+  expect(activeLink.textContent).toBe(menuLabel);
+  expect(activeLink.getAttribute('href')).toBe(path);
+  expect(navigation.querySelector('a[href="https://auroramedia.online/"]').textContent).toBe('Aurora Media');
+  if (path === '/undangan') {
+    expect(screen.queryByText('RSVP online')).toBeNull();
+    expect(screen.queryByText('Personal & elegan')).toBeNull();
+  }
 });
 
 test('replaces the previous brand in saved invitation website content', () => {
@@ -49,8 +224,8 @@ test('replaces the previous brand in saved invitation website content', () => {
   }
 });
 
-test('portal admin exposes the preset catalog and JSON configuration actions', async () => {
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+test('portal admin can add, edit, publish, and remove advertised websites', async () => {
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/admin');
   render(<App />);
 
@@ -58,9 +233,26 @@ test('portal admin exposes the preset catalog and JSON configuration actions', a
   expect(screen.getByRole('button', { name: /glassmorphism luxury/i })).toBeDefined();
   expect(screen.getByRole('button', { name: /elastic spring motion/i })).toBeDefined();
   expect(screen.getByRole('button', { name: /ekspor json/i })).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Tambah website' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'SEO & social media Aurora Media' })).toBeDefined();
   expect(screen.getByText(/impor json/i)).toBeDefined();
+  fireEvent.change(screen.getAllByLabelText('URL website partner')[0], { target: { value: 'https://nunuy.example' } });
+  fireEvent.change(screen.getAllByLabelText('Kategori')[0], { target: { value: 'WEDDING ORGANIZER · PILIHAN' } });
+  fireEvent.click(screen.getAllByLabelText('Tampilkan partner')[0]);
+  fireEvent.click(screen.getByRole('button', { name: 'Tambah website' }));
+  expect(screen.getAllByRole('button', { name: 'Hapus partner' })).toHaveLength(4);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Hapus partner' })[3]);
+  expect(screen.getAllByRole('button', { name: 'Hapus partner' })).toHaveLength(3);
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+  const saved = JSON.parse(localStorage.getItem('portal-cms'));
+  expect(saved.services).toHaveLength(3);
+  expect(saved.services[0]).toMatchObject({
+    href: 'https://nunuy.example',
+    category: 'WEDDING ORGANIZER · PILIHAN',
+    active: false,
+  });
   sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
-});
+}, 30000);
 
 test('shows a helpful message when the Nuansa Invite API is unavailable', async () => {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
@@ -420,6 +612,94 @@ test('renders the registration form on the register route', () => {
   expect(screen.getByLabelText('Nama lengkap')).toBeDefined();
 });
 
+test('requires email OTP verification before completing Nuansa Invite registration', async () => {
+  sessionStorage.clear();
+  const fetchMock = vi.fn(async (url, options) => {
+    const path = new URL(url, window.location.origin).pathname;
+    const payload = path.endsWith('/auth/register')
+      ? { message: 'Kode OTP telah dikirim ke email Anda.' }
+      : {
+        access_token: 'verified-registration-token',
+        token_type: 'bearer',
+        user: { id: 'user-1', full_name: 'Test User', email: 'test@example.com', role: 'user' },
+      };
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: () => 'application/json' },
+      json: async () => payload,
+    };
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  window.history.pushState({}, '', '/undangan-auth?mode=register');
+  const onSuccess = vi.fn();
+  render(<AuthProvider><Auth onBack={vi.fn()} onSuccess={onSuccess} /></AuthProvider>);
+
+  fireEvent.change(screen.getByLabelText('Nama lengkap'), { target: { value: 'Test User' } });
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'test@example.com' } });
+  fireEvent.change(screen.getByLabelText('Kata sandi'), { target: { value: 'Password123' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Daftar' }));
+
+  expect(await screen.findByRole('heading', { name: 'Masukkan kode OTP' })).toBeDefined();
+  expect(screen.getByText('Kode OTP telah dikirim ke email Anda.')).toBeDefined();
+  expect(sessionStorage.getItem('undangan.id.session')).toBeNull();
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+    full_name: 'Test User',
+    email: 'test@example.com',
+    password: 'Password123',
+  });
+
+  fireEvent.change(screen.getByLabelText(/^Kode OTP/), { target: { value: '123456' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Verifikasi email' }));
+
+  await waitFor(() => {
+    expect(JSON.parse(sessionStorage.getItem('undangan.id.session'))).toMatchObject({
+      access_token: 'verified-registration-token',
+      user: { email: 'test@example.com' },
+    });
+  });
+  expect(onSuccess).toHaveBeenCalledOnce();
+  expect(new URL(fetchMock.mock.calls[1][0], window.location.origin).pathname).toBe('/api/auth/register/verify');
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ email: 'test@example.com', code: '123456' });
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
+});
+
+test('shows password strength and keeps symbols optional during signup', async () => {
+  sessionStorage.clear();
+  const fetchMock = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: { get: () => 'application/json' },
+    json: async () => ({ message: 'Kode OTP telah dikirim ke email Anda.' }),
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  window.history.pushState({}, '', '/undangan-auth?mode=register');
+  render(<AuthProvider><Auth onBack={vi.fn()} onSuccess={vi.fn()} /></AuthProvider>);
+
+  fireEvent.change(screen.getByLabelText('Nama lengkap'), { target: { value: 'Test User' } });
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'test@example.com' } });
+  const passwordInput = screen.getByLabelText('Kata sandi');
+  const strengthMeter = screen.getByRole('meter', { name: 'Kekuatan kata sandi' });
+
+  fireEvent.change(passwordInput, { target: { value: 'password123' } });
+  expect(strengthMeter.getAttribute('aria-valuetext')).toBe('Lemah');
+  fireEvent.click(screen.getByRole('button', { name: 'Daftar' }));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/huruf kecil, huruf besar, dan angka/i);
+  expect(fetchMock).not.toHaveBeenCalled();
+
+  fireEvent.change(passwordInput, { target: { value: 'Password123' } });
+  expect(strengthMeter.getAttribute('aria-valuetext')).toBe('Cukup');
+  expect(screen.getByText('Simbol (opsional)')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Daftar' }));
+  expect(await screen.findByRole('heading', { name: 'Masukkan kode OTP' })).toBeDefined();
+  expect(fetchMock).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
+});
+
 test('renders a blog detail route for a published article', () => {
   window.history.pushState({}, '', '/undangan-blog/tips-memilih-template-undangan-digital-yang-sesuai-tema-acara');
   renderApp();
@@ -585,7 +865,6 @@ test('package is selected only when activating an invitation', async () => {
   const paymentRequest = globalThis.fetch.mock.calls.find(([url]) => new URL(url, window.location.origin).pathname.endsWith('/payments'));
   expect(JSON.parse(paymentRequest[1].body)).toEqual({
     payment_method_id: 'bank',
-    mobile: '',
     plan_id: 'premium',
   });
 });
@@ -781,6 +1060,8 @@ test('Basic package sends to one WhatsApp recipient at a time', async () => {
   expect(whatsappMessage).toContain('Yth. Dewi Lestari,');
   expect(whatsappMessage).toContain('Sampai bertemu di hari bahagia kami.');
   expect(whatsappMessage).toContain('/i/hari-bahagia?ticket=');
+  expect(whatsappMessage).toContain('Website: Nuansa Invite');
+  expect(whatsappMessage).toContain('Menu: Dashboard Undangan > Bagikan undangan');
   expect(whatsappMessage).not.toContain('/undangan-ticket/');
   expect(whatsappMessage.match(/https?:\/\//g)).toHaveLength(1);
   openSpy.mockRestore();
@@ -852,6 +1133,8 @@ test('personalized invitation sharing creates a unique guestbook QR before Whats
   const whatsappMessage = decodeURIComponent(whatsappUrl.searchParams.get('text'));
   expect(whatsappUrl.pathname).toBe('/6281234567890');
   expect(whatsappMessage).toContain('/i/hari-bahagia?ticket=');
+  expect(whatsappMessage).toContain('Website: Nuansa Invite');
+  expect(whatsappMessage).toContain('Menu: Dashboard Undangan > Bagikan undangan');
   expect(whatsappMessage).not.toContain(ticketLink.href);
   expect(whatsappMessage.match(/https?:\/\//g)).toHaveLength(1);
   const ticketRequest = globalThis.fetch.mock.calls.find(([url]) => new URL(url, window.location.origin).pathname.endsWith('/invitations/invitation-1/tickets'));
@@ -1004,7 +1287,7 @@ test('super admin can review affiliate history, manage ads, and deactivate witho
     json: async () => responses[new URL(url, window.location.origin).pathname] ?? {},
   }));
   vi.stubGlobal('fetch', fetchMock);
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
 
   render(<AdminBilling />);
   fireEvent.click(await screen.findByRole('button', { name: /affiliate & iklan/i }));
@@ -1035,7 +1318,7 @@ test('super admin can review affiliate history, manage ads, and deactivate witho
 test.each([
   ['/gibrig', /artist performance & entertainment studio/i],
   ['/nunuy-nadhifa-wedding', /make your wedding unforgettable/i],
-  ['/undangan', /buat undangan digital premium/i],
+  ['/undangan', /ciptakan momen istimewa berkelas & elegan/i],
 ])('keeps the public website at %s free of admin buttons', (path, heading) => {
   window.history.pushState({}, '', path);
   renderApp();
@@ -1054,21 +1337,47 @@ test('keeps the unified super admin login page on a trailing-slash route', () =>
 });
 
 test('super admin home links to all admin panels and public websites', () => {
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/setia-creative-admin');
   renderApp();
 
   expect(screen.getByRole('link', { name: /portal admin/i }).getAttribute('href')).toBe('/portal-admin');
   expect(screen.getByRole('link', { name: /gibrig admin/i }).getAttribute('href')).toBe('/gibrig-admin');
   expect(screen.getByRole('link', { name: /nunuy wedding admin/i }).getAttribute('href')).toBe('/nunuy-admin');
+  expect(screen.getByRole('link', { name: 'Google Search Console' })).toMatchObject({
+    href: 'https://search.google.com/search-console?resource_id=sc-domain%3Aauroramedia.online',
+    target: '_blank',
+  });
   expect(screen.getByRole('link', { name: /nuansa invite website admin/i }).getAttribute('href')).toBe('/undangan-website-admin');
   expect(screen.getByRole('link', { name: /nuansa invite admin/i }).getAttribute('href')).toBe('/undangan-admin');
-  expect(screen.getByRole('link', { name: 'Nunuy Nadhifa Wedding' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
+  expect(screen.getByRole('link', { name: 'Nunuy Nadhifa Wedding' }).getAttribute('href')).toBe('https://wediing.auroramedia.online/nunuy-nadhifa-wedding');
+  sessionStorage.clear();
+});
+
+test('restricted admin login opens its assigned panel directly', async () => {
+  const invitationAdminToken = `header.${btoa(JSON.stringify({ role: 'admin', scope: 'invitation' }))}.signature`;
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ access_token: invitationAdminToken }),
+  })));
+  sessionStorage.clear();
+  window.history.pushState({}, '', '/admin');
+  renderApp();
+
+  fireEvent.change(screen.getByLabelText('Email admin'), { target: { value: 'invitation@example.com' } });
+  fireEvent.change(screen.getByLabelText('Kata sandi'), { target: { value: 'password' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Masuk' }));
+
+  await waitFor(() => expect(window.location.pathname).toBe('/undangan-website-admin'));
+  expect(screen.queryByText('Akses panel terbatas')).toBeNull();
+  vi.unstubAllGlobals();
   sessionStorage.clear();
 });
 
 test('opens Nuansa Invite admin from its own direct link after one super admin login', () => {
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/undangan-admin');
   renderApp();
 
@@ -1080,7 +1389,7 @@ test('opens Nuansa Invite admin from its own direct link after one super admin l
 
 test('keeps the previous Portal admin URL as an alias', () => {
   sessionStorage.clear();
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/admin');
   renderApp();
 
@@ -1099,7 +1408,7 @@ test('legacy admin routes require the unified super admin session', () => {
 });
 
 test('one super admin session opens the Portal admin link', () => {
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/portal-admin');
   renderApp();
 
@@ -1119,7 +1428,7 @@ test.each(['admin', 'gibrig', 'nunuy', 'invitation'])('provides exactly 100 orig
 test('admin edits content and applies theme settings to the public site', () => {
   sessionStorage.clear();
   localStorage.removeItem('gibrig-cms');
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/gibrig-admin');
   const admin = render(<App />);
 
@@ -1156,7 +1465,7 @@ test('admin edits content and applies theme settings to the public site', () => 
 
 test('portal theme presets update the actual public website theme', () => {
   localStorage.removeItem('portal-cms');
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', '/portal-admin');
   render(<App />);
 
@@ -1168,24 +1477,45 @@ test('portal theme presets update the actual public website theme', () => {
   window.history.pushState({}, '', '/');
   const publicSite = render(<App />);
   const portal = publicSite.container.querySelector('.theme-portal');
-  expect(portal.style.getPropertyValue('--theme-primary')).toBe('#52634c');
-  expect(portal.className).toContain('theme-layout-editorial');
+  expect(portal.style.getPropertyValue('--primary')).toBe('#52634c');
+  expect(portal.className).toContain('portal-preset-glassmorphism-luxury');
   publicSite.unmount();
   localStorage.removeItem('portal-cms');
   sessionStorage.clear();
-});
+}, 15000);
 
 test.each([
   ['admin', '/portal-admin', '/', 'portal-cms'],
   ['gibrig', '/gibrig-admin', '/gibrig', 'gibrig-cms'],
   ['nunuy', '/nunuy-admin', '/nunuy-nadhifa-wedding', 'nunuy-cms'],
   ['invitation', '/undangan-website-admin', '/undangan', 'invitation-cms'],
-])('publishes an independent phone and WhatsApp contact for %s', (site, adminPath, publicPath, storageKey) => {
+])('publishes an independent phone and WhatsApp contact for %s', async (site, adminPath, publicPath, storageKey) => {
   const phone = '+62 811-2233-4455';
   const whatsapp = '+62 811-9988-7766';
+  const siteKey = site === 'admin' ? 'portal' : site;
+  const publishedContacts = new Map();
+  vi.stubGlobal('fetch', vi.fn((url, options = {}) => {
+    const pathname = new URL(url, window.location.origin).pathname;
+    const contactMatch = pathname.match(/\/api\/(?:public|admin)\/site-contact\/([^/]+)/);
+    let payload = [];
+    if (contactMatch) {
+      const requestedSite = contactMatch[1];
+      if (options.method === 'PUT') publishedContacts.set(requestedSite, JSON.parse(options.body));
+      payload = { site: requestedSite, contact: publishedContacts.get(requestedSite) || null };
+    } else if (pathname.startsWith('/api/public/testimonials/')) {
+      payload = [];
+    } else if (pathname.startsWith('/api/public/seo/')) {
+      payload = { seo: null };
+    } else if (pathname === '/api/public/advertisements') {
+      payload = [];
+    } else if (pathname.endsWith('/nunuy-consultations')) {
+      payload = [];
+    }
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: () => payload };
+  }));
   localStorage.removeItem(storageKey);
   sessionStorage.clear();
-  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, 'test-admin-token');
+  sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
   window.history.pushState({}, '', adminPath);
   const admin = render(<App />);
 
@@ -1193,6 +1523,12 @@ test.each([
   fireEvent.change(screen.getByLabelText('Nomor WhatsApp'), { target: { value: whatsapp } });
   fireEvent.change(screen.getByLabelText('Pesan pembuka WhatsApp'), { target: { value: `Halo dari ${site}` } });
   fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+  expect(await screen.findByText(/nomor telepon dan WhatsApp tersinkron/i)).toBeDefined();
+  expect(publishedContacts.get(siteKey)).toMatchObject({
+    phone,
+    whatsappNumber: whatsapp,
+    whatsappMessage: `Halo dari ${site}`,
+  });
 
   const saved = JSON.parse(localStorage.getItem(storageKey));
   expect(saved.contact.phone).toBe(phone);
@@ -1200,28 +1536,44 @@ test.each([
   expect(saved.whatsapp.message).toBe(`Halo dari ${site}`);
 
   admin.unmount();
+  localStorage.removeItem(storageKey);
   window.history.pushState({}, '', publicPath);
   const publicSite = render(<App />);
-  const contactLink = publicSite.container.querySelector('.whatsapp-contact-link');
-  expect(contactLink.getAttribute('href')).toBe('https://wa.me/6281199887766?text=Halo%20dari%20' + site);
-  expect(contactLink.textContent).toContain(whatsapp);
-  expect(publicSite.getByText(phone)).toBeDefined();
+  await waitFor(() => expect(publicSite.container.querySelector('a[href^="https://wa.me/"]')?.getAttribute('href'))
+    .toContain(`wa.me/${whatsapp.replace(/\D/g, '')}`));
+  const contactLink = publicSite.container.querySelector(`a[href^="https://wa.me/${whatsapp.replace(/\D/g, '')}"]`);
+  expect(contactLink).not.toBeNull();
+  const contactUrl = new URL(contactLink.getAttribute('href'));
+  const contactMessage = new URL(contactLink.getAttribute('href')).searchParams.get('text');
+  const siteName = {
+    admin: 'Aurora Media',
+    gibrig: 'Entertainment Musik',
+    nunuy: 'Nunuy Nadhifa Wedding',
+    invitation: 'Nuansa Invite',
+  }[site];
+  expect(contactMessage).toContain(`Halo dari ${site}`);
+  expect(contactMessage).toContain(`Website: ${siteName}`);
+  expect(contactMessage).toContain('Menu:');
+  expect(contactUrl.pathname).toBe(`/${whatsapp.replace(/\D/g, '')}`);
+  expect(publicSite.container.querySelector(`a[href="tel:${phone.replace(/[^\d+]/g, '')}"]`)?.textContent).toBe(phone);
 
   publicSite.unmount();
   localStorage.removeItem(storageKey);
+  vi.unstubAllGlobals();
   sessionStorage.clear();
-}, 15000);
+}, 30000);
 
 test.each([
-  ['/gibrig', /artist performance & entertainment studio/i],
-  ['/nunuy-nadhifa-wedding', /make your wedding unforgettable/i],
-  ['/undangan', /buat undangan digital premium/i],
-])('provides a Beranda link to Portal Iklan on %s', (path, heading) => {
+  ['/gibrig', /artist performance & entertainment studio/i, '/gibrig'],
+  ['/nunuy-nadhifa-wedding', /make your wedding unforgettable/i, '/nunuy-nadhifa-wedding'],
+  ['/undangan', /ciptakan momen istimewa berkelas & elegan/i, '/undangan'],
+])('provides a Beranda link on %s', (path, heading, href) => {
   window.history.pushState({}, '', path);
   renderApp();
 
   expect(screen.getByRole('heading', { name: heading })).toBeDefined();
-  expect(screen.getByRole('link', { name: 'Beranda' }).getAttribute('href')).toBe('/');
+  expect(screen.getAllByRole('link', { name: 'Beranda' }).every((link) => link.getAttribute('href') === href)).toBe(true);
+  expect(screen.getAllByRole('link', { name: 'Aurora Media' }).every((link) => link.getAttribute('href') === 'https://auroramedia.online/')).toBe(true);
 });
 
 test('renders the Nunuy wedding experience with real-data disclaimers and consultation', () => {
@@ -1229,13 +1581,143 @@ test('renders the Nunuy wedding experience with real-data disclaimers and consul
   const { container } = renderApp();
 
   expect(screen.getByRole('heading', { name: /make your wedding unforgettable/i })).toBeDefined();
-  expect(screen.getAllByText('Hubungi Kami untuk Penawaran Harga')).toHaveLength(3);
+  expect(screen.getAllByText('Hubungi kami')).toHaveLength(3);
+  expect(screen.getByRole('heading', { name: 'Silver' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Gold' })).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Platinum' })).toBeDefined();
+  const packageLinks = [...container.querySelectorAll('.nunuy-package-link')];
+  expect(packageLinks).toHaveLength(3);
+  ['Silver', 'Gold', 'Platinum'].forEach((packageName, index) => {
+    const packageUrl = new URL(packageLinks[index].getAttribute('href'));
+    expect(packageUrl.hostname).toBe('wa.me');
+    expect(packageUrl.pathname).toBe('/6281277881122');
+    const packageMessage = packageUrl.searchParams.get('text');
+    expect(packageMessage).toContain(`paket ${packageName}`);
+    expect(packageMessage).toContain('menanyakan harga');
+    expect(packageMessage).toContain('Website: Nunuy Nadhifa Wedding');
+    expect(packageMessage).toContain(`Menu: Paket Wedding > ${packageName}`);
+    expect(packageLinks[index].getAttribute('target')).toBe('_blank');
+  });
   expect(screen.getByText(/testimoni pelanggan asli akan ditampilkan/i)).toBeDefined();
   expect(screen.getByLabelText(/nama calon pengantin/i)).toBeDefined();
-  expect(screen.queryByLabelText(/email/i)).toBeNull();
+  expect(screen.getByLabelText(/email/i)).toBeDefined();
+  expect(screen.getByRole('navigation', { name: 'Navigasi utama' }).querySelectorAll('a')).toHaveLength(10);
+  expect(screen.getByRole('link', { name: 'Konsultasi Sekarang' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding/kontak#consultation');
+  expect(screen.getByRole('link', { name: 'Lihat Portofolio' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding/galeri');
   expect(container.querySelector('.nunuy-floating-whatsapp').getAttribute('href')).toContain('wa.me/6281277881122');
   expect(container.querySelector('.nunuy-floating-whatsapp svg')).toBeDefined();
   expect(container.querySelector('.nunuy-floating-whatsapp').textContent).toBe('');
+});
+
+test('Nunuy uses the provided brand logo and its own favicon', async () => {
+  window.history.pushState({}, '', '/nunuy-nadhifa-wedding');
+  const { container } = renderApp();
+
+  const headerLogo = container.querySelector('.nunuy-header .nunuy-logo-image');
+  expect(headerLogo.getAttribute('src')).toBe('/nunuy-nadhifa-logo.webp');
+  expect(headerLogo.getAttribute('alt')).toBe('');
+  expect(container.querySelector('.nunuy-header .nunuy-brand-copy strong')).toHaveTextContent('Nunuy Nadhifa Wedding');
+  expect(container.querySelector('.nunuy-footer .nunuy-brand-copy strong')).toHaveTextContent('Nunuy Nadhifa Wedding');
+  await waitFor(() => expect(document.head.querySelector('link[rel="icon"]').getAttribute('href')).toBe('/nunuy-nadhifa-favicon.png'));
+});
+
+test('Nunuy mobile menu exposes page links and can be closed', () => {
+  window.history.pushState({}, '', '/nunuy-nadhifa-wedding');
+  renderApp();
+
+  const toggle = screen.getByRole('button', { name: 'Buka menu' });
+  fireEvent.click(toggle);
+  expect(screen.getByRole('button', { name: 'Tutup menu' }).getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByRole('link', { name: 'Testimoni' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding/testimoni');
+  fireEvent.click(screen.getByRole('button', { name: 'Tutup menu' }));
+  expect(screen.getByRole('button', { name: 'Buka menu' }).getAttribute('aria-expanded')).toBe('false');
+});
+
+test.each([
+  ['Tentang Kami', '/tentang-kami', '.nunuy-intro'],
+  ['Layanan', '/layanan', '.nunuy-services'],
+  ['Paket Wedding', '/paket-wedding', '.nunuy-packages'],
+  ['Galeri', '/galeri', '.nunuy-gallery'],
+  ['Inspirasi', '/inspirasi', '.nunuy-journal'],
+  ['Testimoni', '/testimoni', '.nunuy-testimonials'],
+  ['FAQ', '/faq', '.nunuy-faq'],
+  ['Kontak', '/kontak', '.nunuy-consultation'],
+])('renders the Nunuy %s menu as its own page', async (menuLabel, route, pageSelector) => {
+  const path = `/nunuy-nadhifa-wedding${route}`;
+  window.history.pushState({}, '', path);
+  const { container } = renderApp();
+
+  expect(container.querySelector(pageSelector)).not.toBeNull();
+  expect(container.querySelector('.nunuy-hero')).toBeNull();
+  const currentMenuLink = screen.getByRole('navigation', { name: 'Navigasi utama' })
+    .querySelector(`a[href="${path}"]`);
+  expect(currentMenuLink.getAttribute('aria-current')).toBe('page');
+  expect(currentMenuLink.textContent).toBe(menuLabel);
+  expect(screen.getByRole('link', { name: 'Beranda' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
+  expect(screen.getAllByRole('link', { name: 'Aurora Media' }).every((link) => link.getAttribute('href') === 'https://auroramedia.online/')).toBe(true);
+  await waitFor(() => expect(document.head.querySelector('link[rel="canonical"]').href).toContain(path));
+});
+
+test.each([
+  ['wedding-organizer', 'Wedding Organizer'],
+  ['entertainment-dan-musik', 'Entertainment dan Musik'],
+])('Nunuy service page %s opens a contextual WhatsApp consultation', async (slug, serviceTitle) => {
+  window.history.pushState({}, '', `/nunuy-nadhifa-wedding/layanan/${slug}`);
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: serviceTitle })).toBeDefined();
+  expect(screen.getByText(/ruang lingkup yang dibicarakan/i)).toBeDefined();
+  screen.getAllByRole('link', { name: /konsultasi gratis/i }).forEach((link) => {
+    const url = new URL(link.getAttribute('href'));
+    expect(url.hostname).toBe('wa.me');
+    expect(url.pathname).toBe('/6281277881122');
+    const serviceMessage = url.searchParams.get('text');
+    expect(serviceMessage).toContain(`layanan ${serviceTitle}`);
+    expect(serviceMessage).toContain(`menu: Layanan > ${serviceTitle}`);
+    expect(serviceMessage).toContain('pilihan paket');
+    expect(serviceMessage).toContain('Website: Nunuy Nadhifa Wedding');
+    expect(serviceMessage).toContain(`Menu: Layanan > ${serviceTitle}`);
+    expect(link.getAttribute('target')).toBe('_blank');
+  });
+  await waitFor(() => expect(document.title).toBe(`${serviceTitle} | Nunuy Nadhifa Wedding`));
+  expect(document.head.querySelector('link[rel="canonical"]').href).toContain(`/nunuy-nadhifa-wedding/layanan/${slug}`);
+  expect(document.head.querySelector('script[data-nunuy-seo="true"]').textContent).toContain('"@type":"LocalBusiness"');
+});
+
+test('Nunuy inspiration articles have their own route and article metadata', async () => {
+  window.history.pushState({}, '', '/nunuy-nadhifa-wedding/inspirasi/tips-memilih-wedding-organizer-yang-tepat');
+  renderApp();
+
+  expect(screen.getByRole('heading', { name: 'Tips Memilih Wedding Organizer yang Tepat' })).toBeDefined();
+  expect(screen.getByText(/Tuliskan kebutuhan utama dan hal yang paling penting/i)).toBeDefined();
+  await waitFor(() => expect(document.title).toBe('Tips Memilih Wedding Organizer yang Tepat | Nunuy Nadhifa Wedding'));
+  expect(document.head.querySelector('script[data-nunuy-seo="true"]').textContent).toContain('"@type":"Article"');
+});
+
+test('Nunuy admin manages consultation follow-up status', async () => {
+  const fetchMock = vi.fn(async (_url, options = {}) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
+    json: async () => options.method === 'PATCH'
+      ? { id: 'consultation-1', status: 'contacted' }
+      : [{
+        id: 'consultation-1',
+        couple: 'Alya & Bima',
+        phone: '+6281234567890',
+        email: 'alya@example.com',
+        status: 'new',
+        created_at: '2026-10-25T10:00:00+00:00',
+      }],
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  render(<NunuyConsultationAdmin token="admin-token" />);
+
+  expect(await screen.findByText('Alya & Bima')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Tandai sudah dihubungi' }));
+  expect(await screen.findByRole('status')).toHaveTextContent(/sudah dihubungi/i);
+  expect(fetchMock.mock.calls.some(([, options]) => options.method === 'PATCH')).toBe(true);
+  vi.unstubAllGlobals();
 });
 
 test('uses editable Nunuy admin content on the public website', () => {
@@ -1268,24 +1750,46 @@ test('filters and opens the Nunuy inspiration gallery', () => {
   expect(screen.queryByRole('dialog')).toBeNull();
 });
 
-test('sends the Nunuy consultation details to WhatsApp after confirmation', () => {
+test('stores Nunuy consultation details and provides the WhatsApp follow-up after confirmation', async () => {
   window.history.pushState({}, '', '/nunuy-nadhifa-wedding');
+  const fetchMock = vi.fn(async (url, options = {}) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
+    json: async () => String(url).includes('/public/nunuy-consultations')
+      ? { id: 'consultation-1', status: 'new' }
+      : [],
+  }));
+  vi.stubGlobal('fetch', fetchMock);
   const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
   const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
   renderApp();
 
   fireEvent.change(screen.getByLabelText(/nama calon pengantin/i), { target: { value: 'Alya & Bima' } });
   fireEvent.change(screen.getByLabelText(/nomor whatsapp/i), { target: { value: '081234567890' } });
+  fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'alya@example.com' } });
+  fireEvent.change(screen.getByLabelText(/tanggal pernikahan/i), { target: { value: '2027-06-12' } });
   fireEvent.change(screen.getByLabelText(/lokasi acara/i), { target: { value: 'Bandung' } });
   fireEvent.click(screen.getByRole('button', { name: /kirim konsultasi via whatsapp/i }));
 
   expect(confirmSpy).toHaveBeenCalledOnce();
-  expect(openSpy).toHaveBeenCalledWith(expect.stringContaining('wa.me/6281277881122'), '_blank', 'noopener,noreferrer');
-  expect(decodeURIComponent(openSpy.mock.calls[0][0])).toContain('Nama calon pengantin: Alya & Bima');
-  expect(decodeURIComponent(openSpy.mock.calls[0][0])).toContain('Lokasi acara: Bandung');
-  expect(decodeURIComponent(openSpy.mock.calls[0][0])).not.toContain('Email:');
+  expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/permintaan tersimpan/i));
+  const fallbackMessage = new URL(screen.getByRole('link', { name: 'Lanjutkan ke WhatsApp' }).getAttribute('href')).searchParams.get('text');
+  expect(screen.getByRole('link', { name: 'Lanjutkan ke WhatsApp' }).getAttribute('href')).toContain('wa.me/6281277881122');
+  expect(fallbackMessage).toContain('Website: Nunuy Nadhifa Wedding');
+  expect(fallbackMessage).toContain('Menu: Kontak > Form konsultasi');
+  const submission = fetchMock.mock.calls.find(([url, options]) => String(url).includes('/public/nunuy-consultations') && options.method === 'POST');
+  expect(JSON.parse(submission[1].body)).toMatchObject({
+    couple: 'Alya & Bima',
+    phone: '081234567890',
+    email: 'alya@example.com',
+    wedding_date: '2027-06-12',
+    location: 'Bandung',
+  });
   confirmSpy.mockRestore();
   openSpy.mockRestore();
+  vi.unstubAllGlobals();
 });
 
 test('accepts public testimonials and explains they require approval', async () => {
@@ -1310,6 +1814,43 @@ test('accepts public testimonials and explains they require approval', async () 
     name: 'Alya dan Bima',
     event: 'Pernikahan · Bandung',
     rating: 5,
+  });
+  vi.unstubAllGlobals();
+});
+
+test('shares website ratings through the site-specific public API', async () => {
+  const publishedRating = {
+    id: 'rating-1',
+    kind: 'rating',
+    name: 'Pengunjung',
+    event: 'Rating website',
+    message: null,
+    rating: 4,
+  };
+  const fetchMock = vi.fn(async (_url, options = {}) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
+    json: async () => options.method === 'POST'
+      ? { id: 'rating-2', status: 'pending' }
+      : [publishedRating],
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  render(<PublicTestimonials site="gibrig" />);
+
+  expect(await screen.findByText('4.0')).toBeDefined();
+  expect(screen.getByText('1 penilaian')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Beri rating 4 dari 5' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Kirim rating' }));
+
+  expect(await screen.findByRole('status')).toHaveTextContent(/menunggu persetujuan/i);
+  expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/public/testimonials/gibrig'))).toBe(true);
+  const submission = fetchMock.mock.calls.find(([, options]) => options.method === 'POST');
+  expect(JSON.parse(submission[1].body)).toMatchObject({
+    site: 'gibrig',
+    kind: 'rating',
+    rating: 4,
+    message: null,
   });
   vi.unstubAllGlobals();
 });
@@ -1369,6 +1910,16 @@ test.each([
   const app = renderApp();
 
   try {
+    if (site === 'portal') {
+      expect(screen.queryByRole('heading', { name: 'Cerita dari keluarga dan klien' })).toBeNull();
+      expect(await screen.findByRole('heading', { name: 'Momen berkesan, diceritakan langsung.' })).toBeDefined();
+      expect(await screen.findByRole('heading', { name: 'Bagikan penilaian Anda' })).toBeDefined();
+      for (const reviewSite of ['portal', 'nunuy', 'gibrig', 'invitation']) {
+        expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith(`/public/testimonials/${reviewSite}`))).toBe(true);
+      }
+      return;
+    }
+
     expect(await screen.findByRole('heading', { name: 'Cerita dari keluarga dan klien' })).toBeDefined();
     expect(screen.getByLabelText('Nama')).toBeDefined();
     expect(screen.getByText(/diperiksa admin sebelum ditampilkan/i)).toBeDefined();
@@ -1379,15 +1930,186 @@ test.each([
   }
 });
 
-test('renders the Gibrig public homepage and connects booking inquiry', () => {
+test('Aurora Media displays published testimonials attributed to their connected partner websites', async () => {
+  const testimonials = {
+    nunuy: [{ id: 'nunuy-1', name: 'Alya dan Bima', message: 'Hari pernikahan kami terasa hangat dan tertata.', rating: 5 }],
+    gibrig: [{ id: 'gibrig-1', name: 'Keluarga Rani', message: 'Musiknya membuat acara kami semakin meriah.', rating: 4 }],
+    invitation: [{ id: 'invitation-1', name: 'Dewi', message: 'Undangan digitalnya mudah dibagikan kepada keluarga.', rating: 5 }],
+  };
+  const fetchMock = vi.fn(async (url) => {
+    const pathname = new URL(url, window.location.origin).pathname;
+    const site = pathname.split('/').pop();
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => testimonials[site] || [],
+    };
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  window.history.pushState({}, '', '/');
+  const app = renderApp();
+
+  try {
+    expect(await screen.findByText(/Hari pernikahan kami terasa hangat dan tertata\./)).toBeDefined();
+    expect(screen.getByText(/Musiknya membuat acara kami semakin meriah\./)).toBeDefined();
+    expect(screen.getByText(/Undangan digitalnya mudah dibagikan kepada keluarga\./)).toBeDefined();
+    expect(screen.getByRole('link', { name: 'Nunuy Nadhifa Wedding ↗' }).getAttribute('href')).toBe('/nunuy-nadhifa-wedding');
+    expect(screen.getByRole('link', { name: 'Entertainment Musik ↗' }).getAttribute('href')).toBe('/gibrig');
+    expect(screen.getByRole('link', { name: 'Undangan Digital ↗' }).getAttribute('href')).toBe('/undangan');
+    expect(screen.queryByText('Bagikan cerita Anda')).toBeNull();
+    expect(screen.getAllByText('5.0').length).toBeGreaterThan(0);
+  } finally {
+    app.unmount();
+    vi.unstubAllGlobals();
+  }
+});
+
+test('visitors can submit a star rating with an optional message for admin approval', async () => {
+  const fetchMock = vi.fn(async (url, options = {}) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
+    json: async () => options.method === 'POST'
+      ? { id: 'rating-1', status: 'pending' }
+      : new URL(url, window.location.origin).pathname.endsWith('/public/advertisements')
+        ? []
+        : [],
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  window.history.pushState({}, '', '/');
+  const app = renderApp();
+
+  try {
+    const rating = screen.getByRole('button', { name: 'Beri rating 4 dari 5 untuk Aurora Media' });
+    fireEvent.click(rating);
+    expect(screen.getByLabelText(/pesan opsional/i)).toBeDefined();
+    expect(fetchMock.mock.calls.some(([, options]) => options.method === 'POST')).toBe(false);
+    fireEvent.change(screen.getByLabelText(/pesan opsional/i), { target: { value: 'Informasi partner mudah ditemukan.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Kirim rating' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/menunggu persetujuan/i);
+    const submission = fetchMock.mock.calls.find(([, options]) => options.method === 'POST');
+    expect(JSON.parse(submission[1].body)).toMatchObject({
+      site: 'portal',
+      kind: 'rating',
+      rating: 4,
+      message: 'Informasi partner mudah ditemukan.',
+    });
+    expect(screen.queryByLabelText('Nama')).toBeNull();
+  } finally {
+    app.unmount();
+    vi.unstubAllGlobals();
+  }
+});
+
+test('renders the Gibrig public homepage and connects booking inquiry', async () => {
   window.history.pushState({}, '', '/gibrig');
   const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+  const { container } = render(<App />);
+
+  expect(container.querySelector('.gibrig-topbar .gibrig-brand-logo').getAttribute('src')).toBe('/musik-id-logo.webp');
+  expect(container.querySelector('.gibrig-topbar .gibrig-brand-copy strong')).toHaveTextContent('Entertainment Musik');
+  expect(container.querySelector('.gibrig-footer-brand .gibrig-brand-logo').getAttribute('src')).toBe('/musik-id-logo.webp');
+  expect(await waitFor(() => document.head.querySelector('link[rel="icon"]').getAttribute('href'))).toBe('/musik-id-favicon.png');
+  expect(screen.getByRole('heading', { name: 'Hiburan Berkualitas, Momen Tak Terlupakan' })).toBeDefined();
+  const nav = screen.getByRole('navigation', { name: 'Navigasi utama' });
+  expect(nav.querySelectorAll('a')).toHaveLength(8);
+  expect([...nav.querySelectorAll('a')].map((link) => link.textContent)).toEqual([
+    'Beranda', 'Tentang & Artis', 'Entertainment', 'Paket', 'Galeri', 'Testimoni', 'Sosial Media', 'Aurora Media',
+  ]);
+  expect(nav.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
+  expect(nav.querySelector('a[href="https://auroramedia.online/"]').textContent).toBe('Aurora Media');
+  expect(nav.querySelector('a[href="#social-media"]')).not.toBeNull();
+  expect(container.querySelector('.gibrig-social-links a[href="https://www.tiktok.com/@neng_syelfi_oktora_2"]')).not.toBeNull();
+  expect(container.querySelector('.gibrig-social-links a[href="https://www.youtube.com/@nengsyelfioktora7310"]')).not.toBeNull();
+  expect(container.querySelector('.gibrig-social-links a[href="https://www.instagram.com/nengsyelfiofficial"]')).not.toBeNull();
+  expect(container.querySelector('.gibrig-visual img').getAttribute('src')).toContain('customer-assets.emergentagent.com');
+  expect(container.querySelectorAll('.gibrig-package-card')).toHaveLength(3);
+  expect(container.querySelectorAll('.gibrig-gallery-item')).toHaveLength(6);
+  expect(container.querySelector('.gibrig-artist-profile h2').textContent).toBe('Neng Syelfi Oktora');
+  expect(container.textContent.toLowerCase()).not.toContain('menyesuaikan lokasi');
+  expect(container.querySelector('.whatsapp-contact-link .whatsapp-contact-icon')).not.toBeNull();
+  fireEvent.click(screen.getByRole('link', { name: /hubungi kami/i }));
+  const contactLink = screen.getByRole('link', { name: /hubungi kami/i });
+  const contactMessage = new URL(contactLink.getAttribute('href')).searchParams.get('text');
+  expect(contactLink.getAttribute('href')).toContain('wa.me/6285524752102');
+  expect(contactMessage).toContain('Website: Entertainment Musik');
+  expect(contactMessage).toContain('Menu: Beranda > Hubungi Kami');
+  openSpy.mockRestore();
+});
+
+test('hides the old location-dependent price text from saved Gibrig content', () => {
+  localStorage.setItem('gibrig-cms', JSON.stringify({
+    artists: [{ name: 'Neng Syelfi Oktora', price: ' Menyesuaikan Lokasi ' }],
+    packages: [{ name: 'Paket 1', price: 'Menyesuaikan Lokasi', items: [] }],
+  }));
+  window.history.pushState({}, '', '/gibrig');
+  const { container, unmount } = render(<App />);
+
+  expect(container.textContent.toLowerCase()).not.toContain('menyesuaikan lokasi');
+  unmount();
+  localStorage.removeItem('gibrig-cms');
+});
+
+test.each([
+  ['/gibrig/tentang', 'Tentang & Artis', 'Neng Syelfi Oktora', '.gibrig-artist-profile'],
+  ['/gibrig/entertainment', 'Artist Performance & Entertainment Studio', 'Gibrig Musik Entertainment menghadirkan musik live spektakuler', '.gibrig-entertainment-layout'],
+  ['/gibrig/paket', 'Event packages', 'Paket 1', '.gibrig-package-card'],
+  ['/gibrig/galeri', 'Momen di atas panggung', 'Pertunjukan live di panggung', '.gibrig-gallery-item'],
+  ['/gibrig/testimoni', 'Kesan pelanggan', 'Penilaian website', '.gibrig-testimonials'],
+])('renders the standalone Entertainment Musik page %s without replacing its source data', (path, heading, content, selector) => {
+  window.history.pushState({}, '', path);
+  const { container } = render(<App />);
+
+  expect(screen.getByRole('heading', { name: heading })).toBeDefined();
+  expect(screen.getByText(new RegExp(content, 'i'))).toBeDefined();
+  expect(container.querySelector(selector)).not.toBeNull();
+  if (path === '/gibrig/tentang' || path === '/gibrig/paket') {
+    expect(container.textContent.toLowerCase()).not.toContain('menyesuaikan lokasi');
+  }
+  const mainNavigation = screen.getByRole('navigation', { name: 'Navigasi utama' });
+  expect(mainNavigation.querySelectorAll('a')).toHaveLength(8);
+  expect(mainNavigation.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
+  expect(mainNavigation.querySelector('a[href="https://auroramedia.online/"]').textContent).toBe('Aurora Media');
+  const footerNavigation = screen.getByRole('navigation', { name: 'Navigasi footer' });
+  expect(footerNavigation.querySelector('a[href="/gibrig"]').textContent).toBe('Beranda');
+  expect(footerNavigation.querySelector('a[href="https://auroramedia.online/"]').textContent).toBe('Aurora Media');
+  expect(screen.getByRole('link', { name: 'Kembali ke Aurora Media' }).getAttribute('href')).toBe('https://auroramedia.online/');
+  expect(screen.getByRole('link', { name: /gibrig entertainment, beranda/i }).getAttribute('href')).toBe('/gibrig');
+  expect(document.title).toContain('Gibrig Entertainment');
+});
+
+test('Gibrig package pages keep all saved package details and link the selected package to WhatsApp', () => {
+  window.history.pushState({}, '', '/gibrig/paket');
+  const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+  const { container } = render(<App />);
+
+  const cards = container.querySelectorAll('.gibrig-package-card');
+  expect(cards).toHaveLength(3);
+  expect(cards[1].textContent).toContain('Kentrung');
+  expect(cards[1].textContent).toContain('Terompet');
+  fireEvent.click(screen.getAllByRole('button', { name: /tanya paket/i })[1]);
+  const [whatsappUrl] = openSpy.mock.calls[0];
+  const message = new URL(whatsappUrl).searchParams.get('text');
+  expect(whatsappUrl).toContain('Paket%202');
+  expect(message).toContain('Website: Entertainment Musik');
+  expect(message).toContain('Menu: Paket > Tanya Paket Paket 2');
+  expect(openSpy).toHaveBeenCalledWith(whatsappUrl, '_blank', 'noopener,noreferrer');
+  openSpy.mockRestore();
+});
+
+test('opens package images in a large viewer and closes it with Escape', () => {
+  window.history.pushState({}, '', '/gibrig/paket');
   render(<App />);
 
-  expect(screen.getByRole('heading', { name: 'Hiburan Berkualitas, Momen Tak Terlupakan' })).toBeDefined();
-  fireEvent.click(screen.getAllByRole('button', { name: /booking inquiry/i })[0]);
-  expect(openSpy).toHaveBeenCalledWith(expect.stringContaining('wa.me'), '_blank', 'noopener,noreferrer');
-  openSpy.mockRestore();
+  fireEvent.click(screen.getByRole('button', { name: 'Perbesar gambar Paket 1' }));
+
+  const viewer = screen.getByRole('dialog', { name: 'Pratinjau gambar' });
+  expect(viewer.getAttribute('aria-modal')).toBe('true');
+  expect(viewer.querySelector('img').getAttribute('alt')).toBe('Paket 1 — Esensial');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'Pratinjau gambar' })).toBeNull();
 });
 
 test('connects the invitation hero CTA to registration', () => {

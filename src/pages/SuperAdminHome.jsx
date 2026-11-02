@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import SuperAdminNav from '../components/SuperAdminNav';
 import { adminApi } from '../lib/api';
-import { SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
+import { getAdminScope, SUPER_ADMIN_SESSION_KEY } from '../lib/adminSession';
+import { getSiteUrl } from '../lib/siteDomains';
 
 const adminPanels = [
+  { title: 'SEO Semua Website', description: 'Atur judul, deskripsi, frasa pencarian, dan metadata untuk setiap website.', href: '/setia-creative-admin/seo' },
   { title: 'Portal Admin', description: 'Kelola konten dan pengaturan website utama.', href: '/portal-admin' },
   { title: 'Gibrig Admin', description: 'Kelola konten Gibrig Entertainment.', href: '/gibrig-admin' },
   { title: 'Nunuy Wedding Admin', description: 'Kelola paket dan konten wedding.', href: '/nunuy-admin' },
@@ -12,11 +14,17 @@ const adminPanels = [
 ];
 
 const websites = [
-  { title: 'Portal utama', href: '/' },
-  { title: 'Gibrig Entertainment', href: '/gibrig' },
-  { title: 'Nunuy Nadhifa Wedding', href: '/nunuy-nadhifa-wedding' },
-  { title: 'Nuansa Invite', href: '/undangan' },
+  { title: 'Portal utama', href: getSiteUrl('aurora') },
+  { title: 'Gibrig Entertainment', href: getSiteUrl('entertainment', '/gibrig') },
+  { title: 'Nunuy Nadhifa Wedding', href: getSiteUrl('nunuy', '/nunuy-nadhifa-wedding') },
+  { title: 'Nuansa Invite', href: getSiteUrl('invitation', '/undangan') },
 ];
+
+const scopedPanels = {
+  nunuy: { title: 'Nunuy Wedding Admin', href: '/nunuy-admin' },
+  gibrig: { title: 'Entertainment Musik Admin', href: '/gibrig-admin' },
+  invitation: { title: 'Nuansa Invite Website Admin', href: '/undangan-website-admin' },
+};
 
 export default function SuperAdminHome({ onLogin }) {
   const [token, setToken] = useState(() => sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY));
@@ -24,6 +32,12 @@ export default function SuperAdminHome({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const scope = getAdminScope(token);
+  const scopedPanel = scope && scope !== 'all' ? scopedPanels[scope] : null;
+
+  useEffect(() => {
+    if (token && scopedPanel && onLogin) onLogin(scopedPanel.href);
+  }, [onLogin, scopedPanel, token]);
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -31,10 +45,12 @@ export default function SuperAdminHome({ onLogin }) {
     setIsLoading(true);
     try {
       const result = await adminApi.login({ email, password });
-      sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, result.access_token);
-      setToken(result.access_token);
+      const accessToken = result.access_token;
+      const nextScope = getAdminScope(accessToken);
+      sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, accessToken);
+      setToken(accessToken);
       setPassword('');
-      onLogin?.();
+      if (nextScope === 'all') onLogin?.();
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -47,18 +63,38 @@ export default function SuperAdminHome({ onLogin }) {
     setToken(null);
   };
 
-  if (!token) {
+  if (token && scope && scope !== 'all') {
+    if (scopedPanel && onLogin) return null;
+    return (
+      <main className="super-admin-home">
+        <header className="billing-admin-header">
+          <a className="brand" href={getSiteUrl('aurora')}><span className="logo-mark">A</span>Aurora Media</a>
+          <div><span>Akses panel terbatas</span><button onClick={logout}>Keluar</button></div>
+        </header>
+        <div className="super-admin-content">
+          <section className="super-admin-intro">
+            <p className="eyebrow">Akun admin situs</p>
+            <h1>{scopedPanel?.title || 'Panel admin'}</h1>
+            <p>Akun ini hanya dapat mengelola website yang ditetapkan.</p>
+            {scopedPanel ? <a className="primary-btn" href={scopedPanel.href}>Buka panel</a> : null}
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (!token || !scope) {
     return (
       <main className="billing-admin-login super-admin-login">
         <a className="brand" href="/"><span className="logo-mark">S</span>Setia Creative</a>
         <form className="billing-admin-login-card" onSubmit={handleLogin}>
           <p className="eyebrow">Satu akses untuk semua panel</p>
-          <h1>Super Admin</h1>
-          <p>Masuk dengan akun admin backend untuk mengelola semua panel.</p>
+          <h1>Admin</h1>
+          <p>Masuk dengan akun admin situs atau Super Admin.</p>
           <label>Email admin<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label>Kata sandi<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
-          <button className="primary-btn" disabled={isLoading}>{isLoading ? 'Memeriksa…' : 'Masuk ke super admin'}</button>
+          <button className="primary-btn" disabled={isLoading}>{isLoading ? 'Memeriksa…' : 'Masuk'}</button>
           <a className="super-admin-public-link" href="/undangan">Kunjungi website Nuansa Invite</a>
         </form>
       </main>

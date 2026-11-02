@@ -1,11 +1,19 @@
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+import asyncio
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from email.message import EmailMessage
+from email.utils import formataddr
+import hashlib
+import hmac
+import json
 import logging
 import os
 from pathlib import Path
 import re
 import secrets
+import smtplib
+import ssl
 import uuid
 from typing import Literal
 
@@ -59,6 +67,34 @@ class UserRegistration(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
 
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value):
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("Nama lengkap harus berisi minimal dua karakter.")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, value):
+        if not re.search(r"[a-z]", value):
+            raise ValueError("Kata sandi harus memiliki minimal satu huruf kecil.")
+        if not re.search(r"[A-Z]", value):
+            raise ValueError("Kata sandi harus memiliki minimal satu huruf besar.")
+        if not re.search(r"[0-9]", value):
+            raise ValueError("Kata sandi harus memiliki minimal satu angka.")
+        return value
+
+
+class RegistrationCodeVerification(BaseModel):
+    email: EmailStr
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class RegistrationCodeResend(BaseModel):
+    email: EmailStr
+
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -91,7 +127,7 @@ class PlanConfig(BaseModel):
 class PaymentMethodConfig(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9-]{2,32}$")
     name: str = Field(min_length=2, max_length=60)
-    provider: Literal["mayar", "manual"]
+    provider: Literal["midtrans", "manual"]
     enabled: bool = True
     bank_name: str | None = Field(default=None, max_length=60)
     account_name: str | None = Field(default=None, max_length=80)
@@ -122,6 +158,50 @@ class BillingConfigUpdate(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("ID kombinasi affiliate harus unik.")
         return self
+
+
+class SeoConfigUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=320)
+    keywords: str = Field(default="", max_length=500)
+    canonicalUrl: str = Field(default="", max_length=2048)
+    ogImage: str = Field(default="", max_length=2048)
+    noIndex: bool = False
+
+    @field_validator("title", "description")
+    @classmethod
+    def require_nonempty_text(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("Field SEO tidak boleh kosong.")
+        return value
+
+    @field_validator("keywords")
+    @classmethod
+    def normalize_keywords(cls, value):
+        return ", ".join(keyword.strip() for keyword in value.split(",") if keyword.strip())
+
+    @field_validator("canonicalUrl", "ogImage")
+    @classmethod
+    def validate_secure_url(cls, value):
+        value = value.strip()
+        if not value:
+            return value
+        parsed = urlparse(value)
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError("URL SEO harus menggunakan HTTPS.")
+        return value
+
+
+class SiteContactConfigUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    phone: str = Field(default="", max_length=80)
+    whatsapp_number: str = Field(default="", alias="whatsappNumber", max_length=80)
+    whatsapp_message: str = Field(default="", alias="whatsappMessage", max_length=1000)
+
+
+SEO_SITE_IDS = {"portal", "gibrig", "nunuy", "invitation"}
 
 
 class DashboardAdminCreate(BaseModel):
@@ -257,13 +337,26 @@ class GuestbookModeration(BaseModel):
 
 
 class PublicTestimonialCreate(BaseModel):
+    kind: Literal["testimonial", "rating"] = "testimonial"
     site: Literal["portal", "gibrig", "nunuy", "invitation"]
     name: str = Field(min_length=2, max_length=80)
     event: str = Field(min_length=2, max_length=120)
-    message: str = Field(min_length=10, max_length=1000)
+    message: str | None = Field(default=None, max_length=1000)
     rating: int = Field(ge=1, le=5)
 
-    @field_validator("name", "event", "message")
+    @model_validator(mode="before")
+    @classmethod
+    def provide_rating_metadata(cls, value):
+        if isinstance(value, dict) and value.get("kind") == "rating":
+            value = {
+                **value,
+                "name": value.get("name") or "Pengunjung",
+                "event": "Rating website",
+                "message": value.get("message"),
+            }
+        return value
+
+    @field_validator("name", "event")
     @classmethod
     def normalize_testimonial_text(cls, value: str):
         value = value.strip()
@@ -271,9 +364,51 @@ class PublicTestimonialCreate(BaseModel):
             raise ValueError("Kolom testimoni tidak boleh kosong.")
         return value
 
+    @field_validator("message")
+    @classmethod
+    def normalize_testimonial_message(cls, value: str | None):
+        return value.strip() if value is not None else None
+
+    @model_validator(mode="after")
+    def validate_testimonial_message(self):
+        if self.kind == "testimonial" and (self.message is None or len(self.message) < 10):
+            raise ValueError("Testimoni harus berisi minimal 10 karakter.")
+        if self.kind == "rating" and self.message == "":
+            self.message = None
+        return self
 
 class TestimonialModeration(BaseModel):
     status: Literal["visible", "hidden"]
+
+
+class PublicNunuyConsultationCreate(BaseModel):
+    couple: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=8, max_length=24, pattern=r"^[0-9+()\-\s]+$")
+    email: EmailStr | None = None
+    wedding_date: date | None = None
+    location: str | None = Field(default=None, max_length=160)
+    guests: int | None = Field(default=None, ge=1, le=100000)
+    service: str | None = Field(default=None, max_length=120)
+    package: str | None = Field(default=None, max_length=120)
+    budget: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("couple", "phone")
+    @classmethod
+    def normalize_required_contact(cls, value: str):
+        value = value.strip()
+        if not value:
+            raise ValueError("Nama dan nomor WhatsApp wajib diisi.")
+        return value
+
+    @field_validator("location", "service", "package", "budget", "notes")
+    @classmethod
+    def normalize_optional_consultation_text(cls, value: str | None):
+        return value.strip() or None if value is not None else None
+
+
+class NunuyConsultationStatusUpdate(BaseModel):
+    status: Literal["new", "contacted", "closed"]
 
 
 class InvitationTicketRecipient(BaseModel):
@@ -315,7 +450,7 @@ DEFAULT_BILLING_CONFIG = {
         {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": True, "features": ["100 undangan aktif", "Link otomatis dan dapat diedit", "Statistik lengkap"], "bulk_upload_enabled": True, "max_recipients": 1000, "reseller_enabled": True, "max_resellers": 100, "max_reseller_customers": 1000, "reseller_max_markup_percent": 100, "reseller_commission_percent": 10},
     ],
     "payment_methods": [
-        {"id": "mayar", "name": "Mayar checkout", "provider": "mayar", "enabled": True},
+        {"id": "midtrans", "name": "Midtrans checkout", "provider": "midtrans", "enabled": True},
         {"id": "bank-transfer", "name": "Transfer bank", "provider": "manual", "enabled": False, "bank_name": "", "account_name": "", "account_number": "", "instructions": "Pembayaran diverifikasi oleh admin."},
     ],
     "dashboard_admin_limit": 3,
@@ -325,7 +460,7 @@ DEFAULT_BILLING_CONFIG = {
         {"id": "premium-3", "name": "3 Premium", "basic": 0, "premium": 3},
         {"id": "basic-8", "name": "8 Basic", "basic": 8, "premium": 0},
     ],
-    "schema_version": 3,
+    "schema_version": 4,
 }
 
 def get_jwt_secret():
@@ -335,9 +470,81 @@ def get_jwt_secret():
     return secret
 
 
-def create_access_token(user_id: str, role: str = "user"):
+def get_smtp_settings():
+    host = os.environ.get("SMTP_HOST", "").strip()
+    sender = os.environ.get("SMTP_FROM_EMAIL", "").strip()
+    if not host or not sender:
+        raise HTTPException(status_code=503, detail="SMTP_HOST dan SMTP_FROM_EMAIL harus dikonfigurasi untuk mengirim OTP.")
+    try:
+        port = int(os.environ.get("SMTP_PORT", "587"))
+    except ValueError:
+        raise HTTPException(status_code=503, detail="SMTP_PORT harus berupa nomor port yang valid.") from None
+    if not 1 <= port <= 65535:
+        raise HTTPException(status_code=503, detail="SMTP_PORT harus berada di antara 1 dan 65535.")
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    if bool(username) != bool(password):
+        raise HTTPException(status_code=503, detail="SMTP_USERNAME dan SMTP_PASSWORD harus diatur bersama.")
+    use_ssl = os.environ.get("SMTP_USE_SSL", "false").strip().lower() in {"1", "true", "yes"}
+    sender_name = os.environ.get("SMTP_FROM_NAME", "Nuansa Invite").strip() or "Nuansa Invite"
+    if sender_name.casefold() == "undangan.id":
+        sender_name = "Nuansa Invite"
+    return {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "sender": sender,
+        "sender_name": sender_name,
+        "use_ssl": use_ssl,
+    }
+
+
+def ensure_utc(value):
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def send_smtp_message(settings, message):
+    if settings["use_ssl"]:
+        server = smtplib.SMTP_SSL(settings["host"], settings["port"], timeout=15, context=ssl.create_default_context())
+    else:
+        server = smtplib.SMTP(settings["host"], settings["port"], timeout=15)
+    with server:
+        if not settings["use_ssl"]:
+            server.starttls(context=ssl.create_default_context())
+        if settings["username"]:
+            server.login(settings["username"], settings["password"])
+        server.send_message(message)
+
+
+async def send_registration_code_email(email, full_name, code):
+    settings = get_smtp_settings()
+    message = EmailMessage()
+    message["Subject"] = "Kode OTP pendaftaran Nuansa Invite"
+    message["From"] = formataddr((settings["sender_name"], settings["sender"]))
+    message["To"] = email
+    message.set_content(
+        f"Halo {full_name},\n\n"
+        f"Kode OTP pendaftaran Nuansa Invite Anda adalah: {code}\n\n"
+        "Kode berlaku selama 10 menit dan hanya dapat digunakan satu kali. "
+        "Jangan bagikan kode ini kepada siapa pun.\n\n"
+        "Jika Anda tidak merasa mendaftar, abaikan email ini."
+    )
+    try:
+        await asyncio.to_thread(send_smtp_message, settings, message)
+    except Exception as error:
+        logging.getLogger(__name__).exception("Gagal mengirim email OTP pendaftaran.")
+        raise HTTPException(status_code=502, detail="Email OTP gagal dikirim. Coba lagi beberapa saat.") from error
+
+
+def create_access_token(user_id: str, role: str = "user", scope: str | None = None):
     expires_at = datetime.now(timezone.utc) + timedelta(hours=12)
-    return jwt.encode({"sub": user_id, "role": role, "exp": expires_at}, get_jwt_secret(), algorithm="HS256")
+    payload = {"sub": user_id, "role": role, "exp": expires_at}
+    if role == "admin":
+        payload["scope"] = scope or "all"
+    return jwt.encode(payload, get_jwt_secret(), algorithm="HS256")
 
 
 async def get_billing_config():
@@ -371,19 +578,18 @@ async def get_billing_config():
                     for feature in plan.get("features", [])
                 ]
         for method in saved.get("payment_methods", []):
-            if method.get("provider") == "midtrans":
-                if method.get("id") == "bank-transfer" or any(
-                    method.get(field) for field in ("bank_name", "account_name", "account_number")
-                ):
+                if method.get("provider") == "mayar":
+                    method["provider"] = "midtrans"
+                    method["name"] = "Midtrans checkout"
+                elif method.get("provider") == "midtrans":
+                    method["name"] = "Midtrans checkout"
+                if method.get("provider") == "manual" or method.get("id") == "bank-transfer":
                     method["provider"] = "manual"
-                else:
-                    method["provider"] = "mayar"
-                    if method.get("name") in {"GoPay", "QRIS", "GoPay / QRIS"}:
-                        method["name"] = "Mayar checkout"
                 method.pop("payment_code", None)
+                method.pop("gateway", None)
         saved.setdefault("dashboard_admin_limit", DEFAULT_BILLING_CONFIG["dashboard_admin_limit"])
         saved.setdefault("affiliate_combinations", DEFAULT_BILLING_CONFIG["affiliate_combinations"])
-        saved["schema_version"] = 3
+        saved["schema_version"] = 4
         return saved
     await db.platform_settings.update_one(
         {"key": "billing"},
@@ -464,7 +670,7 @@ async def write_audit_log(actor: dict, action: str, target_type: str, target_id:
     })
 
 
-async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+def decode_admin_credentials(credentials: HTTPAuthorizationCredentials):
     if credentials is None:
         raise HTTPException(status_code=401, detail="Admin harus login.")
     try:
@@ -473,7 +679,63 @@ async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(bear
         raise HTTPException(status_code=401, detail="Sesi admin tidak valid.") from None
     if payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Akses admin diperlukan.")
-    return {"email": payload["sub"]}
+    return {"email": payload["sub"], "scope": payload.get("scope", "all")}
+
+
+async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    admin = decode_admin_credentials(credentials)
+    if admin["scope"] != "all":
+        raise HTTPException(status_code=403, detail="Akses Super Admin diperlukan.")
+    return admin
+
+
+async def require_authenticated_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    return decode_admin_credentials(credentials)
+
+
+async def require_super_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    return await require_admin(credentials)
+
+
+async def require_site_admin(
+    site: str,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    admin = decode_admin_credentials(credentials)
+    if admin["scope"] not in {"all", site}:
+        raise HTTPException(status_code=403, detail="Akun admin tidak memiliki akses ke website ini.")
+    return admin
+
+
+async def require_nunuy_admin(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    admin = decode_admin_credentials(credentials)
+    if admin["scope"] not in {"all", "nunuy"}:
+        raise HTTPException(status_code=403, detail="Akun admin tidak memiliki akses ke website ini.")
+    return admin
+
+
+def verify_admin_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except (TypeError, ValueError):
+        return False
+
+
+def get_site_admin_accounts():
+    raw_accounts = os.environ.get("SITE_ADMIN_CREDENTIALS_JSON", "").strip()
+    if not raw_accounts:
+        return {}
+    try:
+        accounts = json.loads(raw_accounts)
+    except ValueError:
+        raise HTTPException(status_code=503, detail="SITE_ADMIN_CREDENTIALS_JSON tidak valid.") from None
+    allowed_sites = {"nunuy", "gibrig", "invitation"}
+    if not isinstance(accounts, dict) or set(accounts) - allowed_sites:
+        raise HTTPException(status_code=503, detail="Konfigurasi akun admin situs tidak valid.")
+    for site, account in accounts.items():
+        if not isinstance(account, dict) or not account.get("email") or not account.get("password_hash"):
+            raise HTTPException(status_code=503, detail=f"Kredensial admin {site} belum lengkap.")
+    return accounts
 
 
 def slugify(value: str):
@@ -673,69 +935,86 @@ def public_payment(payment):
     }
 
 
-def mayar_api_base_url():
-    return "https://api.mayar.io/hl/v2" if os.environ.get("MAYAR_IS_SANDBOX", "false").lower() == "true" else "https://api.mayar.id/hl/v2"
+def midtrans_api_base_url():
+    return "https://api.sandbox.midtrans.com" if os.environ.get("MIDTRANS_IS_SANDBOX", "false").lower() == "true" else "https://api.midtrans.com"
 
 
-async def mayar_request(method, path, **kwargs):
-    api_key = os.environ.get("MAYAR_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="MAYAR_API_KEY belum dikonfigurasi.")
+def midtrans_snap_base_url():
+    return "https://app.sandbox.midtrans.com" if os.environ.get("MIDTRANS_IS_SANDBOX", "false").lower() == "true" else "https://app.midtrans.com"
+
+
+async def midtrans_request(method, path, **kwargs):
+    server_key = os.environ.get("MIDTRANS_SERVER_KEY", "").strip()
+    if not server_key:
+        raise HTTPException(status_code=503, detail="MIDTRANS_SERVER_KEY belum dikonfigurasi.")
+    base_url = midtrans_snap_base_url() if path.startswith("/snap/") else midtrans_api_base_url()
     try:
         async with httpx.AsyncClient(timeout=20) as client_http:
             response = await client_http.request(
                 method,
-                f"{mayar_api_base_url()}{path}",
-                headers={"Authorization": api_key},
+                f"{base_url}{path}",
+                auth=(server_key, ""),
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
                 **kwargs,
             )
         response.raise_for_status()
     except httpx.HTTPStatusError as error:
-        logger.warning("Mayar API rejected request with status %s", error.response.status_code)
-        raise HTTPException(status_code=502, detail="Mayar menolak permintaan pembayaran. Periksa konfigurasi API Key.") from None
+        logger.warning("Midtrans API rejected request with status %s", error.response.status_code)
+        raise HTTPException(status_code=502, detail="Midtrans menolak permintaan pembayaran. Periksa konfigurasi Server Key.") from None
     except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="API Mayar tidak dapat dihubungi.") from None
+        raise HTTPException(status_code=502, detail="API Midtrans tidak dapat dihubungi.") from None
     try:
         result = response.json()
     except ValueError:
-        raise HTTPException(status_code=502, detail="Mayar mengirim respons yang tidak valid.") from None
-    if not isinstance(result, dict) or not isinstance(result.get("data"), dict):
-        raise HTTPException(status_code=502, detail="Mayar mengirim format respons yang tidak dikenal.")
-    if result.get("statusCode") not in {None, 200}:
-        logger.warning("Mayar API returned status %s", result["statusCode"])
-        raise HTTPException(status_code=502, detail="Mayar tidak berhasil memproses permintaan.")
-    return result["data"]
+        raise HTTPException(status_code=502, detail="Midtrans mengirim respons yang tidak valid.") from None
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=502, detail="Midtrans mengirim format respons yang tidak dikenal.")
+    return result
 
 
-async def create_mayar_invoice(payment, user, mobile):
-    now = datetime.now(timezone.utc)
-    invoice = await mayar_request(
+async def create_midtrans_transaction(payment, user, mobile=None):
+    full_name = " ".join(str(user.get("full_name") or "").split()) or "Pengguna Nuansa Invite"
+    name_parts = full_name.split(" ", 1)
+    customer_details = {
+        "first_name": name_parts[0][:50],
+        "email": user["email"],
+    }
+    if len(name_parts) > 1:
+        customer_details["last_name"] = name_parts[1][:50]
+    if mobile:
+        customer_details["phone"] = mobile
+    transaction = await midtrans_request(
         "POST",
-        "/invoices/create",
+        "/snap/v1/transactions",
         json={
-            "name": user["full_name"],
-            "email": user["email"],
-            "mobile": mobile,
-            "description": f"Nuansa Invite {payment['plan_name']} · {payment['order_id']}",
-            "expiredAt": (now + timedelta(hours=24)).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-            "items": [{
-                "quantity": 1,
-                "rate": payment["amount"],
-                "description": f"Paket {payment['plan_name']} - Nuansa Invite",
-            }],
-            "extraData": {
-                "noCustomer": payment["id"],
-                "idProd": payment["plan_id"],
+            "transaction_details": {
+                "order_id": payment["order_id"],
+                "gross_amount": payment["amount"],
             },
+            "item_details": [{
+                "id": payment["plan_id"][:50],
+                "price": payment["amount"],
+                "quantity": 1,
+                "name": f"Paket {payment['plan_name']} - Nuansa Invite"[:50],
+            }],
+            "customer_details": customer_details,
         },
     )
-    invoice_id = invoice.get("id")
-    redirect_url = invoice.get("link") or invoice.get("paymentUrl")
-    if not isinstance(invoice_id, str) or not isinstance(redirect_url, str) or not redirect_url.startswith("https://"):
-        raise HTTPException(status_code=502, detail="Mayar tidak mengembalikan ID invoice dan tautan pembayaran yang valid.")
-    payment["mayar_invoice_id"] = invoice_id
-    if isinstance(invoice.get("transactionId"), str):
-        payment["mayar_transaction_id"] = invoice["transactionId"]
+    token = transaction.get("token")
+    redirect_url = transaction.get("redirect_url")
+    parsed_url = urlparse(redirect_url) if isinstance(redirect_url, str) else None
+    allowed_hosts = {"app.midtrans.com", "app.sandbox.midtrans.com"}
+    if (
+        not isinstance(token, str)
+        or not token
+        or parsed_url is None
+        or parsed_url.scheme != "https"
+        or parsed_url.hostname not in allowed_hosts
+    ):
+        raise HTTPException(status_code=502, detail="Midtrans tidak mengembalikan token dan tautan checkout yang valid.")
+    payment["midtrans_token"] = token
+    if isinstance(transaction.get("transaction_id"), str):
+        payment["midtrans_transaction_id"] = transaction["transaction_id"]
     return redirect_url
 
 
@@ -817,25 +1096,96 @@ async def root():
     return {"message": "Nuansa Invite API is running"}
 
 
+@api_router.get("/public/seo/{site}")
+async def get_public_seo_config(site: str):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website SEO tidak ditemukan.")
+    saved = await db.platform_settings.find_one({"key": f"seo:{site}"}, {"_id": 0, "key": 0})
+    if saved is None:
+        return {"site": site, "seo": None}
+    return {"site": site, "seo": {key: value for key, value in saved.items() if key != "key"}}
+
+
+@api_router.get("/admin/seo/{site}")
+async def get_admin_seo_config(site: str, _admin=Depends(require_site_admin)):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website SEO tidak ditemukan.")
+    saved = await db.platform_settings.find_one({"key": f"seo:{site}"}, {"_id": 0, "key": 0})
+    seo = None if saved is None else {key: value for key, value in saved.items() if key != "key"}
+    return {"site": site, "seo": seo}
+
+
+@api_router.put("/admin/seo/{site}")
+async def update_admin_seo_config(site: str, payload: SeoConfigUpdate, _admin=Depends(require_site_admin)):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website SEO tidak ditemukan.")
+    config = payload.model_dump()
+    await db.platform_settings.update_one(
+        {"key": f"seo:{site}"},
+        {"$set": {"key": f"seo:{site}", **config}},
+        upsert=True,
+    )
+    await write_audit_log(_admin, "seo.config.updated", "seo_config", site, {
+        "title": config["title"],
+        "no_index": config["noIndex"],
+    })
+    return {"site": site, "seo": config}
+
+
+@api_router.get("/public/site-contact/{site}")
+async def get_public_site_contact(site: str):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website tidak ditemukan.")
+    saved = await db.platform_settings.find_one({"key": f"site-contact:{site}"}, {"_id": 0, "key": 0})
+    if saved is None:
+        return {"site": site, "contact": None}
+    contact = {key: value for key, value in saved.items() if key != "key"}
+    contact = SiteContactConfigUpdate(**contact).model_dump(by_alias=True)
+    return {"site": site, "contact": contact}
+
+
+@api_router.put("/admin/site-contact/{site}")
+async def update_site_contact(
+    site: str,
+    payload: SiteContactConfigUpdate,
+    _admin=Depends(require_site_admin),
+):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website tidak ditemukan.")
+    config = payload.model_dump(by_alias=True)
+    await db.platform_settings.update_one(
+        {"key": f"site-contact:{site}"},
+        {"$set": {"key": f"site-contact:{site}", **config}},
+        upsert=True,
+    )
+    return {"site": site, "contact": config}
+
+
 @api_router.post("/admin/login")
 async def admin_login(payload: AdminLogin):
     get_jwt_secret()
     admin_email = os.environ.get("ADMIN_EMAIL", "").lower()
     password_hash = os.environ.get("ADMIN_PASSWORD_HASH", "")
-    if not admin_email or not password_hash:
+    site_accounts = get_site_admin_accounts()
+    if not (admin_email and password_hash) and not site_accounts:
         raise HTTPException(status_code=503, detail="ADMIN_EMAIL dan ADMIN_PASSWORD_HASH belum dikonfigurasi.")
 
-    try:
-        valid_password = bcrypt.checkpw(payload.password.encode("utf-8"), password_hash.encode("utf-8"))
-    except ValueError:
-        valid_password = False
-    if payload.email.lower() != admin_email or not valid_password:
+    email = payload.email.lower()
+    if admin_email and password_hash and email == admin_email and verify_admin_password(payload.password, password_hash):
+        scope = "all"
+    else:
+        scope = next((
+            site
+            for site, account in site_accounts.items()
+            if email == account["email"].lower() and verify_admin_password(payload.password, account["password_hash"])
+        ), None)
+    if scope is None:
         raise HTTPException(status_code=401, detail="Email atau kata sandi admin salah.")
 
     return {
-        "access_token": create_access_token(admin_email, role="admin"),
+        "access_token": create_access_token(email, role="admin", scope=scope),
         "token_type": "bearer",
-        "user": {"email": admin_email, "role": "admin"},
+        "user": {"email": email, "role": "admin", "scope": scope},
     }
 
 
@@ -851,13 +1201,13 @@ async def get_public_billing_config():
 @api_router.get("/admin/billing/config")
 async def get_admin_billing_config(_admin=Depends(require_admin)):
     config = await get_billing_config()
-    return {**config, "gateway_ready": bool(os.environ.get("MAYAR_API_KEY"))}
+    return {**config, "gateway_ready": bool(os.environ.get("MIDTRANS_SERVER_KEY", "").strip())}
 
 
 @api_router.put("/admin/billing/config")
 async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depends(require_admin)):
     config = payload.model_dump()
-    config["schema_version"] = 3
+    config["schema_version"] = 4
     previous_config = await get_billing_config()
     previous_plans = {plan["id"]: plan for plan in previous_config["plans"]}
     default_plans = {plan["id"]: plan for plan in DEFAULT_BILLING_CONFIG["plans"]}
@@ -907,7 +1257,7 @@ async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depen
             "reseller_commission_percent": plan["reseller_commission_percent"],
         } for plan in config["plans"]],
     })
-    return {**config, "gateway_ready": bool(os.environ.get("MAYAR_API_KEY"))}
+    return {**config, "gateway_ready": bool(os.environ.get("MIDTRANS_SERVER_KEY"))}
 
 
 @api_router.get("/admin/demo-accounts")
@@ -1053,25 +1403,102 @@ async def create_demo_account(payload: DemoAccountCreate, _admin=Depends(require
 
 @api_router.post("/auth/register")
 async def register_user(payload: UserRegistration):
-    get_jwt_secret()
+    secret = get_jwt_secret()
     email = str(payload.email).lower()
     await db.users.create_index("email", unique=True)
     if await db.users.find_one({"email": email}, {"_id": 1}):
         raise HTTPException(status_code=409, detail="Email sudah terdaftar.")
 
+    await db.registration_otps.create_index("email", unique=True)
+    await db.registration_otps.create_index("expires_at", expireAfterSeconds=0)
+    existing = await db.registration_otps.find_one({"email": email})
+    now = datetime.now(timezone.utc)
+    if existing and existing.get("last_sent_at") and now - ensure_utc(existing["last_sent_at"]) < timedelta(seconds=60):
+        raise HTTPException(status_code=429, detail="Tunggu 60 detik sebelum meminta kode OTP baru.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    pending_registration = {
+        "email": email,
+        "full_name": payload.full_name.strip(),
+        "password_hash": bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        "code_hash": hmac.new(secret.encode("utf-8"), code.encode("ascii"), hashlib.sha256).hexdigest(),
+        "attempts": 0,
+        "last_sent_at": now,
+        "expires_at": now + timedelta(minutes=10),
+    }
+    await send_registration_code_email(email, pending_registration["full_name"], code)
+    await db.registration_otps.replace_one({"email": email}, pending_registration, upsert=True)
+    return {"message": "Kode OTP telah dikirim ke email Anda. Periksa kotak masuk atau folder spam."}
+
+
+@api_router.post("/auth/register/resend")
+async def resend_registration_code(payload: RegistrationCodeResend):
+    secret = get_jwt_secret()
+    email = str(payload.email).lower()
+    pending = await db.registration_otps.find_one({"email": email})
+    if pending is None:
+        raise HTTPException(status_code=404, detail="Pendaftaran belum dimulai. Isi formulir daftar untuk meminta kode OTP.")
+
+    now = datetime.now(timezone.utc)
+    if now - ensure_utc(pending["last_sent_at"]) < timedelta(seconds=60):
+        raise HTTPException(status_code=429, detail="Tunggu 60 detik sebelum meminta kode OTP baru.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    pending.update({
+        "code_hash": hmac.new(secret.encode("utf-8"), code.encode("ascii"), hashlib.sha256).hexdigest(),
+        "attempts": 0,
+        "last_sent_at": now,
+        "expires_at": now + timedelta(minutes=10),
+    })
+    await send_registration_code_email(email, pending["full_name"], code)
+    await db.registration_otps.replace_one({"email": email}, pending, upsert=True)
+    return {"message": "Kode OTP baru telah dikirim ke email Anda."}
+
+
+@api_router.post("/auth/register/verify")
+async def verify_registration_code(payload: RegistrationCodeVerification):
+    secret = get_jwt_secret()
+    email = str(payload.email).lower()
+    pending = await db.registration_otps.find_one({"email": email})
+    if pending is None:
+        raise HTTPException(status_code=400, detail="Kode OTP tidak ditemukan. Silakan mulai pendaftaran kembali.")
+
+    now = datetime.now(timezone.utc)
+    if ensure_utc(pending["expires_at"]) <= now:
+        await db.registration_otps.delete_one({"email": email})
+        raise HTTPException(status_code=400, detail="Kode OTP sudah kedaluwarsa. Minta kode baru untuk melanjutkan.")
+    if pending["attempts"] >= 5:
+        await db.registration_otps.delete_one({"email": email})
+        raise HTTPException(status_code=429, detail="Batas percobaan OTP tercapai. Mulai pendaftaran kembali.")
+
+    submitted_hash = hmac.new(secret.encode("utf-8"), payload.code.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(submitted_hash, pending["code_hash"]):
+        failed_attempt = await db.registration_otps.find_one_and_update(
+            {"email": email, "attempts": {"$lt": 5}},
+            {"$inc": {"attempts": 1}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if failed_attempt is None:
+            await db.registration_otps.delete_one({"email": email})
+            raise HTTPException(status_code=429, detail="Batas percobaan OTP tercapai. Mulai pendaftaran kembali.")
+        raise HTTPException(status_code=400, detail="Kode OTP salah.")
+
     user = {
         "id": str(uuid.uuid4()),
-        "full_name": payload.full_name.strip(),
+        "full_name": pending["full_name"],
         "email": email,
-        "password_hash": bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        "password_hash": pending["password_hash"],
         "role": "user",
         "active": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "email_verified": True,
+        "created_at": now.isoformat(),
     }
     try:
         await db.users.insert_one(user)
     except DuplicateKeyError:
+        await db.registration_otps.delete_one({"email": email})
         raise HTTPException(status_code=409, detail="Email sudah terdaftar.") from None
+    await db.registration_otps.delete_one({"email": email})
 
     return {
         "access_token": create_access_token(user["id"]),
@@ -1447,10 +1874,10 @@ async def create_reseller_order(payload: ResellerOrderCreate, current_user=Depen
             status_code=422,
             detail=f"Harga jual harus di antara Rp {plan['price']:,} dan Rp {max_price:,}.",
         )
-    if not os.environ.get("MAYAR_API_KEY"):
-        raise HTTPException(status_code=503, detail="Checkout penjualan reseller belum tersedia: konfigurasi Mayar belum lengkap.")
-    if not any(method.get("provider") == "mayar" and method.get("enabled") for method in billing["payment_methods"]):
-        raise HTTPException(status_code=503, detail="Checkout Mayar sedang dinonaktifkan oleh Super Admin.")
+    if not os.environ.get("MIDTRANS_SERVER_KEY"):
+        raise HTTPException(status_code=503, detail="Checkout penjualan reseller belum tersedia: konfigurasi Midtrans belum lengkap.")
+    if not any(method.get("provider") == "midtrans" and method.get("enabled") for method in billing["payment_methods"]):
+        raise HTTPException(status_code=503, detail="Checkout Midtrans sedang dinonaktifkan oleh Super Admin.")
 
     order_id = f"RS-{uuid.uuid4().hex[:18].upper()}"
     payment_id = str(uuid.uuid4())
@@ -1479,8 +1906,8 @@ async def create_reseller_order(payload: ResellerOrderCreate, current_user=Depen
         "duration_days": plan["duration_days"],
         "amount": payload.selling_price,
         "base_amount": plan["price"],
-        "payment_method": "Mayar checkout reseller",
-        "provider": "mayar",
+        "payment_method": "Midtrans checkout reseller",
+        "provider": "midtrans",
         "order_type": "reseller",
         "reseller_order_id": reseller_order_id,
         "status": "pending",
@@ -1506,7 +1933,7 @@ async def create_reseller_order(payload: ResellerOrderCreate, current_user=Depen
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
-    redirect_url = await create_mayar_invoice(
+    redirect_url = await create_midtrans_transaction(
         payment,
         {"full_name": payload.customer_name.strip(), "email": customer_email},
         f"+{phone_digits}",
@@ -1842,6 +2269,7 @@ async def create_public_guestbook(slug: str, payload: GuestbookEntryCreate):
 def public_testimonial_entry(entry):
     return {
         "id": entry["id"],
+        "kind": entry.get("kind", "testimonial"),
         "name": entry["name"],
         "event": entry["event"],
         "message": entry["message"],
@@ -1874,8 +2302,10 @@ async def create_public_testimonial(payload: PublicTestimonialCreate):
 @api_router.get("/admin/testimonials")
 async def list_admin_testimonials(
     site: Literal["portal", "gibrig", "nunuy", "invitation"] | None = None,
-    _admin=Depends(require_admin),
+    _admin=Depends(require_authenticated_admin),
 ):
+    if _admin["scope"] != "all" and site != _admin["scope"]:
+        raise HTTPException(status_code=403, detail="Akun admin tidak memiliki akses ke testimoni website ini.")
     query = {"status": {"$in": ["pending", "visible"]}}
     if site:
         query["site"] = site
@@ -1887,8 +2317,13 @@ async def list_admin_testimonials(
 async def moderate_testimonial(
     testimonial_id: str,
     payload: TestimonialModeration,
-    _admin=Depends(require_admin),
+    _admin=Depends(require_authenticated_admin),
 ):
+    entry = await db.testimonials.find_one({"id": testimonial_id}, {"_id": 0, "site": 1})
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Testimoni tidak ditemukan.")
+    if _admin["scope"] != "all" and entry.get("site") != _admin["scope"]:
+        raise HTTPException(status_code=403, detail="Akun admin tidak memiliki akses ke testimoni website ini.")
     result = await db.testimonials.update_one(
         {"id": testimonial_id},
         {"$set": {"status": payload.status}},
@@ -1900,6 +2335,44 @@ async def moderate_testimonial(
         if entry.get("status") != payload.status:
             raise HTTPException(status_code=409, detail="Status testimoni tidak dapat diperbarui.")
     return {"id": testimonial_id, "status": payload.status}
+
+
+@api_router.post("/public/nunuy-consultations")
+async def create_public_nunuy_consultation(payload: PublicNunuyConsultationCreate):
+    consultation_id = str(uuid.uuid4())
+    entry = {
+        "id": consultation_id,
+        **payload.model_dump(mode="json"),
+        "status": "new",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.nunuy_consultations.insert_one(entry)
+    return {"id": consultation_id, "status": entry["status"]}
+
+
+@api_router.get("/admin/nunuy-consultations")
+async def list_nunuy_consultations(_admin=Depends(require_nunuy_admin)):
+    entries = await db.nunuy_consultations.find({}, {"_id": 0}).sort("created_at", -1).to_list(length=500)
+    return entries
+
+
+@api_router.patch("/admin/nunuy-consultations/{consultation_id}")
+async def update_nunuy_consultation_status(
+    consultation_id: str,
+    payload: NunuyConsultationStatusUpdate,
+    _admin=Depends(require_nunuy_admin),
+):
+    result = await db.nunuy_consultations.update_one(
+        {"id": consultation_id},
+        {"$set": {"status": payload.status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.modified_count == 0:
+        entry = await db.nunuy_consultations.find_one({"id": consultation_id}, {"_id": 0, "status": 1})
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Konsultasi tidak ditemukan.")
+        if entry.get("status") != payload.status:
+            raise HTTPException(status_code=409, detail="Status konsultasi tidak dapat diperbarui.")
+    return {"id": consultation_id, "status": payload.status}
 
 
 def public_invitation_ticket(ticket, invitation):
@@ -2184,6 +2657,8 @@ async def create_invitation_payment_locked(invitation_id: str, payload: PaymentC
             "instructions": method.get("instructions"),
         }
     else:
+        if not os.environ.get("MIDTRANS_SERVER_KEY"):
+            raise HTTPException(status_code=503, detail="Checkout Midtrans belum dikonfigurasi.")
         mobile = re.sub(r"[\s()-]", "", payload.mobile or "")
         if mobile.startswith("0"):
             mobile = f"+62{mobile[1:]}"
@@ -2192,9 +2667,9 @@ async def create_invitation_payment_locked(invitation_id: str, payload: PaymentC
         elif mobile.startswith("62"):
             mobile = f"+{mobile}"
         digits = re.sub(r"\D", "", mobile)
-        if not 8 <= len(digits) <= 15:
-            raise HTTPException(status_code=422, detail="Masukkan nomor ponsel yang valid untuk pembayaran Mayar.")
-        redirect_url = await create_mayar_invoice(payment, current_user, mobile)
+        if mobile and not 8 <= len(digits) <= 15:
+            raise HTTPException(status_code=422, detail="Nomor ponsel untuk pembayaran Midtrans tidak valid.")
+        redirect_url = await create_midtrans_transaction(payment, current_user, mobile or None)
         payment["redirect_url"] = redirect_url
     await db.payment_orders.insert_one(payment)
     await db.invitations.update_one(
@@ -2230,55 +2705,47 @@ async def submit_transfer_reference(payment_id: str, payload: PaymentProof, curr
     return {"status": "pending", "message": "Referensi transfer terkirim untuk diverifikasi admin."}
 
 
-@api_router.post("/payments/mayar/webhook")
-async def mayar_webhook(payload: dict):
-    if not os.environ.get("MAYAR_API_KEY"):
-        raise HTTPException(status_code=503, detail="Gateway Mayar belum dikonfigurasi.")
-    if payload.get("event") != "payment.received":
-        return {"status": "ignored"}
-    data = payload.get("data")
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=400, detail="Notifikasi Mayar tidak lengkap.")
+@api_router.post("/payments/midtrans/webhook")
+async def midtrans_webhook(payload: dict):
+    server_key = os.environ.get("MIDTRANS_SERVER_KEY", "").strip()
+    if not server_key:
+        raise HTTPException(status_code=503, detail="Gateway Midtrans belum dikonfigurasi.")
+    required_fields = ("order_id", "status_code", "gross_amount", "signature_key")
+    if any(not isinstance(payload.get(field), str) or not payload[field] for field in required_fields):
+        raise HTTPException(status_code=400, detail="Notifikasi Midtrans tidak lengkap.")
 
-    identifiers = {
-        str(data[key])
-        for key in ("id", "transactionId", "paymentLinkTransactionId", "productId", "paymentLinkId")
-        if data.get(key)
-    }
-    extra_data = data.get("extraData")
-    if isinstance(extra_data, dict) and extra_data.get("noCustomer"):
-        identifiers.add(str(extra_data["noCustomer"]))
-    if not identifiers:
-        raise HTTPException(status_code=400, detail="ID transaksi Mayar tidak ditemukan.")
+    signature_source = f"{payload['order_id']}{payload['status_code']}{payload['gross_amount']}{server_key}"
+    expected_signature = hashlib.sha512(signature_source.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(expected_signature, payload["signature_key"].lower()):
+        raise HTTPException(status_code=401, detail="Tanda tangan notifikasi Midtrans tidak valid.")
 
     payment = await db.payment_orders.find_one(
-        {
-            "provider": "mayar",
-            "$or": [
-                {"id": {"$in": list(identifiers)}},
-                {"order_id": {"$in": list(identifiers)}},
-                {"mayar_invoice_id": {"$in": list(identifiers)}},
-                {"mayar_transaction_id": {"$in": list(identifiers)}},
-            ],
-        },
+        {"provider": "midtrans", "order_id": payload["order_id"]},
         {"_id": 0},
     )
     if payment is None:
-        raise HTTPException(status_code=404, detail="Order Mayar tidak ditemukan.")
+        raise HTTPException(status_code=404, detail="Order Midtrans tidak ditemukan.")
 
-    invoice_id = payment.get("mayar_invoice_id")
-    if not invoice_id:
-        raise HTTPException(status_code=409, detail="Order belum memiliki ID invoice Mayar.")
-    invoice = await mayar_request("GET", f"/invoices/{invoice_id}")
+    transaction = await midtrans_request("GET", f"/v2/{payment['order_id']}/status")
     try:
-        invoice_amount = Decimal(str(invoice["amount"]))
+        transaction_amount = Decimal(str(transaction["gross_amount"]))
     except (KeyError, InvalidOperation, TypeError):
-        raise HTTPException(status_code=502, detail="Detail invoice Mayar tidak lengkap.") from None
-    if invoice.get("id") != invoice_id or invoice_amount != Decimal(payment["amount"]):
-        raise HTTPException(status_code=400, detail="Invoice Mayar tidak sesuai dengan order.")
+        raise HTTPException(status_code=502, detail="Detail transaksi Midtrans tidak lengkap.") from None
+    if (
+        transaction.get("order_id") != payment["order_id"]
+        or transaction_amount != Decimal(payment["amount"])
+        or transaction.get("currency", "IDR") != "IDR"
+    ):
+        raise HTTPException(status_code=400, detail="Transaksi Midtrans tidak sesuai dengan order.")
 
-    if str(invoice.get("status", "")).lower() == "paid":
-        await set_payment_status(payment, "paid", "paid")
+    transaction_status = str(transaction.get("transaction_status", "")).lower()
+    fraud_status = str(transaction.get("fraud_status", "")).lower()
+    if transaction_status == "settlement" or (transaction_status == "capture" and fraud_status == "accept"):
+        if str(transaction.get("status_code")) != "200":
+            raise HTTPException(status_code=400, detail="Status transaksi Midtrans belum berhasil.")
+        await set_payment_status(payment, "paid", transaction_status)
+    elif transaction_status in {"deny", "cancel", "expire", "failure"}:
+        await set_payment_status(payment, "failed", transaction_status)
     return {"status": "ok"}
 
 

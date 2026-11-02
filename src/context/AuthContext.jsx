@@ -44,7 +44,9 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (credentials) => saveSession(await authApi.login(credentials));
-  const register = async (details) => saveSession(await authApi.register(details));
+  const requestRegistrationCode = (details) => authApi.register(details);
+  const resendRegistrationCode = (email) => authApi.resendRegistrationCode({ email });
+  const verifyRegistrationCode = async (details) => saveSession(await authApi.verifyRegistrationCode(details));
   const logout = () => {
     sessionStorage.removeItem(SESSION_KEY);
     setSession(null);
@@ -55,7 +57,9 @@ export function AuthProvider({ children }) {
     token: session?.access_token || null,
     isChecking,
     login,
-    register,
+    requestRegistrationCode,
+    resendRegistrationCode,
+    verifyRegistrationCode,
     logout,
   }), [session, isChecking]);
 
