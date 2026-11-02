@@ -22,5 +22,12 @@ jobs:
             git checkout main
             git reset --hard origin/main
             npm install
+            BACKEND_FILE=/opt/auroramedia-api/app/server.py
+            cp -a "$BACKEND_FILE" "$BACKEND_FILE.bak-$(date +%Y%m%d%H%M%S)"
+            cp -a backend/server.py "$BACKEND_FILE"
             VITE_BASE=/ npm run build
-            sudo systemctl reload nginx
+            cp -a dist/. /var/www/auroramedia-sites/current/
+            nginx -t
+            systemctl reload nginx
+            systemctl restart auroramedia-api.service
+            curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/api/public/portal-ads

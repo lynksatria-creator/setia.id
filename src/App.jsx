@@ -827,6 +827,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
   const contactSite = site === 'admin' ? 'portal' : site;
   const [credentials, setCredentials] = useState({ username: defaultAdmins[site].username, passwordHash: '' });
   const [loggedIn, setLoggedIn] = useState(hasScopedAccess);
+  const [activeAdminSection, setActiveAdminSection] = useState('dashboard');
   const [formData, setFormData] = useState(() => site === 'admin'
     ? normalizeInvitationBrand(normalizePortalData(loadData(dataKey, defaultData)))
     : normalizeInvitationBrand(mergeDataDefaults(defaultData, loadData(dataKey, defaultData))));
@@ -1029,16 +1030,33 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     return <AdminLogin site={site} label={label} onLogin={() => setLoggedIn(true)} credentials={credentials} />;
   }
 
+  const adminNavigationItems = [
+    { id: 'dashboard', label: 'Dashboard', href: '#admin-dashboard' },
+    { id: 'content', label: 'Content', href: '#admin-content' },
+    { id: 'theme', label: 'Theme', href: '#admin-theme' },
+    { id: 'media', label: 'Media', href: '#admin-media' },
+    ...(superAdminAuthenticated ? [{ id: 'seo', label: 'SEO', href: '/setia-creative-admin/seo' }] : []),
+    ...(site === 'admin' ? [{ id: 'ads', label: 'Iklan', href: '#admin-ads' }] : []),
+  ];
+
   return (
     <div className="admin-shell admin-dashboard">
       <aside className="admin-sidebar">
         <div className="brand-box">{label}</div>
-        <nav>
-          <a href="#">Dashboard</a>
-          <a href="#">Content</a>
-          <a href="#">Theme</a>
-          <a href="#">Media</a>
-          <a href="#">SEO</a>
+        <nav aria-label={`Navigasi ${label}`}>
+          {adminNavigationItems.map((item) => (
+            <a
+              href={item.href}
+              key={item.id}
+              className={activeAdminSection === item.id ? 'is-active' : undefined}
+              aria-current={activeAdminSection === item.id ? 'location' : undefined}
+              onClick={() => {
+                if (item.href.startsWith('#')) setActiveAdminSection(item.id);
+              }}
+            >
+              {item.label}
+            </a>
+          ))}
         </nav>
         <button className="logout-button" onClick={logout}>{scope ? 'Keluar' : 'Logout'}</button>
       </aside>
@@ -1060,7 +1078,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
         {editorMessage ? <p className="admin-editor-message" role="status">{editorMessage}</p> : null}
         {editorError ? <p className="form-error admin-editor-error" role="alert">{editorError}</p> : null}
 
-        <section className="stats-grid">
+        <section className="stats-grid" id="admin-dashboard">
           {site === 'nunuy' ? [
             ['Layanan aktif', formData.serviceSection?.items?.filter((item) => item.active !== false).length || 0],
             ['Paket aktif', formData.packageSection?.items?.filter((item) => item.active !== false).length || 0],
@@ -1075,7 +1093,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             </>}
         </section>
 
-        <section className="admin-panel-block">
+        <section className="admin-panel-block" id="admin-media">
           <h3>Logo, gambar & tampilan</h3>
           <p className="muted">{description}</p>
           <div className="form-grid">
@@ -1126,7 +1144,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
 
         {site === 'admin' ? (
           <>
-            <section className="admin-panel-block portal-cms-block">
+            <section className="admin-panel-block portal-cms-block" id="admin-content">
               <div className="portal-admin-section-heading">
                 <div>
                   <h3>Aurora Media · Content Studio</h3>
@@ -1216,7 +1234,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
               </div>
             </section>
 
-            <section className="admin-panel-block">
+            <section className="admin-panel-block" id="admin-ads">
               <h3>Ad Slot Manager</h3>
               <p className="muted">Aktifkan, ubah materi, dan atur tautan setiap slot iklan.</p>
               <div className="form-grid portal-ad-page-settings">
@@ -1266,7 +1284,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
               </div>
             </section>
 
-            <section className="admin-panel-block">
+            <section className="admin-panel-block" id="admin-theme">
               <h3>Preset, Theme & Motion</h3>
               <div className="form-grid portal-theme-controls">
                 <label className="portal-form-wide">20 template preset
@@ -1323,7 +1341,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
         {site === 'nunuy' && (superAdminAuthenticated || scope === 'nunuy') ? (
           <NunuyConsultationAdmin token={sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY)} />
         ) : null}
-        <section className="admin-panel-block">
+        <section className="admin-panel-block" id={site === 'admin' ? undefined : 'admin-content'}>
           <h3>Pengaturan semua konten</h3>
           <p className="muted">Edit teks, data kontak, daftar layanan, paket, FAQ, tema, ukuran, dan seluruh data website.</p>
           <StructuredEditor

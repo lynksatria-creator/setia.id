@@ -1467,6 +1467,17 @@ test('keeps the previous Portal admin URL as an alias', () => {
   renderApp();
 
   expect(screen.getByRole('heading', { name: 'Portal Admin' })).toBeDefined();
+  const adminNavigation = screen.getByRole('navigation', { name: 'Navigasi Portal Admin' });
+  expect(adminNavigation.querySelector('a[href="#admin-dashboard"]')).not.toBeNull();
+  expect(adminNavigation.querySelector('a[href="#admin-content"]')).not.toBeNull();
+  expect(adminNavigation.querySelector('a[href="#admin-theme"]')).not.toBeNull();
+  expect(adminNavigation.querySelector('a[href="#admin-media"]')).not.toBeNull();
+  expect(adminNavigation.querySelector('a[href="/setia-creative-admin/seo"]')).not.toBeNull();
+  const adsLink = adminNavigation.querySelector('a[href="#admin-ads"]');
+  expect(adsLink).not.toBeNull();
+  fireEvent.click(adsLink);
+  expect(adsLink).toHaveClass('is-active');
+  expect(document.getElementById('admin-ads')).not.toBeNull();
   expect(window.location.pathname).toBe('/admin');
   sessionStorage.clear();
 });

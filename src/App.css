@@ -1825,6 +1825,11 @@ input {
 }
 
 .admin-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
   background: #0f172a;
   color: white;
   padding: 24px 18px;
@@ -1847,9 +1852,30 @@ input {
 }
 
 .admin-sidebar nav a {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
   color: rgba(255, 255, 255, 0.75);
   padding: 0.8rem 0.9rem;
   border-radius: 12px;
+  text-decoration: none;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.admin-sidebar nav a:hover,
+.admin-sidebar nav a.is-active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.admin-sidebar nav a:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.admin-panel-block[id],
+.stats-grid[id] {
+  scroll-margin-top: 24px;
 }
 
 .admin-main {
@@ -1981,6 +2007,36 @@ input {
 
   .admin-dashboard {
     grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    position: sticky;
+    z-index: 20;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .admin-sidebar .brand-box {
+    flex-shrink: 0;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+  }
+
+  .admin-sidebar nav {
+    display: flex;
+    flex: 1;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  .admin-sidebar nav a {
+    min-height: 40px;
+    flex-shrink: 0;
+    padding: 0.65rem 0.75rem;
+    white-space: nowrap;
   }
 }
 
