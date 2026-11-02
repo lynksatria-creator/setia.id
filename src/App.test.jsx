@@ -46,7 +46,7 @@ test('Aurora homepage shows its rotating ad carousel immediately after partner c
   localStorage.removeItem('portal-cms');
   const ads = {
     page: { title: 'Sponsor Beranda', description: 'Partner pilihan Aurora Media.', layout: 'featured' },
-    top: { enabled: true, label: 'SPONSOR 1', title: 'Studio Momen', href: 'https://studio.example', duration: 1, format: 'banner', animation: 'fade' },
+    top: { enabled: true, label: 'SPONSOR 1', title: 'Studio Momen', image: 'https://example.com/poster.jpg', href: 'https://studio.example', duration: 1, format: 'banner', animation: 'fade', imageWidth: 62, imageHeight: 420 },
     midFeed: { enabled: true, label: 'SPONSOR 2', title: 'Ruang Cerita', href: 'https://cerita.example', duration: 5, format: 'card', animation: 'rise' },
   };
   vi.stubGlobal('fetch', vi.fn(async (url) => {
@@ -66,7 +66,10 @@ test('Aurora homepage shows its rotating ad carousel immediately after partner c
   expect(await screen.findByText('Studio Momen')).toBeDefined();
   expect(page.container.querySelector('#brands').nextElementSibling.classList.contains('portal-home-ad-section')).toBe(true);
   expect(screen.getByRole('heading', { name: 'Sponsor Beranda' })).toBeDefined();
-  expect(page.container.querySelector('.portal-home-ad-section .portal-ad-listing').getAttribute('href')).toBe('https://studio.example');
+  const homepageAd = page.container.querySelector('.portal-home-ad-section .portal-ad-listing');
+  expect(homepageAd.getAttribute('href')).toBe('https://studio.example');
+  expect(homepageAd.style.getPropertyValue('--portal-ad-image-width')).toBe('62%');
+  expect(homepageAd.style.getPropertyValue('--portal-ad-image-height')).toBe('420px');
   expect(await screen.findByText('Ruang Cerita', {}, { timeout: 2500 })).toBeDefined();
 
   page.unmount();
@@ -86,7 +89,7 @@ test('Aurora Media rotates enabled advertisements after each configured duration
   localStorage.setItem('portal-cms', JSON.stringify({
     ads: {
       page: { title: 'Partner Pilihan', description: 'Brand untuk momen istimewa.', layout: 'featured' },
-      top: { enabled: true, label: 'PARTNER PILIHAN', title: 'Studio Momen', image: 'https://example.com/banner.jpg', href: 'https://studio.example', format: 'banner', animation: 'rise', duration: 2 },
+      top: { enabled: true, label: 'PARTNER PILIHAN', title: 'Studio Momen', image: 'https://example.com/banner.jpg', href: 'https://studio.example', format: 'banner', animation: 'rise', duration: 2, imageWidth: 65, imageHeight: 420 },
       midFeed: { enabled: true, label: 'REKOMENDASI', title: 'Ruang Cerita', href: 'https://cerita.example', format: 'card', animation: 'fade', duration: 5 },
     },
   }));
@@ -101,6 +104,8 @@ test('Aurora Media rotates enabled advertisements after each configured duration
   expect(banner.getAttribute('rel')).toBe('noopener noreferrer');
   expect(banner.className).toContain('portal-ad-format-banner');
   expect(banner.className).toContain('portal-ad-animation-rise');
+  expect(banner.style.getPropertyValue('--portal-ad-image-width')).toBe('65%');
+  expect(banner.style.getPropertyValue('--portal-ad-image-height')).toBe('420px');
 
   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
   expect(screen.getByText('Ruang Cerita')).toBeDefined();
@@ -1478,6 +1483,8 @@ test('keeps the previous Portal admin URL as an alias', () => {
   fireEvent.click(adsLink);
   expect(adsLink).toHaveClass('is-active');
   expect(document.getElementById('admin-ads')).not.toBeNull();
+  expect(document.querySelectorAll('.portal-admin-ad input[type="file"]')).toHaveLength(4);
+  expect(document.querySelectorAll('.portal-admin-ad input[type="number"]')).toHaveLength(12);
   expect(window.location.pathname).toBe('/admin');
   sessionStorage.clear();
 });

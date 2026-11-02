@@ -216,6 +216,8 @@ class PortalAdSlotConfig(BaseModel):
     format: Literal["banner", "card", "link"] = "card"
     animation: Literal["none", "fade", "rise", "float"] = "fade"
     duration: int = Field(default=8, ge=1, le=120)
+    imageWidth: int = Field(default=40, ge=20, le=100)
+    imageHeight: int = Field(default=240, ge=120, le=600)
 
     @field_validator("href")
     @classmethod

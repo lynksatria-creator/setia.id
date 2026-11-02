@@ -167,10 +167,10 @@ const defaultPortalData = {
   ],
   ads: {
     page: { title: 'Pilihan Iklan', description: 'Temukan brand dan layanan pilihan dari partner Aurora Media.', layout: 'grid' },
-    top: { enabled: false, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', image: '', href: '#contact', format: 'banner', animation: 'rise', duration: 8 },
-    midFeed: { enabled: false, label: 'FEATURED PARTNER', title: 'Buat momen Anda lebih istimewa', image: '', href: '/nunuy-nadhifa-wedding', format: 'card', animation: 'fade', duration: 8 },
-    sidebar: { enabled: false, label: 'DIREKOMENDASIKAN', title: 'Cerita indah dimulai dari sini', image: '', href: '/undangan', format: 'card', animation: 'fade', duration: 8 },
-    floatingBottom: { enabled: false, label: 'Punya acara dalam waktu dekat?', title: 'Mari rencanakan bersama', image: '', href: '/nunuy-nadhifa-wedding', format: 'link', animation: 'float', duration: 8 },
+    top: { enabled: false, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', image: '', href: '#contact', format: 'banner', animation: 'rise', duration: 8, imageWidth: 40, imageHeight: 240 },
+    midFeed: { enabled: false, label: 'FEATURED PARTNER', title: 'Buat momen Anda lebih istimewa', image: '', href: '/nunuy-nadhifa-wedding', format: 'card', animation: 'fade', duration: 8, imageWidth: 100, imageHeight: 240 },
+    sidebar: { enabled: false, label: 'DIREKOMENDASIKAN', title: 'Cerita indah dimulai dari sini', image: '', href: '/undangan', format: 'card', animation: 'fade', duration: 8, imageWidth: 100, imageHeight: 240 },
+    floatingBottom: { enabled: false, label: 'Punya acara dalam waktu dekat?', title: 'Mari rencanakan bersama', image: '', href: '/nunuy-nadhifa-wedding', format: 'link', animation: 'float', duration: 8, imageWidth: 40, imageHeight: 180 },
   },
   gallery: [
     'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1100&q=85',
@@ -1262,6 +1262,10 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
                     <label>Label<input value={formData.ads[key].label || ''} onChange={(event) => updateField(`ads.${key}.label`, event.target.value)} /></label>
                     <label>Judul<input value={formData.ads[key].title || ''} onChange={(event) => updateField(`ads.${key}.title`, event.target.value)} /></label>
                     <label>URL gambar<input value={formData.ads[key].image || ''} onChange={(event) => updateField(`ads.${key}.image`, event.target.value)} /></label>
+                    <label>Upload poster<input type="file" accept="image/*" onChange={(event) => handleImageUpload(`ads.${key}.image`, event.target.files?.[0])} /></label>
+                    {formData.ads[key].image ? <div className="admin-media-preview portal-ad-poster-preview"><span>Pratinjau poster</span><img src={formData.ads[key].image} alt={`Pratinjau poster ${title}`} /></div> : null}
+                    <label>Lebar poster (%)<input type="number" min="20" max="100" value={formData.ads[key].imageWidth ?? 40} onChange={(event) => updateField(`ads.${key}.imageWidth`, Number(event.target.value))} /></label>
+                    <label>Tinggi poster (px)<input type="number" min="120" max="600" value={formData.ads[key].imageHeight ?? 240} onChange={(event) => updateField(`ads.${key}.imageHeight`, Number(event.target.value))} /></label>
                     <label>URL tujuan<input value={formData.ads[key].href || ''} onChange={(event) => updateField(`ads.${key}.href`, event.target.value)} /></label>
                     <label>Format iklan
                       <select value={formData.ads[key].format || 'card'} onChange={(event) => updateField(`ads.${key}.format`, event.target.value)}>
@@ -1581,7 +1585,7 @@ const PortalHomeAdCarousel = ({ ads, animationsEnabled }) => {
         </div>
         <div className={`portal-ad-display${animationsEnabled ? '' : ' portal-ad-motion-off'}`} aria-label="Iklan partner Aurora Media">
           <div className={`portal-ad-listings portal-ad-layout-${page.layout || 'grid'}`}>
-            <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>
+            <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 40}%`, '--portal-ad-image-height': `${Number(ad.imageHeight) || 240}px` }}>
               {ad.image ? <img src={ad.image} alt="" loading="lazy" /> : null}
               <span className="portal-ad-listing-copy">
                 <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>
@@ -2115,7 +2119,7 @@ const PortalAdsPage = () => {
                   const href = resolveBrandHref(rawHref);
                   const external = /^https?:\/\//i.test(href);
                   return (
-                    <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>
+                    <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 40}%`, '--portal-ad-image-height': `${Number(ad.imageHeight) || 240}px` }}>
                       {ad.image ? <img src={ad.image} alt="" loading="lazy" /> : null}
                       <span className="portal-ad-listing-copy">
                         <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>

@@ -574,6 +574,8 @@ def test_portal_ads_config_is_saved_and_limited_to_super_admin(monkeypatch):
             "format": "banner",
             "animation": "rise",
             "duration": 12,
+            "imageWidth": 65,
+            "imageHeight": 420,
         },
         "midFeed": {"enabled": False},
         "sidebar": {"enabled": False},
@@ -594,7 +596,9 @@ def test_portal_ads_config_is_saved_and_limited_to_super_admin(monkeypatch):
     saved = client.put("/api/admin/portal-ads", headers=headers, json=config)
 
     assert saved.status_code == 200
-    assert saved.json()["ads"]["top"]["duration"] == 12
+    assert saved.json()["ads"]["top"].get("duration") == 12
+    assert saved.json()["ads"]["top"]["imageWidth"] == 65
+    assert saved.json()["ads"]["top"]["imageHeight"] == 420
     assert client.get("/api/public/portal-ads").json() == saved.json()
     assert audit_logs.document["action"] == "portal.ads.updated"
 
