@@ -89,7 +89,7 @@ export default function SuperAdminHome({ onLogin }) {
         <a className="brand" href="/"><span className="logo-mark">S</span>Setia Creative</a>
         <form className="billing-admin-login-card" onSubmit={handleLogin}>
           <p className="eyebrow">Satu akses untuk semua panel</p>
-          <h1>Admin</h1>
+          <h1>Super Admin</h1>
           <p>Masuk dengan akun admin situs atau Super Admin.</p>
           <label>Email admin<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label>Kata sandi<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>

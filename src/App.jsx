@@ -672,15 +672,51 @@ const normalizePortalData = (data) => {
   };
 };
 
-const mergeSiteContact = (data, contact) => ({
-  ...data,
-  contact: { ...data.contact, phone: contact.phone ?? data.contact?.phone },
-  whatsapp: {
-    ...data.whatsapp,
-    number: contact.whatsappNumber ?? data.whatsapp?.number,
-    message: contact.whatsappMessage ?? data.whatsapp?.message,
-  },
-});
+const mergeSiteContact = (data = {}, contact = {}) => {
+  const payload = contact && typeof contact === 'object' && Object.hasOwn(contact, 'contact') && contact.contact && typeof contact.contact === 'object'
+    ? contact.contact
+    : contact;
+  const dataContact = data.contact || {};
+  const dataWhatsapp = data.whatsapp || {};
+  const nextContact = {
+    ...dataContact,
+    ...payload,
+    phone: Object.prototype.hasOwnProperty.call(payload, 'phone')
+      ? payload.phone
+      : Object.prototype.hasOwnProperty.call(contact, 'phone')
+        ? contact.phone
+        : dataContact.phone,
+    email: Object.prototype.hasOwnProperty.call(payload, 'email')
+      ? payload.email
+      : Object.prototype.hasOwnProperty.call(contact, 'email')
+        ? contact.email
+        : dataContact.email,
+  };
+  const nextWhatsapp = {
+    ...dataWhatsapp,
+    ...(payload.whatsapp || contact.whatsapp || {}),
+    number: Object.prototype.hasOwnProperty.call(payload, 'whatsappNumber')
+      ? payload.whatsappNumber
+      : Object.prototype.hasOwnProperty.call(contact, 'whatsappNumber')
+        ? contact.whatsappNumber
+        : Object.prototype.hasOwnProperty.call(payload, 'number')
+          ? payload.number
+          : dataWhatsapp.number,
+    message: Object.prototype.hasOwnProperty.call(payload, 'whatsappMessage')
+      ? payload.whatsappMessage
+      : Object.prototype.hasOwnProperty.call(contact, 'whatsappMessage')
+        ? contact.whatsappMessage
+        : Object.prototype.hasOwnProperty.call(payload, 'message')
+          ? payload.message
+          : dataWhatsapp.message,
+  };
+
+  return {
+    ...data,
+    contact: nextContact,
+    whatsapp: nextWhatsapp,
+  };
+};
 
 const useWindowPath = () => {
   const [path, setPath] = useState(formatPath(window.location.pathname));
@@ -819,9 +855,10 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     let active = true;
     const requestEditVersion = contactEditVersion.current;
     siteContactApi.get(contactSite)
-      .then(({ contact }) => {
-        if (!active || !contact || contactEditVersion.current !== requestEditVersion) return;
-        setFormData((current) => mergeSiteContact(current, contact));
+      .then((result) => {
+        const nextContact = result?.contact ?? result;
+        if (!active || !nextContact || contactEditVersion.current !== requestEditVersion) return;
+        setFormData((current) => mergeSiteContact(current, nextContact));
       })
       .catch((error) => {
         console.error(`Kontak publik ${contactSite} gagal dimuat dari API:`, error);
@@ -852,12 +889,22 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
       return;
     }
     try {
-      saveData(dataKey, formData);
+      const nextData = {
+        ...formData,
+        contact: { ...(formData.contact || {}), phone: formData.contact?.phone ?? '' },
+        whatsapp: {
+          ...(formData.whatsapp || {}),
+          number: formData.whatsapp?.number ?? '',
+          message: formData.whatsapp?.message ?? '',
+        },
+      };
+      saveData(dataKey, nextData);
       await siteContactApi.update(sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY), contactSite, {
-        phone: formData.contact?.phone || '',
-        whatsappNumber: formData.whatsapp?.number || '',
-        whatsappMessage: formData.whatsapp?.message || '',
+        phone: nextData.contact?.phone ?? '',
+        whatsappNumber: nextData.whatsapp?.number ?? '',
+        whatsappMessage: nextData.whatsapp?.message ?? '',
       });
+      setFormData(nextData);
       setEditorError('');
       setEditorMessage('Perubahan dipublikasikan; nomor telepon dan WhatsApp tersinkron ke semua domain situs ini.');
     } catch (error) {
@@ -1447,7 +1494,12 @@ const PortalHome = () => {
   useEffect(() => {
     let active = true;
     siteContactApi.get('portal')
-      .then(({ contact }) => { if (active && contact) setPortalData((current) => normalizePortalData(mergeSiteContact(current, contact))); })
+      .then((result) => {
+        const nextContact = result?.contact ?? result;
+        if (active && nextContact) {
+          setPortalData((current) => normalizePortalData(mergeSiteContact(current, nextContact)));
+        }
+      })
       .catch((error) => { console.error('Kontak publik portal gagal dimuat dari API:', error); });
     return () => { active = false; };
   }, []);
@@ -1511,6 +1563,7 @@ const PortalHome = () => {
     ['TikTok', portalData.socialLinks.tiktok, '♪'],
     ['YouTube', portalData.socialLinks.youtube, '▶'],
   ].filter(([, href]) => isValidPortalPartnerHref(href) && /^https?:\/\//i.test(href));
+  const phoneHref = `tel:${String(portalData.contact.phone || '').replace(/[^\d+]/g, '')}`;
   const whatsappHref = createWhatsAppUrl(portalData.whatsapp.number, portalData.whatsapp.message, portalData.siteName, 'Beranda > Kontak');
 
   const renderAd = (key, className) => {
@@ -1620,6 +1673,7 @@ const PortalHome = () => {
           </a>
           <p className="portal-footer-slogan">{portalData.footer}<span aria-hidden="true">♥</span></p>
           <div className="portal-social-links" aria-label="Kontak dan media sosial">
+            <a href={phoneHref} aria-label={`Hubungi kami langsung di ${portalData.contact.phone}`}>{portalData.contact.phone}</a>
             <a href={`mailto:${portalData.contact.email}`} aria-label={`Email ${portalData.contact.email}`}>✉</a>
             <a href={whatsappHref} target="_blank" rel="noopener noreferrer" aria-label="Hubungi melalui WhatsApp">◉</a>
             {socialLinks.map(([label, href, icon]) => <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label}>{icon}</a>)}
@@ -2128,7 +2182,7 @@ const GibrigHome = ({ path }) => {
       <header className="topbar gibrig-topbar">
         <div className="container nav-wrap gibrig-nav-wrap">
           <a className="brand gibrig-brand" href="/gibrig" aria-label={`${data.siteName}, beranda`}>
-            {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt="Logo Entertainment Musik — Neng Syelfi Oktora Official Music" /> : <span className="logo-mark">{data.logo || 'G'}</span>}
+            {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="logo-mark">{data.logo || 'G'}</span>}
             <span className="gibrig-brand-copy"><strong>Entertainment Musik</strong><small>{data.siteName}</small></span>
           </a>
           <nav className="nav-links gibrig-nav" aria-label="Navigasi utama">
@@ -2275,13 +2329,22 @@ const GibrigHome = ({ path }) => {
           </div>
         </section> : null}
 
-        {activePage.slug === '' || activePage.slug === 'testimoni' ? <PublicTestimonials site="gibrig" initialItems={data.testimonials} sectionId="testimonials" eyebrow="Testimoni" title="Kesan pelanggan" className={`gibrig-testimonials${activePage.slug ? ' gibrig-inner-page' : ''}`} /> : null}
+        {activePage.slug === '' || activePage.slug === 'testimoni' ? (
+          <PublicTestimonials
+            site="gibrig"
+            initialItems={data.testimonials}
+            sectionId="testimonials"
+            eyebrow="Testimoni"
+            title={activePage.slug === 'testimoni' ? 'Kesan pelanggan' : 'Cerita dari keluarga dan klien'}
+            className={`gibrig-testimonials${activePage.slug ? ' gibrig-inner-page' : ''}`}
+          />
+        ) : null}
 
         <section id="contact" className="section-wrap gibrig-contact">
           <div className="container gibrig-footer-content">
             <div className="gibrig-footer-brand">
               <a className="brand gibrig-brand" href="/gibrig">
-                {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt="" /> : <span className="logo-mark">{data.logo || 'G'}</span>}
+                {data.logoImage ? <img className="gibrig-brand-logo" src={data.logoImage} alt={`${data.siteName} logo`} /> : <span className="logo-mark">{data.logo || 'G'}</span>}
                 <span className="gibrig-brand-copy"><strong>Entertainment Musik</strong><small>{data.siteName}</small></span>
               </a>
               <p>{data.about}</p>
@@ -2308,10 +2371,10 @@ const GibrigHome = ({ path }) => {
             </nav>
             <div className="gibrig-footer-contact">
               <strong>Hubungi Kami</strong>
-              {data.contact?.phone ? <a href={`tel:${String(data.contact.phone).replace(/[^\d+]/g, '')}`}>◉ <span>{data.contact.phone}</span></a> : null}
+              {data.contact?.phone ? <a href={`tel:${String(data.contact.phone).replace(/[^\d+]/g, '')}`}><span>{data.contact.phone}</span></a> : null}
               {data.contact?.email ? <a href={`mailto:${data.contact.email}`}>✉ <span>{data.contact.email}</span></a> : null}
               {data.contact?.address ? <p>{data.contact.address}</p> : null}
-              {whatsappNumber ? <a href={createWhatsAppUrl(whatsappNumber, whatsappMessage, 'Entertainment Musik', 'Footer > WhatsApp')} target="_blank" rel="noopener noreferrer">◉ <span>WhatsApp</span></a> : null}
+              {whatsappNumber ? <a href={createWhatsAppUrl(whatsappNumber, whatsappMessage, 'Entertainment Musik', 'Footer > WhatsApp')} target="_blank" rel="noopener noreferrer"><span>WhatsApp</span></a> : null}
             </div>
           </div>
           <div className="container gibrig-copyright"><p>{data.footer}</p><a href={getSiteUrl('aurora')} aria-label="Kembali ke Aurora Media">↑</a></div>
@@ -2608,12 +2671,12 @@ const InvitationHome = ({ path = '/undangan' }) => {
           <Pricing plans={data.pricingPlans} onChoose={() => openAuth('register')} />
         ) : null}
 
-        {path === '/undangan/testimoni' ? (
+        {(isHome || path === '/undangan/testimoni') ? (
           <PublicTestimonials
             site="invitation"
             initialItems={data.testimonials}
-            eyebrow="Apa kata mereka?"
-            title="Cerita dari keluarga dan klien"
+            eyebrow={isHome ? 'Apa kata mereka?' : 'Apa kata mereka?'}
+            title={isHome ? 'Cerita dari keluarga dan klien' : 'Cerita dari keluarga dan klien'}
             description="Bagikan pengalaman menggunakan Nuansa Invite. Testimoni ditampilkan setelah ditinjau."
             className="invitation-page-testimonials"
             sectionId="testimoni"
