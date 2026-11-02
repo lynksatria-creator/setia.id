@@ -6375,6 +6375,8 @@ input {
   }
 
   .portal-showcase-card {
+    position: relative;
+    isolation: isolate;
     overflow: hidden;
     border: 1px solid rgba(32, 53, 46, 0.1);
     border-radius: var(--portal-radius);
@@ -6437,6 +6439,8 @@ input {
   }
 
   .portal-showcase-copy {
+    position: relative;
+    z-index: 2;
     padding: 23px 23px 25px;
   }
 
@@ -9087,7 +9091,7 @@ input {
 
 .portal-home .portal-partner-mark {
   position: absolute;
-  z-index: 2;
+  z-index: 1;
   top: 50%;
   left: 50%;
   display: grid;
@@ -9101,10 +9105,13 @@ input {
   color: #8056a3;
   font-family: var(--portal-heading-font);
   font-size: 1.45rem;
+  pointer-events: none;
   transform: translate(-50%, -50%);
 }
 
 .portal-home .portal-showcase-copy {
+  position: relative;
+  z-index: 2;
   display: flex;
   min-width: 0;
   flex-direction: column;
