@@ -1494,7 +1494,7 @@ test.each([
   const whatsapp = '+62 811-9988-7766';
   const siteKey = site === 'admin' ? 'portal' : site;
   const publishedContacts = new Map();
-  vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+  vi.stubGlobal('fetch', vi.fn((url, options = {}) => {
     const pathname = new URL(url, window.location.origin).pathname;
     const contactMatch = pathname.match(/\/api\/(?:public|admin)\/site-contact\/([^/]+)/);
     let payload = [];
@@ -1511,7 +1511,7 @@ test.each([
     } else if (pathname.endsWith('/nunuy-consultations')) {
       payload = [];
     }
-    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => payload };
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: () => payload };
   }));
   localStorage.removeItem(storageKey);
   sessionStorage.clear();
