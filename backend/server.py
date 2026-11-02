@@ -193,6 +193,14 @@ class SeoConfigUpdate(BaseModel):
         return value
 
 
+class SiteContactConfigUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    phone: str = Field(default="", max_length=80)
+    whatsapp_number: str = Field(default="", alias="whatsappNumber", max_length=80)
+    whatsapp_message: str = Field(default="", alias="whatsappMessage", max_length=1000)
+
+
 SEO_SITE_IDS = {"portal", "gibrig", "nunuy", "invitation"}
 
 
@@ -1122,6 +1130,35 @@ async def update_admin_seo_config(site: str, payload: SeoConfigUpdate, _admin=De
         "no_index": config["noIndex"],
     })
     return {"site": site, "seo": config}
+
+
+@api_router.get("/public/site-contact/{site}")
+async def get_public_site_contact(site: str):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website tidak ditemukan.")
+    saved = await db.platform_settings.find_one({"key": f"site-contact:{site}"}, {"_id": 0, "key": 0})
+    if saved is None:
+        return {"site": site, "contact": None}
+    contact = {key: value for key, value in saved.items() if key != "key"}
+    contact = SiteContactConfigUpdate(**contact).model_dump(by_alias=True)
+    return {"site": site, "contact": contact}
+
+
+@api_router.put("/admin/site-contact/{site}")
+async def update_site_contact(
+    site: str,
+    payload: SiteContactConfigUpdate,
+    _admin=Depends(require_site_admin),
+):
+    if site not in SEO_SITE_IDS:
+        raise HTTPException(status_code=404, detail="Website tidak ditemukan.")
+    config = payload.model_dump(by_alias=True)
+    await db.platform_settings.update_one(
+        {"key": f"site-contact:{site}"},
+        {"$set": {"key": f"site-contact:{site}", **config}},
+        upsert=True,
+    )
+    return {"site": site, "contact": config}
 
 
 @api_router.post("/admin/login")

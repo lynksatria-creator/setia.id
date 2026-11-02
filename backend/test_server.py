@@ -561,6 +561,49 @@ def test_seo_config_rejects_non_https_canonical_urls(monkeypatch):
     assert response.status_code == 422
 
 
+def test_site_contact_config_is_shared_and_scope_protected(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+
+    class SettingsCollection:
+        def __init__(self):
+            self.documents = {}
+
+        async def find_one(self, query, _projection=None):
+            return copy.deepcopy(self.documents.get(query["key"]))
+
+        async def update_one(self, query, update, upsert=False):
+            assert upsert is True
+            self.documents[query["key"]] = copy.deepcopy(update["$set"])
+
+    settings = SettingsCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=settings))
+    client = TestClient(server.app)
+    config = {
+        "phone": "+62 811-2233-4455",
+        "whatsappNumber": "+62 811-9988-7766",
+        "whatsappMessage": "Halo Nunuy",
+    }
+
+    for site in ("portal", "gibrig", "nunuy", "invitation"):
+        assert client.get(f"/api/public/site-contact/{site}").json() == {"site": site, "contact": None}
+        assert client.put(f"/api/admin/site-contact/{site}", json=config).status_code == 401
+        scope = "all" if site == "portal" else site
+        token = server.create_access_token(f"{site}@example.com", role="admin", scope=scope)
+        headers = {"Authorization": f"Bearer {token}"}
+        saved = client.put(f"/api/admin/site-contact/{site}", headers=headers, json=config)
+
+        assert saved.status_code == 200
+        assert saved.json() == {"site": site, "contact": config}
+        assert client.get(f"/api/public/site-contact/{site}").json() == {"site": site, "contact": config}
+
+    gibrig_token = server.create_access_token("gibrig@example.com", role="admin", scope="gibrig")
+    assert client.put(
+        "/api/admin/site-contact/nunuy",
+        headers={"Authorization": f"Bearer {gibrig_token}"},
+        json=config,
+    ).status_code == 403
+
+
 def test_public_testimonial_requires_admin_approval_and_can_be_hidden(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
     testimonials = FakeTestimonialCollection()

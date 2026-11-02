@@ -162,6 +162,15 @@ export const adminApi = {
   approvePayment: (token, id) => apiRequest(`/admin/payments/${id}/approve`, { token, method: 'POST' }),
 };
 
+export const siteContactApi = {
+  get: (site) => apiRequest(`/public/site-contact/${encodeURIComponent(site)}`),
+  update: (token, site, contact) => apiRequest(`/admin/site-contact/${encodeURIComponent(site)}`, {
+    token,
+    method: 'PUT',
+    body: JSON.stringify(contact),
+  }),
+};
+
 export const seoApi = {
   publicConfig: (site) => apiRequest(`/public/seo/${encodeURIComponent(site)}`),
 };

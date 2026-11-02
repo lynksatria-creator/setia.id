@@ -1489,9 +1489,30 @@ test.each([
   ['gibrig', '/gibrig-admin', '/gibrig', 'gibrig-cms'],
   ['nunuy', '/nunuy-admin', '/nunuy-nadhifa-wedding', 'nunuy-cms'],
   ['invitation', '/undangan-website-admin', '/undangan', 'invitation-cms'],
-])('publishes an independent phone and WhatsApp contact for %s', (site, adminPath, publicPath, storageKey) => {
+])('publishes an independent phone and WhatsApp contact for %s', async (site, adminPath, publicPath, storageKey) => {
   const phone = '+62 811-2233-4455';
   const whatsapp = '+62 811-9988-7766';
+  const siteKey = site === 'admin' ? 'portal' : site;
+  const publishedContacts = new Map();
+  vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+    const pathname = new URL(url, window.location.origin).pathname;
+    const contactMatch = pathname.match(/\/api\/(?:public|admin)\/site-contact\/([^/]+)/);
+    let payload = [];
+    if (contactMatch) {
+      const requestedSite = contactMatch[1];
+      if (options.method === 'PUT') publishedContacts.set(requestedSite, JSON.parse(options.body));
+      payload = { site: requestedSite, contact: publishedContacts.get(requestedSite) || null };
+    } else if (pathname.startsWith('/api/public/testimonials/')) {
+      payload = [];
+    } else if (pathname.startsWith('/api/public/seo/')) {
+      payload = { seo: null };
+    } else if (pathname === '/api/public/advertisements') {
+      payload = [];
+    } else if (pathname.endsWith('/nunuy-consultations')) {
+      payload = [];
+    }
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => payload };
+  }));
   localStorage.removeItem(storageKey);
   sessionStorage.clear();
   sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, SUPER_ADMIN_TEST_TOKEN);
@@ -1502,6 +1523,12 @@ test.each([
   fireEvent.change(screen.getByLabelText('Nomor WhatsApp'), { target: { value: whatsapp } });
   fireEvent.change(screen.getByLabelText('Pesan pembuka WhatsApp'), { target: { value: `Halo dari ${site}` } });
   fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+  expect(await screen.findByText(/nomor telepon dan WhatsApp tersinkron/i)).toBeDefined();
+  expect(publishedContacts.get(siteKey)).toMatchObject({
+    phone,
+    whatsappNumber: whatsapp,
+    whatsappMessage: `Halo dari ${site}`,
+  });
 
   const saved = JSON.parse(localStorage.getItem(storageKey));
   expect(saved.contact.phone).toBe(phone);
@@ -1509,9 +1536,12 @@ test.each([
   expect(saved.whatsapp.message).toBe(`Halo dari ${site}`);
 
   admin.unmount();
+  localStorage.removeItem(storageKey);
   window.history.pushState({}, '', publicPath);
   const publicSite = render(<App />);
-  const contactLink = publicSite.container.querySelector('a[href^="https://wa.me/"]');
+  await waitFor(() => expect(publicSite.container.querySelector('a[href^="https://wa.me/"]')?.getAttribute('href'))
+    .toContain(`wa.me/${whatsapp.replace(/\D/g, '')}`));
+  const contactLink = publicSite.container.querySelector(`a[href^="https://wa.me/${whatsapp.replace(/\D/g, '')}"]`);
   expect(contactLink).not.toBeNull();
   const contactUrl = new URL(contactLink.getAttribute('href'));
   const contactMessage = new URL(contactLink.getAttribute('href')).searchParams.get('text');
@@ -1525,10 +1555,11 @@ test.each([
   expect(contactMessage).toContain(`Website: ${siteName}`);
   expect(contactMessage).toContain('Menu:');
   expect(contactUrl.pathname).toBe(`/${whatsapp.replace(/\D/g, '')}`);
-  expect(publicSite.container.textContent.replace(/\D/g, '')).toContain(phone.replace(/\D/g, ''));
+  expect(publicSite.container.querySelector(`a[href="tel:${phone.replace(/[^\d+]/g, '')}"]`)?.textContent).toBe(phone);
 
   publicSite.unmount();
   localStorage.removeItem(storageKey);
+  vi.unstubAllGlobals();
   sessionStorage.clear();
 }, 30000);
 

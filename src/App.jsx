@@ -22,7 +22,7 @@ import SuperAdminNav from './components/SuperAdminNav';
 import SeoHead from './components/SeoHead';
 import StructuredEditor from './components/StructuredEditor';
 import { getAdminScope, SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
-import { advertisementsApi, nunuyConsultationsApi, testimonialsApi } from './lib/api';
+import { advertisementsApi, nunuyConsultationsApi, siteContactApi, testimonialsApi } from './lib/api';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
 import { createDefaultTheme, getThemeCatalog, themeStyle } from './lib/themeCatalog';
 import { SEO_DEFAULTS } from './lib/seoSites';
@@ -672,6 +672,16 @@ const normalizePortalData = (data) => {
   };
 };
 
+const mergeSiteContact = (data, contact) => ({
+  ...data,
+  contact: { ...data.contact, phone: contact.phone ?? data.contact?.phone },
+  whatsapp: {
+    ...data.whatsapp,
+    number: contact.whatsappNumber ?? data.whatsapp?.number,
+    message: contact.whatsappMessage ?? data.whatsapp?.message,
+  },
+});
+
 const useWindowPath = () => {
   const [path, setPath] = useState(formatPath(window.location.pathname));
 
@@ -776,6 +786,7 @@ const AdminLogin = ({ site, label, onLogin, credentials }) => {
 const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], description, adminScope = null, superAdminAuthenticated = false, onSuperAdminLogout }) => {
   const scope = adminScope || (superAdminAuthenticated ? 'all' : null);
   const hasScopedAccess = scope === 'all' || scope === site;
+  const contactSite = site === 'admin' ? 'portal' : site;
   const [credentials, setCredentials] = useState({ username: defaultAdmins[site].username, passwordHash: '' });
   const [loggedIn, setLoggedIn] = useState(hasScopedAccess);
   const [formData, setFormData] = useState(() => site === 'admin'
@@ -791,6 +802,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
   const [themeSearch, setThemeSearch] = useState('');
   const [editorMessage, setEditorMessage] = useState('');
   const [editorError, setEditorError] = useState('');
+  const contactEditVersion = useRef(0);
   const themes = useMemo(() => [...getThemeCatalog(site), ...customThemes], [site, customThemes]);
   const filteredThemes = useMemo(() => themes.filter((theme) => theme.name.toLowerCase().includes(themeSearch.toLowerCase())), [themes, themeSearch]);
 
@@ -803,8 +815,25 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     loadCreds();
   }, [hasScopedAccess, site]);
 
+  useEffect(() => {
+    let active = true;
+    const requestEditVersion = contactEditVersion.current;
+    siteContactApi.get(contactSite)
+      .then(({ contact }) => {
+        if (!active || !contact || contactEditVersion.current !== requestEditVersion) return;
+        setFormData((current) => mergeSiteContact(current, contact));
+      })
+      .catch((error) => {
+        console.error(`Kontak publik ${contactSite} gagal dimuat dari API:`, error);
+      });
+    return () => { active = false; };
+  }, [contactSite]);
+
   const updateField = (path, value) => {
     const pathSegments = Array.isArray(path) ? path : path.split('.');
+    if (pathSegments[0] === 'contact' || pathSegments[0] === 'whatsapp') {
+      contactEditVersion.current += 1;
+    }
     setFormData((prev) => {
       const next = structuredClone(prev);
       let cursor = next;
@@ -816,7 +845,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     });
   };
 
-  const saveChanges = () => {
+  const saveChanges = async () => {
     if (site === 'admin' && formData.services.some((service) => service.active !== false && !isValidPortalPartnerHref(service.href))) {
       setEditorError('Setiap partner aktif harus memiliki URL website yang valid (HTTP, HTTPS, atau halaman internal).');
       setEditorMessage('');
@@ -824,10 +853,15 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     }
     try {
       saveData(dataKey, formData);
+      await siteContactApi.update(sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY), contactSite, {
+        phone: formData.contact?.phone || '',
+        whatsappNumber: formData.whatsapp?.number || '',
+        whatsappMessage: formData.whatsapp?.message || '',
+      });
       setEditorError('');
-      setEditorMessage('Semua perubahan website berhasil dipublikasikan di browser ini.');
+      setEditorMessage('Perubahan dipublikasikan; nomor telepon dan WhatsApp tersinkron ke semua domain situs ini.');
     } catch (error) {
-      setEditorError(`Perubahan gagal disimpan: ${error.message}`);
+      setEditorError(`Perubahan lokal tersimpan, tetapi sinkronisasi kontak gagal: ${error.message}`);
     }
   };
 
@@ -1405,10 +1439,19 @@ const LegacyPortalHome = () => {
 };
 
 const PortalHome = () => {
-  const portalData = useMemo(() => normalizePortalData(loadData(storage.portal, defaultPortalData)), []);
+  const [portalData, setPortalData] = useState(() => normalizePortalData(loadData(storage.portal, defaultPortalData)));
   const [menuOpen, setMenuOpen] = useState(false);
   const portalRef = useRef(null);
   const { theme } = portalData;
+
+  useEffect(() => {
+    let active = true;
+    siteContactApi.get('portal')
+      .then(({ contact }) => { if (active && contact) setPortalData((current) => normalizePortalData(mergeSiteContact(current, contact))); })
+      .catch((error) => { console.error('Kontak publik portal gagal dimuat dari API:', error); });
+    return () => { active = false; };
+  }, []);
+
   const portalStyle = {
     '--primary': theme.primary,
     '--accent': theme.accent,
@@ -2011,17 +2054,26 @@ const gibrigPages = [
 ];
 
 const GibrigHome = ({ path }) => {
-  const data = useMemo(() => {
+  const [data, setData] = useState(() => {
     const saved = loadData(storage.gibrig, defaultGibrigData);
     return {
       ...mergeDataDefaults(defaultGibrigData, saved),
       logoImage: saved.logoImage || defaultGibrigData.logoImage,
     };
-  }, []);
+  });
   const [previewImage, setPreviewImage] = useState(null);
   const previewTriggerRef = useRef(null);
   const previewCloseRef = useRef(null);
   const activePage = gibrigPages.find((page) => page.slug === path.replace(/^\/gibrig\/?/, '')) || gibrigPages[0];
+
+  useEffect(() => {
+    let active = true;
+    siteContactApi.get('gibrig')
+      .then(({ contact }) => { if (active && contact) setData((current) => mergeSiteContact(current, contact)); })
+      .catch((error) => { console.error('Kontak publik Entertainment Musik gagal dimuat dari API:', error); });
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => {
     if (!previewImage) return undefined;
     const previousOverflow = document.body.style.overflow;
@@ -2279,12 +2331,23 @@ const GibrigHome = ({ path }) => {
 };
 
 const NunuyHome = ({ path }) => {
-  const data = useMemo(() => {
+  const [data, setData] = useState(() => {
     const saved = loadData(storage.nunuy, defaultNunuyData);
     return {
       ...mergeDataDefaults(defaultNunuyData, saved),
       logoImage: saved.logoImage || defaultNunuyData.logoImage,
     };
+  });
+
+  useEffect(() => {
+    let active = true;
+    siteContactApi.get('nunuy')
+      .then(({ contact }) => {
+        if (!active || !contact) return;
+        setData((current) => mergeSiteContact(current, contact));
+      })
+      .catch((error) => { console.error('Kontak publik Nunuy gagal dimuat dari API:', error); });
+    return () => { active = false; };
   }, []);
   return (
     <NunuyWedding
@@ -2349,18 +2412,26 @@ const InvitationFeatureGrid = ({ features }) => (
 );
 
 const InvitationHome = ({ path = '/undangan' }) => {
-  const data = useMemo(() => {
+  const [data, setData] = useState(() => {
     const saved = loadData(storage.invitation, defaultInvitationData);
     return normalizeInvitationBrand({
       ...mergeDataDefaults(defaultInvitationData, saved),
       logoImage: saved.logoImage || defaultInvitationData.logoImage,
     });
-  }, []);
+  });
   const [advertisements, setAdvertisements] = useState([]);
   const [advertisementsError, setAdvertisementsError] = useState('');
   const page = invitationPages[path] || invitationPages['/undangan'];
   const isHome = path === '/undangan';
   const openAuth = (mode) => navigate(`/undangan-auth?mode=${mode}`);
+
+  useEffect(() => {
+    let active = true;
+    siteContactApi.get('invitation')
+      .then(({ contact }) => { if (active && contact) setData((current) => mergeSiteContact(current, contact)); })
+      .catch((error) => { console.error('Kontak publik Nuansa Invite gagal dimuat dari API:', error); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!isHome) return undefined;
