@@ -1622,7 +1622,6 @@ const PortalHomeAdCarousel = ({ ads, animationsEnabled }) => {
             <div className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} key={key} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 40}%`, '--portal-ad-image-height': `${Math.max(320, Number(ad.imageHeight) || 240)}px` }}>
               {ad.image ? (
                 <button ref={previewTriggerRef} className="portal-ad-listing-media" type="button" aria-label={`Lihat foto penuh ${ad.title || ad.label || 'iklan'}`} onClick={() => setPreviewImage({ src: ad.image, title: ad.title || ad.label || 'Iklan' })}>
-                  <img className="portal-ad-listing-backdrop" src={ad.image} alt="" loading="lazy" />
                   <img className="portal-ad-listing-image" src={ad.image} alt="" loading="lazy" />
                   <span className="portal-ad-image-zoom" aria-hidden="true">⤢</span>
                 </button>

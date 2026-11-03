@@ -75,6 +75,7 @@ test('Aurora homepage shows its rotating ad carousel immediately after partner c
   fireEvent.click(screen.getByRole('button', { name: 'Lihat foto penuh Studio Momen' }));
   const imageDialog = screen.getByRole('dialog', { name: 'Foto penuh Studio Momen' });
   expect(imageDialog.querySelector('img').getAttribute('src')).toBe('https://example.com/poster.jpg');
+  expect(homepageAd.querySelector('.portal-ad-listing-backdrop')).toBeNull();
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.queryByRole('dialog', { name: 'Foto penuh Studio Momen' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Iklan berikutnya' }));

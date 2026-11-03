@@ -10414,6 +10414,7 @@ input {
 .portal-ad-listing {
   position: relative;
   display: flex;
+  align-items: center;
   min-height: 250px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
@@ -10431,14 +10432,14 @@ input {
 
 .portal-ad-listing-media {
   position: relative;
-  display: block;
-  flex: 0 1 var(--portal-ad-image-width, 40%);
-  width: var(--portal-ad-image-width, 40%);
-  max-width: calc(100% - 280px);
-  height: var(--portal-ad-image-height, 320px);
-  min-height: 0;
-  overflow: hidden;
-  background: var(--portal-surface);
+  display: inline-flex;
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(calc(100% - 280px), var(--portal-ad-image-width, 40%));
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  background: transparent;
   color: inherit;
   padding: 0;
   border: 0;
@@ -10447,31 +10448,16 @@ input {
   isolation: isolate;
 }
 
-.portal-ad-listing-media::after {
-  position: absolute;
-  z-index: 2;
-  inset: 0;
-  background: rgba(36, 27, 44, 0.12);
-  content: '';
-  pointer-events: none;
-}
-
 .portal-ad-listing-media > img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.portal-ad-listing-backdrop {
-  z-index: 0;
-  object-fit: cover;
-  filter: blur(18px) saturate(0.82);
-  transform: scale(1.1);
+  position: static;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: var(--portal-ad-image-height, 320px);
 }
 
 .portal-ad-listing-image {
-  z-index: 1;
   object-fit: contain;
   filter: drop-shadow(0 8px 18px rgba(20, 15, 28, 0.28));
 }
@@ -10556,9 +10542,9 @@ input {
 }
 
 .portal-ad-format-card .portal-ad-listing-media {
-  flex: 0 1 var(--portal-ad-image-width, 40%);
-  width: var(--portal-ad-image-width, 100%);
-  max-width: 100%;
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(100%, var(--portal-ad-image-width, 100%));
   align-self: center;
 }
 
@@ -10626,7 +10612,7 @@ input {
 }
 
 .portal-ad-layout-list .portal-ad-listing-media {
-  width: var(--portal-ad-image-width, 24%);
+  max-width: min(calc(100% - 280px), var(--portal-ad-image-width, 24%));
 }
 
 .portal-ad-layout-featured .portal-ad-listing {
@@ -10637,7 +10623,7 @@ input {
 }
 
 .portal-ad-layout-featured .portal-ad-listing-media {
-  width: var(--portal-ad-image-width, 54%);
+  max-width: min(calc(100% - 280px), var(--portal-ad-image-width, 54%));
 }
 
 .portal-ad-format-card {
@@ -10648,8 +10634,8 @@ input {
 
 .portal-ad-format-card > .portal-ad-listing-media {
   flex: 0 1 auto;
-  width: var(--portal-ad-image-width, 100%);
-  max-width: 100%;
+  width: fit-content;
+  max-width: min(100%, var(--portal-ad-image-width, 100%));
   align-self: center;
 }
 
@@ -10801,8 +10787,8 @@ input {
   .portal-ad-listing-media,
   .portal-ad-layout-list .portal-ad-listing-media,
   .portal-ad-layout-featured .portal-ad-listing-media {
-    width: var(--portal-ad-image-width, 36%);
-    max-width: calc(100% - 180px);
+    width: fit-content;
+    max-width: min(calc(100% - 180px), var(--portal-ad-image-width, 36%));
   }
 
   .portal-ad-format-card {
@@ -10810,7 +10796,8 @@ input {
   }
 
   .portal-ad-format-card > .portal-ad-listing-media {
-    width: var(--portal-ad-image-width, 100%);
+    width: fit-content;
+    max-width: min(100%, var(--portal-ad-image-width, 100%));
   }
 
   .portal-ad-listing-copy {
