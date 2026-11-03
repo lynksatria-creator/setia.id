@@ -9154,27 +9154,6 @@ input {
   display: none;
 }
 
-.portal-home .portal-partner-mark {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  bottom: auto;
-  left: 25%;
-  display: grid;
-  width: 67px;
-  height: 67px;
-  place-items: center;
-  border: 7px solid #fcfafe;
-  border-radius: 50%;
-  background: linear-gradient(145deg, #fff, #f9f4fc);
-  box-shadow: 0 4px 12px rgba(57, 34, 73, 0.12);
-  color: #8056a3;
-  font-family: var(--portal-heading-font);
-  font-size: 1.45rem;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
 .portal-home .portal-showcase-copy {
   position: relative;
   z-index: 2;
@@ -9513,11 +9492,6 @@ input {
     min-height: 139px;
   }
 
-  .portal-home .portal-partner-mark {
-    width: 55px;
-    height: 55px;
-    border-width: 6px;
-  }
 }
 
 .portal-info-main {
@@ -10465,6 +10439,11 @@ input {
   min-height: 0;
   overflow: hidden;
   background: var(--portal-surface);
+  color: inherit;
+  padding: 0;
+  border: 0;
+  cursor: zoom-in;
+  text-align: left;
   isolation: isolate;
 }
 
@@ -10495,6 +10474,72 @@ input {
   z-index: 1;
   object-fit: contain;
   filter: drop-shadow(0 8px 18px rgba(20, 15, 28, 0.28));
+}
+
+.portal-ad-image-zoom {
+  position: absolute;
+  z-index: 3;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 50%;
+  background: rgba(31, 24, 38, 0.58);
+  color: white;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.portal-ad-listing-media:focus-visible,
+.portal-ad-image-lightbox-close:focus-visible {
+  outline: 3px solid var(--accent, #c9a66b);
+  outline-offset: 3px;
+}
+
+.portal-ad-image-lightbox {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 14, 23, 0.94);
+}
+
+.portal-ad-image-lightbox-panel {
+  position: relative;
+  display: grid;
+  width: min(100%, 1600px);
+  height: min(100%, 1000px);
+  place-items: center;
+}
+
+.portal-ad-image-lightbox-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.portal-ad-image-lightbox-close {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 50%;
+  background: rgba(31, 24, 38, 0.72);
+  color: white;
+  font: inherit;
+  font-size: 1.7rem;
+  line-height: 1;
 }
 
 .portal-ad-format-card .portal-ad-listing-media {

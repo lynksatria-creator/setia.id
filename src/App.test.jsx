@@ -25,6 +25,7 @@ test('renders the Aurora Media reference landing page with working partner links
   expect(screen.getAllByText(/Aurora Media/i).length).toBeGreaterThan(0);
   expect(screen.getByRole('heading', { name: /temukan partner terbaik/i })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Kolaborasi untuk Momen Berkesan' })).toBeDefined();
+  expect(document.querySelector('.portal-partner-mark')).toBeNull();
   expect(screen.getByRole('heading', { name: 'Nunuy Nadhifa Wedding' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Entertainment Musik' })).toBeDefined();
   expect(screen.getByRole('heading', { name: 'Undangan Digital' })).toBeDefined();
@@ -47,7 +48,7 @@ test('Aurora homepage shows its rotating ad carousel immediately after partner c
   localStorage.removeItem('portal-cms');
   const ads = {
     page: { title: 'Sponsor Beranda', description: 'Partner pilihan Aurora Media.', layout: 'featured' },
-    top: { enabled: true, label: 'SPONSOR 1', title: 'Studio Momen', image: 'https://example.com/poster.jpg', href: 'https://studio.example', duration: 1, format: 'banner', animation: 'fade', imageWidth: 62, imageHeight: 420 },
+    top: { enabled: true, label: 'SPONSOR 1', title: 'Studio Momen', image: 'https://example.com/poster.jpg', href: 'https://studio.example', duration: 30, format: 'banner', animation: 'fade', imageWidth: 62, imageHeight: 420 },
     midFeed: { enabled: true, label: 'SPONSOR 2', title: 'Ruang Cerita', href: 'https://cerita.example', duration: 5, format: 'card', animation: 'rise' },
   };
   vi.stubGlobal('fetch', vi.fn(async (url) => {
@@ -68,9 +69,15 @@ test('Aurora homepage shows its rotating ad carousel immediately after partner c
   expect(page.container.querySelector('#brands').nextElementSibling.classList.contains('portal-home-ad-section')).toBe(true);
   expect(screen.getByRole('heading', { name: 'Sponsor Beranda' })).toBeDefined();
   const homepageAd = page.container.querySelector('.portal-home-ad-section .portal-ad-listing');
-  expect(homepageAd.getAttribute('href')).toBe('https://studio.example');
+  expect(homepageAd.querySelector('.portal-ad-listing-copy').getAttribute('href')).toBe('https://studio.example');
   expect(homepageAd.style.getPropertyValue('--portal-ad-image-width')).toBe('62%');
   expect(homepageAd.style.getPropertyValue('--portal-ad-image-height')).toBe('420px');
+  fireEvent.click(screen.getByRole('button', { name: 'Lihat foto penuh Studio Momen' }));
+  const imageDialog = screen.getByRole('dialog', { name: 'Foto penuh Studio Momen' });
+  expect(imageDialog.querySelector('img').getAttribute('src')).toBe('https://example.com/poster.jpg');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'Foto penuh Studio Momen' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Iklan berikutnya' }));
   expect(await screen.findByText('Ruang Cerita', {}, { timeout: 2500 })).toBeDefined();
 
   page.unmount();

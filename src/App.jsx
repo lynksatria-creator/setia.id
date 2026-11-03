@@ -1573,16 +1573,35 @@ const LegacyPortalHome = () => {
 const PortalHomeAdCarousel = ({ ads, animationsEnabled }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [rotationPaused, setRotationPaused] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+  const previewTriggerRef = useRef(null);
+  const previewCloseRef = useRef(null);
   const advertisements = useMemo(() => Object.entries(ads).filter(([key, ad]) => key !== 'page' && ad.enabled), [ads]);
   const activeAdvertisement = advertisements.length ? advertisements[activeIndex % advertisements.length] : null;
   const page = ads.page;
 
   useEffect(() => {
-    if (rotationPaused || advertisements.length < 2 || !activeAdvertisement) return undefined;
+    if (rotationPaused || previewImage || advertisements.length < 2 || !activeAdvertisement) return undefined;
     const duration = Math.min(120, Math.max(1, Number(activeAdvertisement[1].duration) || 8));
     const timer = window.setTimeout(() => setActiveIndex((index) => (index + 1) % advertisements.length), duration * 1000);
     return () => window.clearTimeout(timer);
-  }, [activeAdvertisement, advertisements.length, rotationPaused]);
+  }, [activeAdvertisement, advertisements.length, previewImage, rotationPaused]);
+
+  useEffect(() => {
+    if (!previewImage) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    previewCloseRef.current?.focus();
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setPreviewImage(null);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', closeOnEscape);
+      previewTriggerRef.current?.focus();
+    };
+  }, [previewImage]);
 
   if (!activeAdvertisement) return null;
 
@@ -1600,21 +1619,22 @@ const PortalHomeAdCarousel = ({ ads, animationsEnabled }) => {
         </div>
         <div className={`portal-ad-display${animationsEnabled ? '' : ' portal-ad-motion-off'}`} aria-label="Iklan partner Aurora Media">
           <div className={`portal-ad-listings portal-ad-layout-${page.layout || 'grid'}`}>
-            <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 40}%`, '--portal-ad-image-height': `${Math.max(320, Number(ad.imageHeight) || 240)}px` }}>
+            <div className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} key={key} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 40}%`, '--portal-ad-image-height': `${Math.max(320, Number(ad.imageHeight) || 240)}px` }}>
               {ad.image ? (
-                <span className="portal-ad-listing-media" aria-hidden="true">
+                <button ref={previewTriggerRef} className="portal-ad-listing-media" type="button" aria-label={`Lihat foto penuh ${ad.title || ad.label || 'iklan'}`} onClick={() => setPreviewImage({ src: ad.image, title: ad.title || ad.label || 'Iklan' })}>
                   <img className="portal-ad-listing-backdrop" src={ad.image} alt="" loading="lazy" />
                   <img className="portal-ad-listing-image" src={ad.image} alt="" loading="lazy" />
-                </span>
+                  <span className="portal-ad-image-zoom" aria-hidden="true">⤢</span>
+                </button>
               ) : null}
-              <span className="portal-ad-listing-copy">
+              <a className="portal-ad-listing-copy" href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>
                 <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>
                 <strong>{ad.title || 'Jelajahi website partner'}</strong>
                 {ad.description ? <span className="portal-ad-listing-description">{ad.description}</span> : null}
                 <span>Lihat website <span aria-hidden="true">↗</span></span>
-              </span>
+              </a>
               <span className="portal-ad-listing-index">{String(activeIndex + 1).padStart(2, '0')} / {String(advertisements.length).padStart(2, '0')}</span>
-            </a>
+            </div>
           </div>
           {advertisements.length > 1 ? (
             <div className="portal-ads-controls">
@@ -1625,6 +1645,16 @@ const PortalHomeAdCarousel = ({ ads, animationsEnabled }) => {
             </div>
           ) : null}
         </div>
+        {previewImage ? (
+          <div className="portal-ad-image-lightbox" role="presentation" onClick={(event) => {
+            if (event.target === event.currentTarget) setPreviewImage(null);
+          }}>
+            <div className="portal-ad-image-lightbox-panel" role="dialog" aria-modal="true" aria-label={`Foto penuh ${previewImage.title}`}>
+              <button ref={previewCloseRef} className="portal-ad-image-lightbox-close" type="button" aria-label="Tutup foto penuh" onClick={() => setPreviewImage(null)}>×</button>
+              <img className="portal-ad-image-lightbox-image" src={previewImage.src} alt={previewImage.title} />
+            </div>
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -1806,9 +1836,6 @@ const PortalHome = () => {
                     {service.image ? <img src={service.image} alt={`Visual ${service.name}`} loading="lazy" /> : <span className="portal-image-fallback" aria-hidden="true">P.</span>}
                     <span>0{index + 1} <i /> {String(Math.max(portalData.services.filter((item) => item.active !== false).length, 1)).padStart(2, '0')}</span>
                   </a>
-                  <span className="portal-partner-mark" aria-hidden="true">
-                    {service.category?.toLowerCase().includes('music') ? 'M' : service.category?.toLowerCase().includes('invitation') ? '✉' : '♡'}
-                  </span>
                   <div className="portal-showcase-copy">
                     <span className="portal-partner-category">{service.category || 'CREATIVE PARTNER'}</span>
                     <h3>{service.name}</h3>
