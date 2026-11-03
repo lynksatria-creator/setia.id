@@ -1600,8 +1600,13 @@ const PortalHomeAdCarousel = ({ ads, animationsEnabled }) => {
         </div>
         <div className={`portal-ad-display${animationsEnabled ? '' : ' portal-ad-motion-off'}`} aria-label="Iklan partner Aurora Media">
           <div className={`portal-ad-listings portal-ad-layout-${page.layout || 'grid'}`}>
-            <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 40}%`, '--portal-ad-image-height': `${Number(ad.imageHeight) || 240}px` }}>
-              {ad.image ? <img src={ad.image} alt="" loading="lazy" /> : null}
+            <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 40}%`, '--portal-ad-image-height': `${Math.max(320, Number(ad.imageHeight) || 240)}px` }}>
+              {ad.image ? (
+                <span className="portal-ad-listing-media" aria-hidden="true">
+                  <img className="portal-ad-listing-backdrop" src={ad.image} alt="" loading="lazy" />
+                  <img className="portal-ad-listing-image" src={ad.image} alt="" loading="lazy" />
+                </span>
+              ) : null}
               <span className="portal-ad-listing-copy">
                 <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>
                 <strong>{ad.title || 'Jelajahi website partner'}</strong>
