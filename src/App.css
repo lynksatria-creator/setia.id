@@ -10461,7 +10461,8 @@ input {
   max-width: calc(100% - 280px);
   height: var(--portal-ad-image-height, 240px);
   min-height: 0;
-  object-fit: cover;
+  background: var(--portal-surface);
+  object-fit: contain;
 }
 
 .portal-ad-listing-copy {
