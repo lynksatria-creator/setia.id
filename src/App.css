@@ -6802,6 +6802,15 @@ input {
     border-radius: 10px;
   }
 
+  .portal-ad-website-preview {
+    justify-self: start;
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   .portal-checkbox-label {
     display: flex;
     align-items: center;
@@ -10474,15 +10483,31 @@ input {
 }
 
 .portal-ad-listing-copy > strong {
+  display: -webkit-box;
+  overflow: hidden;
   font-family: var(--portal-heading-font);
-  font-size: clamp(1.45rem, 2.8vw, 2.3rem);
+  font-size: clamp(1.25rem, 2vw, 1.8rem);
   font-weight: 600;
-  line-height: 1.12;
+  line-height: 1.14;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .portal-ad-listing-copy > span {
   font-size: 0.78rem;
   font-weight: 700;
+}
+
+.portal-ad-listing-copy > .portal-ad-listing-description {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: #69766f;
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .portal-ad-listing-copy > span span,

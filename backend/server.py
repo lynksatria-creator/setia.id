@@ -2,8 +2,7 @@ from contextlib import asynccontextmanager
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from email.message import EmailMessage
-from email.utils import formataddr
+from html import escape
 import hashlib
 import hmac
 import json
@@ -12,8 +11,6 @@ import os
 from pathlib import Path
 import re
 import secrets
-import smtplib
-import ssl
 import uuid
 from typing import Literal
 
@@ -211,6 +208,7 @@ class PortalAdSlotConfig(BaseModel):
     enabled: bool = False
     label: str = Field(default="", max_length=120)
     title: str = Field(default="", max_length=180)
+    description: str = Field(default="", max_length=500)
     image: str = Field(default="", max_length=4_000_000)
     href: str = Field(default="", max_length=2048)
     format: Literal["banner", "card", "link"] = "card"
@@ -519,34 +517,18 @@ def get_jwt_secret():
     return secret
 
 
-def get_smtp_settings():
-    host = os.environ.get("SMTP_HOST", "").strip()
-    sender = os.environ.get("SMTP_FROM_EMAIL", "").strip()
-    if not host or not sender:
-        raise HTTPException(status_code=503, detail="SMTP_HOST dan SMTP_FROM_EMAIL harus dikonfigurasi untuk mengirim OTP.")
-    try:
-        port = int(os.environ.get("SMTP_PORT", "587"))
-    except ValueError:
-        raise HTTPException(status_code=503, detail="SMTP_PORT harus berupa nomor port yang valid.") from None
-    if not 1 <= port <= 65535:
-        raise HTTPException(status_code=503, detail="SMTP_PORT harus berada di antara 1 dan 65535.")
-    username = os.environ.get("SMTP_USERNAME", "").strip()
-    password = os.environ.get("SMTP_PASSWORD", "")
-    if bool(username) != bool(password):
-        raise HTTPException(status_code=503, detail="SMTP_USERNAME dan SMTP_PASSWORD harus diatur bersama.")
-    use_ssl = os.environ.get("SMTP_USE_SSL", "false").strip().lower() in {"1", "true", "yes"}
-    sender_name = os.environ.get("SMTP_FROM_NAME", "Nuansa Invite").strip() or "Nuansa Invite"
+def get_mailtarget_settings():
+    api_key = os.environ.get("MAILTARGET_API_KEY", "").strip()
+    sender = os.environ.get("MAILTARGET_FROM_EMAIL", os.environ.get("SMTP_FROM_EMAIL", "")).strip()
+    if not api_key or not sender:
+        raise HTTPException(
+            status_code=503,
+            detail="MAILTARGET_API_KEY dan MAILTARGET_FROM_EMAIL harus dikonfigurasi untuk mengirim OTP.",
+        )
+    sender_name = os.environ.get("MAILTARGET_FROM_NAME", os.environ.get("SMTP_FROM_NAME", "Nuansa Invite")).strip()
     if sender_name.casefold() == "undangan.id":
         sender_name = "Nuansa Invite"
-    return {
-        "host": host,
-        "port": port,
-        "username": username,
-        "password": password,
-        "sender": sender,
-        "sender_name": sender_name,
-        "use_ssl": use_ssl,
-    }
+    return {"api_key": api_key, "sender": sender, "sender_name": sender_name or "Nuansa Invite"}
 
 
 def ensure_utc(value):
@@ -555,37 +537,41 @@ def ensure_utc(value):
     return value.astimezone(timezone.utc)
 
 
-def send_smtp_message(settings, message):
-    if settings["use_ssl"]:
-        server = smtplib.SMTP_SSL(settings["host"], settings["port"], timeout=15, context=ssl.create_default_context())
-    else:
-        server = smtplib.SMTP(settings["host"], settings["port"], timeout=15)
-    with server:
-        if not settings["use_ssl"]:
-            server.starttls(context=ssl.create_default_context())
-        if settings["username"]:
-            server.login(settings["username"], settings["password"])
-        server.send_message(message)
-
-
 async def send_registration_code_email(email, full_name, code):
-    settings = get_smtp_settings()
-    message = EmailMessage()
-    message["Subject"] = "Kode OTP pendaftaran Nuansa Invite"
-    message["From"] = formataddr((settings["sender_name"], settings["sender"]))
-    message["To"] = email
-    message.set_content(
+    settings = get_mailtarget_settings()
+    text_body = (
         f"Halo {full_name},\n\n"
         f"Kode OTP pendaftaran Nuansa Invite Anda adalah: {code}\n\n"
         "Kode berlaku selama 10 menit dan hanya dapat digunakan satu kali. "
         "Jangan bagikan kode ini kepada siapa pun.\n\n"
         "Jika Anda tidak merasa mendaftar, abaikan email ini."
     )
+    safe_name = escape(full_name)
+    html_body = (
+        f"<p>Halo {safe_name},</p>"
+        f"<p>Kode OTP pendaftaran Nuansa Invite Anda adalah: <strong>{escape(code)}</strong></p>"
+        "<p>Kode berlaku selama 10 menit dan hanya dapat digunakan satu kali. "
+        "Jangan bagikan kode ini kepada siapa pun.</p>"
+        "<p>Jika Anda tidak merasa mendaftar, abaikan email ini.</p>"
+    )
+    payload = {
+        "subject": "Kode OTP pendaftaran Nuansa Invite",
+        "from": {"email": settings["sender"], "name": settings["sender_name"]},
+        "to": [{"email": email, "name": full_name}],
+        "bodyText": text_body,
+        "bodyHtml": html_body,
+    }
     try:
-        await asyncio.to_thread(send_smtp_message, settings, message)
-    except Exception as error:
-        logging.getLogger(__name__).exception("Gagal mengirim email OTP pendaftaran.")
-        raise HTTPException(status_code=502, detail="Email OTP gagal dikirim. Coba lagi beberapa saat.") from error
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                "https://transmission.mailtarget.co/v1/layang/transmissions",
+                headers={"Authorization": f"Bearer {settings['api_key']}"},
+                json=payload,
+            )
+        response.raise_for_status()
+    except (httpx.RequestError, httpx.HTTPStatusError) as error:
+        logging.getLogger(__name__).warning("Pengiriman OTP Mailtarget gagal (%s).", type(error).__name__)
+        raise HTTPException(status_code=502, detail="Email OTP gagal dikirim. Coba lagi beberapa saat.") from None
 
 
 def create_access_token(user_id: str, role: str = "user", scope: str | None = None):

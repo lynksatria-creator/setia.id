@@ -7,6 +7,7 @@ import Auth from './pages/Auth';
 import { SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
 import { getThemeCatalog } from './lib/themeCatalog';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
+import { normalizePortalAds } from './lib/portalAds';
 import { regionalInvitationTemplates } from './lib/regionalInvitationTemplates';
 import AdminBilling from './pages/AdminBilling';
 import PublicInvitation from './pages/PublicInvitation';
@@ -89,7 +90,7 @@ test('Aurora Media rotates enabled advertisements after each configured duration
   localStorage.setItem('portal-cms', JSON.stringify({
     ads: {
       page: { title: 'Partner Pilihan', description: 'Brand untuk momen istimewa.', layout: 'featured' },
-      top: { enabled: true, label: 'PARTNER PILIHAN', title: 'Studio Momen', image: 'https://example.com/banner.jpg', href: 'https://studio.example', format: 'banner', animation: 'rise', duration: 2, imageWidth: 65, imageHeight: 420 },
+      top: { enabled: true, label: 'PARTNER PILIHAN', title: 'Studio Momen', description: 'Musik live untuk acara spesial.', image: 'https://example.com/banner.jpg', href: 'https://studio.example', format: 'banner', animation: 'rise', duration: 2, imageWidth: 65, imageHeight: 420 },
       midFeed: { enabled: true, label: 'REKOMENDASI', title: 'Ruang Cerita', href: 'https://cerita.example', format: 'card', animation: 'fade', duration: 5 },
     },
   }));
@@ -106,6 +107,7 @@ test('Aurora Media rotates enabled advertisements after each configured duration
   expect(banner.className).toContain('portal-ad-animation-rise');
   expect(banner.style.getPropertyValue('--portal-ad-image-width')).toBe('65%');
   expect(banner.style.getPropertyValue('--portal-ad-image-height')).toBe('420px');
+  expect(screen.getByText('Musik live untuk acara spesial.')).toBeDefined();
 
   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
   expect(screen.getByText('Ruang Cerita')).toBeDefined();
@@ -331,6 +333,18 @@ test('portal admin can add, edit, publish, and remove advertised websites', asyn
   });
   sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
 }, 30000);
+
+test('normalizes portal ad fields to API limits', () => {
+  const normalized = normalizePortalAds({
+    page: { title: 'Iklan' },
+    top: { title: 'A'.repeat(181), imageWidth: 140 },
+    midFeed: { title: 'Promo', imageWidth: 0 },
+  });
+
+  expect(normalized.top.title).toHaveLength(180);
+  expect(normalized.top.imageWidth).toBe(100);
+  expect(normalized.midFeed.imageWidth).toBe(20);
+});
 
 test('shows a helpful message when the Nuansa Invite API is unavailable', async () => {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
@@ -1485,6 +1499,7 @@ test('keeps the previous Portal admin URL as an alias', () => {
   expect(document.getElementById('admin-ads')).not.toBeNull();
   expect(document.querySelectorAll('.portal-admin-ad input[type="file"]')).toHaveLength(4);
   expect(document.querySelectorAll('.portal-admin-ad input[type="number"]')).toHaveLength(12);
+  expect(document.querySelectorAll('.portal-admin-ad textarea')).toHaveLength(4);
   expect(window.location.pathname).toBe('/admin');
   sessionStorage.clear();
 });

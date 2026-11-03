@@ -569,6 +569,7 @@ def test_portal_ads_config_is_saved_and_limited_to_super_admin(monkeypatch):
             "enabled": True,
             "label": "PARTNER PILIHAN",
             "title": "Studio Momen",
+            "description": "Dekorasi dan dokumentasi untuk hari istimewa.",
             "image": "https://example.com/banner.jpg",
             "href": "https://studio.example",
             "format": "banner",
@@ -599,6 +600,7 @@ def test_portal_ads_config_is_saved_and_limited_to_super_admin(monkeypatch):
     assert saved.json()["ads"]["top"].get("duration") == 12
     assert saved.json()["ads"]["top"]["imageWidth"] == 65
     assert saved.json()["ads"]["top"]["imageHeight"] == 420
+    assert saved.json()["ads"]["top"]["description"] == "Dekorasi dan dokumentasi untuk hari istimewa."
     assert client.get("/api/public/portal-ads").json() == saved.json()
     assert audit_logs.document["action"] == "portal.ads.updated"
 
@@ -876,9 +878,10 @@ def test_registration_requires_jwt_secret(monkeypatch):
     assert "JWT_SECRET" in response.json()["detail"]
 
 
-def test_registration_requires_configured_smtp(monkeypatch):
+def test_registration_requires_configured_mailtarget(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
-    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("MAILTARGET_API_KEY", raising=False)
+    monkeypatch.delenv("MAILTARGET_FROM_EMAIL", raising=False)
     monkeypatch.delenv("SMTP_FROM_EMAIL", raising=False)
     monkeypatch.setattr(server, "db", SimpleNamespace(
         users=FakeUsersCollection(),
@@ -892,7 +895,41 @@ def test_registration_requires_configured_smtp(monkeypatch):
     })
 
     assert response.status_code == 503
-    assert "SMTP_HOST" in response.json()["detail"]
+    assert "MAILTARGET_API_KEY" in response.json()["detail"]
+
+
+def test_registration_otp_is_sent_through_mailtarget(monkeypatch):
+    monkeypatch.setenv("MAILTARGET_API_KEY", "test-mailtarget-key")
+    monkeypatch.setenv("MAILTARGET_FROM_EMAIL", "hello@example.com")
+    captured = {}
+
+    class MailtargetResponse:
+        def raise_for_status(self):
+            return None
+
+    class MailtargetClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, url, **kwargs):
+            captured.update(url=url, **kwargs)
+            return MailtargetResponse()
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", MailtargetClient)
+
+    asyncio.run(server.send_registration_code_email("recipient@example.com", "Test User", "123456"))
+
+    assert captured["url"] == "https://transmission.mailtarget.co/v1/layang/transmissions"
+    assert captured["headers"]["Authorization"] == "Bearer test-mailtarget-key"
+    assert captured["json"]["from"]["email"] == "hello@example.com"
+    assert captured["json"]["to"] == [{"email": "recipient@example.com", "name": "Test User"}]
+    assert "123456" in captured["json"]["bodyText"]
 
 
 def test_registration_verifies_email_otp_before_creating_session(monkeypatch):

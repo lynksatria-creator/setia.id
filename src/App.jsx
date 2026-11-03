@@ -26,6 +26,7 @@ import { getAdminScope, SUPER_ADMIN_SESSION_KEY } from './lib/adminSession';
 import { advertisementsApi, nunuyConsultationsApi, portalAdsApi, siteContactApi, testimonialsApi } from './lib/api';
 import { createOwnerGuestbookUrl } from './lib/ownerGuestbookUrl';
 import { createDefaultTheme, getThemeCatalog, themeStyle } from './lib/themeCatalog';
+import { normalizePortalAds } from './lib/portalAds';
 import { SEO_DEFAULTS } from './lib/seoSites';
 import { createWhatsAppUrl } from './lib/whatsapp';
 import { getRootRouteForHost, getSiteUrl, resolveBrandHref } from './lib/siteDomains';
@@ -180,10 +181,10 @@ const defaultPortalData = {
   ],
   ads: {
     page: { title: 'Pilihan Iklan', description: 'Temukan brand dan layanan pilihan dari partner Aurora Media.', layout: 'grid' },
-    top: { enabled: false, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', image: '', href: '#contact', format: 'banner', animation: 'rise', duration: 8, imageWidth: 40, imageHeight: 240 },
-    midFeed: { enabled: false, label: 'FEATURED PARTNER', title: 'Buat momen Anda lebih istimewa', image: '', href: '/nunuy-nadhifa-wedding', format: 'card', animation: 'fade', duration: 8, imageWidth: 100, imageHeight: 240 },
-    sidebar: { enabled: false, label: 'DIREKOMENDASIKAN', title: 'Cerita indah dimulai dari sini', image: '', href: '/undangan', format: 'card', animation: 'fade', duration: 8, imageWidth: 100, imageHeight: 240 },
-    floatingBottom: { enabled: false, label: 'Punya acara dalam waktu dekat?', title: 'Mari rencanakan bersama', image: '', href: '/nunuy-nadhifa-wedding', format: 'link', animation: 'float', duration: 8, imageWidth: 40, imageHeight: 180 },
+    top: { enabled: false, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', description: '', image: '', href: '#contact', format: 'banner', animation: 'rise', duration: 8, imageWidth: 40, imageHeight: 240 },
+    midFeed: { enabled: false, label: 'FEATURED PARTNER', title: 'Buat momen Anda lebih istimewa', description: '', image: '', href: '/nunuy-nadhifa-wedding', format: 'card', animation: 'fade', duration: 8, imageWidth: 100, imageHeight: 240 },
+    sidebar: { enabled: false, label: 'DIREKOMENDASIKAN', title: 'Cerita indah dimulai dari sini', description: '', image: '', href: '/undangan', format: 'card', animation: 'fade', duration: 8, imageWidth: 100, imageHeight: 240 },
+    floatingBottom: { enabled: false, label: 'Punya acara dalam waktu dekat?', title: 'Mari rencanakan bersama', description: '', image: '', href: '/nunuy-nadhifa-wedding', format: 'link', animation: 'float', duration: 8, imageWidth: 40, imageHeight: 180 },
   },
   gallery: [
     'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1100&q=85',
@@ -669,10 +670,7 @@ const normalizePortalData = (data) => {
     logoImage: saved.logoImage || defaultPortalData.logoImage,
     hero: { ...defaultPortalData.hero, ...(saved.hero || {}) },
     services,
-    ads: Object.fromEntries(Object.entries(defaultPortalData.ads).map(([key, value]) => [
-      key,
-      { ...value, ...(saved.ads?.[key] || {}) },
-    ])),
+    ads: normalizePortalAds(defaultPortalData.ads, saved.ads),
     theme: {
       ...defaultPortalData.theme,
       ...(saved.theme || {}),
@@ -1273,13 +1271,17 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
                     <legend>{title}</legend>
                     <label className="portal-checkbox-label"><input type="checkbox" checked={Boolean(formData.ads[key].enabled)} onChange={(event) => updateField(`ads.${key}.enabled`, event.target.checked)} /> Slot aktif</label>
                     <label>Label<input value={formData.ads[key].label || ''} onChange={(event) => updateField(`ads.${key}.label`, event.target.value)} /></label>
-                    <label>Judul<input value={formData.ads[key].title || ''} onChange={(event) => updateField(`ads.${key}.title`, event.target.value)} /></label>
+                    <label>Judul singkat<input maxLength={180} value={formData.ads[key].title || ''} onChange={(event) => updateField(`ads.${key}.title`, event.target.value.slice(0, 180))} placeholder="Nama brand atau headline" /></label>
+                    <label className="portal-form-wide">Deskripsi iklan<textarea rows="3" maxLength="500" value={formData.ads[key].description || ''} onChange={(event) => updateField(`ads.${key}.description`, event.target.value)} placeholder="Detail singkat tentang produk atau penawaran" /></label>
                     <label>URL gambar<input value={formData.ads[key].image || ''} onChange={(event) => updateField(`ads.${key}.image`, event.target.value)} /></label>
                     <label>Upload poster<input type="file" accept="image/*" onChange={(event) => handleImageUpload(`ads.${key}.image`, event.target.files?.[0])} /></label>
                     {formData.ads[key].image ? <div className="admin-media-preview portal-ad-poster-preview"><span>Pratinjau poster</span><img src={formData.ads[key].image} alt={`Pratinjau poster ${title}`} /></div> : null}
-                    <label>Lebar poster (%)<input type="number" min="20" max="100" value={formData.ads[key].imageWidth ?? 40} onChange={(event) => updateField(`ads.${key}.imageWidth`, Number(event.target.value))} /></label>
+                    <label>Lebar poster (%)<input type="number" min="20" max="100" value={formData.ads[key].imageWidth ?? 40} onChange={(event) => updateField(`ads.${key}.imageWidth`, Math.min(100, Math.max(20, Number(event.target.value) || 20)))} /></label>
                     <label>Tinggi poster (px)<input type="number" min="120" max="600" value={formData.ads[key].imageHeight ?? 240} onChange={(event) => updateField(`ads.${key}.imageHeight`, Number(event.target.value))} /></label>
-                    <label>URL website tujuan<input type="url" value={formData.ads[key].href || ''} onChange={(event) => updateField(`ads.${key}.href`, event.target.value)} placeholder="https://website-brand.com" /></label>
+                    <label>Link website iklan<input type="url" value={formData.ads[key].href || ''} onChange={(event) => updateField(`ads.${key}.href`, event.target.value)} placeholder="https://website-brand.com" /></label>
+                    {isValidPortalPartnerHref(formData.ads[key].href) ? (
+                      <a className="portal-ad-website-preview" href={resolveBrandHref(formData.ads[key].href)} target="_blank" rel="noopener noreferrer">Buka pratinjau website iklan ↗</a>
+                    ) : null}
                     <label>Format iklan
                       <select value={formData.ads[key].format || 'card'} onChange={(event) => updateField(`ads.${key}.format`, event.target.value)}>
                         <option value="banner">Banner</option>
@@ -1603,6 +1605,7 @@ const PortalHomeAdCarousel = ({ ads, animationsEnabled }) => {
               <span className="portal-ad-listing-copy">
                 <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>
                 <strong>{ad.title || 'Jelajahi website partner'}</strong>
+                {ad.description ? <span className="portal-ad-listing-description">{ad.description}</span> : null}
                 <span>Lihat website <span aria-hidden="true">↗</span></span>
               </span>
               <span className="portal-ad-listing-index">{String(activeIndex + 1).padStart(2, '0')} / {String(advertisements.length).padStart(2, '0')}</span>
@@ -2137,6 +2140,7 @@ const PortalAdsPage = () => {
                       <span className="portal-ad-listing-copy">
                         <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>
                         <strong>{ad.title || 'Jelajahi website partner'}</strong>
+                        {ad.description ? <span className="portal-ad-listing-description">{ad.description}</span> : null}
                         <span>Lihat website <span aria-hidden="true">↗</span></span>
                       </span>
                       <span className="portal-ad-listing-index">{String(activeIndex + 1).padStart(2, '0')} / {String(advertisements.length).padStart(2, '0')}</span>
