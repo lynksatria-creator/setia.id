@@ -5,7 +5,6 @@ import './pages/Invitation.css';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import InvitationUnderDevelopment from './pages/InvitationUnderDevelopment';
-import Auth from './pages/Auth';
 import Blog, { articleSlug } from './pages/Blog';
 import BlogDetail from './pages/BlogDetail';
 import Pricing from './pages/Pricing';
@@ -181,7 +180,7 @@ const defaultPortalData = {
   ],
   ads: {
     page: { title: 'Pilihan Iklan', description: 'Temukan brand dan layanan pilihan dari partner Aurora Media.', layout: 'grid' },
-    top: { enabled: false, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', description: '', image: '', href: '#contact', format: 'banner', animation: 'rise', duration: 8, imageWidth: 40, imageHeight: 240 },
+    top: { enabled: false, label: 'PARTNER SPOTLIGHT', title: 'Ruang untuk brand Anda', description: '', image: '', href: '#contact', format: 'banner', animation: 'rise', duration: 8, imageWidth: 68, imageHeight: 320 },
     midFeed: { enabled: false, label: 'FEATURED PARTNER', title: 'Buat momen Anda lebih istimewa', description: '', image: '', href: '/nunuy-nadhifa-wedding', format: 'card', animation: 'fade', duration: 8, imageWidth: 100, imageHeight: 240 },
     sidebar: { enabled: false, label: 'DIREKOMENDASIKAN', title: 'Cerita indah dimulai dari sini', description: '', image: '', href: '/undangan', format: 'card', animation: 'fade', duration: 8, imageWidth: 100, imageHeight: 240 },
     floatingBottom: { enabled: false, label: 'Punya acara dalam waktu dekat?', title: 'Mari rencanakan bersama', description: '', image: '', href: '/nunuy-nadhifa-wedding', format: 'link', animation: 'float', duration: 8, imageWidth: 40, imageHeight: 180 },
@@ -1049,6 +1048,12 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
     ...(superAdminAuthenticated ? [{ id: 'seo', label: 'SEO', href: '/setia-creative-admin/seo' }] : []),
     ...(site === 'admin' ? [{ id: 'ads', label: 'Iklan', href: '#admin-ads' }] : []),
   ];
+  const publicWebsiteUrl = {
+    admin: getSiteUrl('aurora'),
+    gibrig: getSiteUrl('entertainment', '/gibrig'),
+    nunuy: getSiteUrl('nunuy', '/nunuy-nadhifa-wedding'),
+    invitation: getSiteUrl('invitation', '/undangan'),
+  }[site] || getSiteUrl('aurora');
 
   return (
     <div className="admin-shell admin-dashboard">
@@ -1080,6 +1085,7 @@ const AdminPanel = ({ site, label, dataKey, defaultData, customFields = [], desc
             <h1>{label}</h1>
           </div>
           <div className="admin-actions">
+            <a className="ghost admin-live-link" href={publicWebsiteUrl} target="_blank" rel="noopener noreferrer">Website Live <span aria-hidden="true">↗</span></a>
             <button className="ghost" onClick={saveDraft}>Save Draft</button>
             <button className="ghost" onClick={preview}>Preview</button>
             <button onClick={saveChanges}>Publish</button>
@@ -2151,7 +2157,7 @@ const PortalAdsPage = () => {
       <main className="portal-ads-main">
         <section className="portal-ads-hero">
           <div className="container">
-            <p className="eyebrow">PARTNER &amp; REKOMENDASI</p>
+            <p className="eyebrow">PROMOSI PILIHAN</p>
             <h1>{page.title}</h1>
             <p>{page.description}</p>
           </div>
@@ -2166,8 +2172,13 @@ const PortalAdsPage = () => {
                   const href = resolveBrandHref(rawHref);
                   const external = /^https?:\/\//i.test(href);
                   return (
-                    <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 40}%`, '--portal-ad-image-height': `${Number(ad.imageHeight) || 240}px` }}>
-                      {ad.image ? <img src={ad.image} alt="" loading="lazy" /> : null}
+                    <a className={`portal-ad-listing portal-ad-format-${ad.format || 'card'} portal-ad-animation-${ad.animation || 'fade'}`} href={href} key={key} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={{ '--portal-ad-image-width': `${Number(ad.imageWidth) || 68}%`, '--portal-ad-image-height': `${Math.max(240, Number(ad.imageHeight) || 320)}px` }}>
+                      {ad.image ? (
+                        <span className="portal-ad-listing-visual">
+                          {ad.format === 'banner' ? <img className="portal-ad-listing-backdrop" src={ad.image} alt="" aria-hidden="true" loading="lazy" /> : null}
+                          <img className="portal-ad-listing-image" src={ad.image} alt="" loading="lazy" />
+                        </span>
+                      ) : null}
                       <span className="portal-ad-listing-copy">
                         <small>{ad.label || 'PARTNER AURORA MEDIA'}</small>
                         <strong>{ad.title || 'Jelajahi website partner'}</strong>
@@ -3046,8 +3057,7 @@ function App() {
   };
 
   if (path === '/undangan-auth') {
-    const nextPath = new URLSearchParams(window.location.search).get('next');
-    return <Auth onBack={() => navigate('/undangan')} onSuccess={() => navigate(nextPath || '/undangan-dashboard')} />;
+    return <InvitationUnderDevelopment />;
   }
 
   if (path === '/undangan-dashboard') {

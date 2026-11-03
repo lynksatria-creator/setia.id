@@ -799,6 +799,7 @@ button {
 .artist-card button,
 .logout-button,
 .admin-actions button,
+.admin-actions a,
 .theme-builder-row button,
 .admin-shell button {
   border: none;
@@ -1895,8 +1896,13 @@ input {
 
 .admin-actions {
   display: flex;
+  align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.admin-actions a {
+  text-decoration: none;
 }
 
 .stats-grid {
@@ -10377,31 +10383,38 @@ input {
 }
 
 .portal-ads-hero {
-  padding: clamp(56px, 8vw, 104px) 0 54px;
+  padding: clamp(32px, 5vw, 56px) 0 22px;
   background: linear-gradient(120deg, var(--portal-surface), var(--portal-background) 72%);
+  text-align: center;
+}
+
+.portal-ads-hero .eyebrow {
+  justify-content: center;
 }
 
 .portal-ads-hero h1 {
   max-width: 860px;
-  margin: 14px 0;
+  margin: 8px auto;
   color: var(--primary);
   font-family: var(--portal-heading-font);
-  font-size: clamp(2.6rem, 5vw, 4.5rem);
+  font-size: clamp(2.2rem, 4vw, 3rem);
   font-weight: 500;
   line-height: 1;
 }
 
 .portal-ads-hero .container > p:last-child {
   max-width: 620px;
+  margin: 0 auto;
   color: #69766f;
-  line-height: 1.8;
+  font-size: 0.82rem;
+  line-height: 1.6;
 }
 
 .portal-ad-display {
   display: grid;
-  min-height: 360px;
-  align-content: center;
-  padding-top: 40px;
+  min-height: 0;
+  align-content: start;
+  padding-top: 0;
   padding-bottom: 60px;
 }
 
@@ -10423,6 +10436,58 @@ input {
   color: var(--primary);
   text-decoration: none;
   transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.portal-ads-page .portal-ad-format-banner {
+  min-height: 320px;
+}
+
+.portal-ads-page .portal-ad-listing-visual {
+  position: relative;
+  display: grid;
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(100%, var(--portal-ad-image-width, 68%));
+  max-height: var(--portal-ad-image-height, 320px);
+  overflow: hidden;
+  place-items: center;
+}
+
+.portal-ads-page .portal-ad-listing-image {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: var(--portal-ad-image-height, 320px);
+  object-fit: contain;
+}
+
+.portal-ads-page .portal-ad-format-banner .portal-ad-listing-visual {
+  flex: 0 1 var(--portal-ad-image-width, 68%);
+  width: var(--portal-ad-image-width, 68%);
+  max-width: calc(100% - 280px);
+  max-height: none;
+  align-self: stretch;
+  background: #312a31;
+  isolation: isolate;
+}
+
+.portal-ads-page .portal-ad-listing-backdrop {
+  position: absolute;
+  inset: -14px;
+  width: calc(100% + 28px);
+  height: calc(100% + 28px);
+  object-fit: cover;
+  filter: blur(16px);
+  opacity: 0.72;
+}
+
+.portal-ads-page .portal-ad-format-banner .portal-ad-listing-image {
+  width: 100%;
+  height: 100%;
+  max-height: var(--portal-ad-image-height, 320px);
 }
 
 .portal-ad-listing:hover {
@@ -10778,6 +10843,25 @@ input {
 }
 
 @media (max-width: 700px) {
+  .portal-ads-page .portal-ad-format-banner {
+    flex-direction: column;
+  }
+
+  .portal-ads-page .portal-ad-format-banner .portal-ad-listing-visual {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    height: clamp(190px, 55vw, 260px);
+  }
+
+  .portal-ads-page .portal-ad-format-banner .portal-ad-listing-image {
+    max-height: 100%;
+  }
+
+  .portal-ads-page .portal-ad-listing-copy {
+    min-width: 0;
+  }
+
   .portal-ad-listing,
   .portal-ad-layout-list .portal-ad-listing,
   .portal-ad-layout-featured .portal-ad-listing {

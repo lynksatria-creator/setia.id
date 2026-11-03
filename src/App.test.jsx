@@ -113,6 +113,8 @@ test('Aurora Media rotates enabled advertisements after each configured duration
   expect(banner.getAttribute('rel')).toBe('noopener noreferrer');
   expect(banner.className).toContain('portal-ad-format-banner');
   expect(banner.className).toContain('portal-ad-animation-rise');
+  expect(banner.querySelector('.portal-ad-listing-backdrop').getAttribute('src')).toBe('https://example.com/banner.jpg');
+  expect(banner.querySelector('.portal-ad-listing-image').getAttribute('src')).toBe('https://example.com/banner.jpg');
   expect(banner.style.getPropertyValue('--portal-ad-image-width')).toBe('65%');
   expect(banner.style.getPropertyValue('--portal-ad-image-height')).toBe('420px');
   expect(screen.getByText('Musik live untuk acara spesial.')).toBeDefined();
@@ -354,19 +356,12 @@ test('normalizes portal ad fields to API limits', () => {
   expect(normalized.midFeed.imageWidth).toBe(20);
 });
 
-test('shows a helpful message when the Nuansa Invite API is unavailable', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
-  sessionStorage.clear();
+test('routes Nuansa Invite login to the development page', () => {
   window.history.pushState({}, '', '/undangan-auth?mode=login');
   renderApp();
 
-  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'tester@undangan.id' } });
-  fireEvent.change(screen.getByLabelText('Kata sandi'), { target: { value: 'Tester12345!' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Masuk' }));
-
-  const alert = await screen.findByRole('alert');
-  expect(alert.textContent).toMatch(/backend berjalan di port 8000 dan MongoDB tersedia/i);
-  vi.unstubAllGlobals();
+  expect(screen.getByRole('heading', { name: 'Peluncuran Resmi Platform' })).toBeDefined();
+  expect(screen.getByText('MASIH DALAM PROSES PENGEMBANGAN')).toBeDefined();
 });
 
 test('shows active affiliate advertisements on the Nuansa Invite homepage', async () => {
@@ -703,13 +698,13 @@ test('template preview content follows its selected event category', () => {
   });
 });
 
-test('renders the registration form on the register route', () => {
+test('routes Nuansa Invite registration to the development page', () => {
   sessionStorage.clear();
   window.history.pushState({}, '', '/undangan-auth?mode=register');
   renderApp();
 
-  expect(screen.getByRole('heading', { name: 'Buat akun' })).toBeDefined();
-  expect(screen.getByLabelText('Nama lengkap')).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Peluncuran Resmi Platform' })).toBeDefined();
+  expect(screen.getByText('MASIH DALAM PROSES PENGEMBANGAN')).toBeDefined();
 });
 
 test('requires email OTP verification before completing Nuansa Invite registration', async () => {
@@ -1527,6 +1522,7 @@ test('one super admin session opens the Portal admin link', () => {
   const admin = renderApp();
 
   expect(screen.getByRole('heading', { name: 'Portal Admin' })).toBeDefined();
+  expect(screen.getByRole('link', { name: /website live/i }).getAttribute('href')).toBe('https://auroramedia.online/');
   expect(screen.getByRole('navigation', { name: 'Navigasi super admin' })).toBeDefined();
   expect(admin.container.querySelector('.portal-ad-page-settings input')).not.toBeNull();
   expect(admin.container.querySelector('.portal-ad-page-settings select').value).toBe('grid');
