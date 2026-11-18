@@ -23,7 +23,7 @@ import bcrypt
 from bson import BSON
 import httpx
 import jwt
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -36,6 +36,20 @@ from urllib.parse import quote, urlparse
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
+
+
+def load_midtrans_env_fallback(env_file: Path):
+    for key, value in dotenv_values(env_file).items():
+        if (
+            key in {"MIDTRANS_SERVER_KEY", "MIDTRANS_IS_SANDBOX"}
+            and isinstance(value, str)
+            and value.strip()
+            and not os.environ.get(key, "").strip()
+        ):
+            os.environ[key] = value
+
+
+load_midtrans_env_fallback(ROOT_DIR / ".env")
 
 mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 db_name = os.environ.get("DB_NAME", "undangan_id")

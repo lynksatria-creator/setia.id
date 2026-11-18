@@ -1,6 +1,7 @@
 import copy
 import asyncio
 import hashlib
+import os
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from pymongo.errors import DuplicateKeyError
@@ -10,6 +11,22 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from backend import server
+
+
+def test_midtrans_dotenv_fallback_fills_blank_environment_values(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "MIDTRANS_SERVER_KEY=SB-Mid-server-test\n"
+        "MIDTRANS_IS_SANDBOX=true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", "")
+    monkeypatch.setenv("MIDTRANS_IS_SANDBOX", "false")
+
+    server.load_midtrans_env_fallback(env_file)
+
+    assert os.environ["MIDTRANS_SERVER_KEY"] == "SB-Mid-server-test"
+    assert os.environ["MIDTRANS_IS_SANDBOX"] == "false"
 
 
 @pytest.mark.parametrize(
