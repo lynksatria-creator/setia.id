@@ -610,6 +610,56 @@ test('renders template-specific quote and honoree photo content', () => {
   expect(honoreePage.container.querySelector('.wedding-honoree-photo[src="https://example.com/nara.jpg"]')).not.toBeNull();
 });
 
+test('presents the wedding journey in order without replacing the selected theme', () => {
+  const invitation = {
+    id: 'template-journey',
+    title: 'Alya & Fajar',
+    slug: 'alya-fajar',
+    content: {
+      event_type: 'Akad & Resepsi',
+      template_id: 'gen-z-editorial',
+      couple_names: 'Alya & Fajar',
+      groom_photo: 'https://example.com/fajar.jpg',
+      bride_photo: 'https://example.com/alya.jpg',
+      quote: 'Dua hati, satu perjalanan.',
+      story: 'Kisah perjalanan kami.',
+      event_date: '2026-10-07',
+      event_time: '10:00',
+      reception_date: '2026-10-07',
+      reception_time: '12:00',
+      venue: 'Gedung Melati',
+      address: 'Jakarta',
+      gallery: ['https://example.com/gallery.jpg'],
+      video_url: 'https://youtu.be/example-video',
+      schedule: [{ time: '10:00', title: 'Akad Nikah' }],
+      digital_envelope: {
+        bank: { enabled: true, name: 'BCA', account_name: 'Alya', account_number: '001234567' },
+      },
+    },
+  };
+  const { container } = render(<PublicInvitation invitation={invitation} />);
+  const sectionTypes = [...container.querySelector('.wedding-content').children]
+    .map((section) => [...section.classList].find((className) => className.startsWith('wedding-') && className !== 'wedding-section'))
+    .filter(Boolean);
+
+  expect(container.querySelector('.public-template-gen-z-editorial')).not.toBeNull();
+  expect(sectionTypes).toEqual([
+    'wedding-greeting',
+    'wedding-couple',
+    'wedding-quote',
+    'wedding-story',
+    'wedding-events',
+    'wedding-countdown',
+    'wedding-schedule',
+    'wedding-gallery',
+    'wedding-video',
+    'wedding-digital-envelope',
+    'wedding-rsvp',
+    'wedding-guestbook',
+    'wedding-closing',
+  ]);
+});
+
 test('opens the invitation and scrolls to RSVP when the link includes the RSVP fragment', async () => {
   window.history.pushState({}, '', '/i/aulia-farhan-6bcd575#rsvp');
   const scrollIntoView = vi.fn();
@@ -980,7 +1030,9 @@ test('test account does not select a package while filling invitation details', 
   expect(screen.getByLabelText('Ayat atau doa pilihan')).toBeDefined();
   expect(screen.queryByLabelText('Kutipan pernikahan')).toBeNull();
   fireEvent.change(screen.getByLabelText('Undangan ini untuk acara apa?'), { target: { value: 'Khitanan' } });
-  expect(screen.getByLabelText('Nama khitanan / yang dirayakan')).toBeDefined();
+  expect(screen.getByLabelText('Nama anak yang dikhitan')).toBeDefined();
+  expect(screen.getByLabelText('Foto anak')).toBeDefined();
+  expect(screen.getByLabelText('Cerita khitanan')).toBeDefined();
   expect(screen.queryByLabelText('Nama pasangan')).toBeNull();
   expect(container.querySelector('.template-choice.selected strong').textContent).toBe('Khitanan Royal');
   fireEvent.click(container.querySelector('.template-picker .template-demo-button'));

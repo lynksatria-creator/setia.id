@@ -48,6 +48,23 @@ jobs:
           git fetch origin
           git checkout main
           git reset --hard origin/main
+          mongo_service=""
+          for candidate in mongod mongodb; do
+            if systemctl cat "$candidate.service" >/dev/null 2>&1; then
+              mongo_service="$candidate.service"
+              break
+            fi
+          done
+          if [[ -n "$mongo_service" ]]; then
+            if ! systemctl is-active --quiet "$mongo_service"; then
+              echo "Starting inactive MongoDB service."
+              systemctl start "$mongo_service"
+            fi
+            systemctl is-active --quiet "$mongo_service"
+            echo "MongoDB systemd service is active."
+          else
+            echo "::warning::No local MongoDB systemd service found; verify the configured MongoDB endpoint is reachable."
+          fi
           npm install
           BACKEND_FILE=/opt/auroramedia-api/app/server.py
           cp -a "$BACKEND_FILE" "$BACKEND_FILE.bak-$(date +%Y%m%d%H%M%S)"

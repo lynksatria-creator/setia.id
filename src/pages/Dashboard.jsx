@@ -108,6 +108,113 @@ const eventGroups = [
 
 const weddingEventTypes = ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy'];
 const organizerEventTypes = ['Reuni', 'Gathering', 'Family Gathering', 'Halal Bihalal', 'Seminar', 'Workshop', 'Meeting', 'Grand Opening', 'Event', 'Acara Komunitas', 'Custom Event'];
+const eventFormProfiles = {
+  Anniversary: {
+    honoreeLabel: 'Nama pasangan yang merayakan',
+    honoreePlaceholder: 'Contoh: Aulia & Farhan',
+    photoLabel: 'Foto pasangan',
+    storyLabel: 'Cerita perjalanan pasangan',
+    storyPlaceholder: 'Ceritakan momen perjalanan pasangan yang ingin dibagikan...',
+  },
+  Aqiqah: {
+    honoreeLabel: 'Nama bayi',
+    honoreePlaceholder: 'Contoh: Aisyah Putri',
+    photoLabel: 'Foto bayi',
+    storyLabel: 'Cerita kelahiran',
+    storyPlaceholder: 'Tuliskan kabar kelahiran dan doa untuk buah hati...',
+  },
+  Khitanan: {
+    honoreeLabel: 'Nama anak yang dikhitan',
+    honoreePlaceholder: 'Contoh: Rafi',
+    photoLabel: 'Foto anak',
+    storyLabel: 'Cerita khitanan',
+    storyPlaceholder: 'Tuliskan cerita atau pesan untuk anak...',
+  },
+  'Walimatul Khitan': {
+    honoreeLabel: 'Nama anak yang dikhitan',
+    honoreePlaceholder: 'Contoh: Rafi',
+    photoLabel: 'Foto anak',
+    storyLabel: 'Cerita khitanan',
+    storyPlaceholder: 'Tuliskan cerita atau pesan untuk anak...',
+  },
+  Tasyakuran: {
+    honoreeLabel: 'Nama keluarga / tuan rumah',
+    honoreePlaceholder: 'Contoh: Keluarga Bapak Andi',
+    photoLabel: 'Foto keluarga',
+    storyLabel: 'Cerita tasyakuran',
+    storyPlaceholder: 'Ceritakan hal yang disyukuri bersama...',
+  },
+  Pengajian: {
+    honoreeLabel: 'Nama majelis / penyelenggara',
+    honoreePlaceholder: 'Contoh: Majelis An-Nur',
+    photoLabel: 'Foto kegiatan pengajian',
+    storyLabel: 'Tentang pengajian',
+    storyPlaceholder: 'Tuliskan tema atau pesan pengajian...',
+  },
+  Haul: {
+    honoreeLabel: 'Nama yang dikenang',
+    honoreePlaceholder: 'Contoh: Almarhum Bapak ...',
+    photoLabel: 'Foto yang dikenang',
+    storyLabel: 'Kenangan dan doa',
+    storyPlaceholder: 'Tuliskan kenangan atau doa untuk yang dikenang...',
+  },
+  Syukuran: {
+    honoreeLabel: 'Nama keluarga / tuan rumah',
+    honoreePlaceholder: 'Contoh: Keluarga Bapak Andi',
+    photoLabel: 'Foto keluarga',
+    storyLabel: 'Cerita syukuran',
+    storyPlaceholder: 'Ceritakan hal yang disyukuri bersama...',
+  },
+  Milad: {
+    honoreeLabel: 'Nama yang merayakan milad',
+    honoreePlaceholder: 'Contoh: Naira',
+    photoLabel: 'Foto yang merayakan milad',
+    storyLabel: 'Cerita milad',
+    storyPlaceholder: 'Tuliskan ucapan atau cerita milad...',
+  },
+  'Ulang Tahun Anak': {
+    honoreeLabel: 'Nama anak yang berulang tahun',
+    honoreePlaceholder: 'Contoh: Nara',
+    photoLabel: 'Foto anak',
+    storyLabel: 'Cerita ulang tahun',
+    storyPlaceholder: 'Ceritakan hal seru tentang yang berulang tahun...',
+  },
+  'Ulang Tahun Dewasa': {
+    honoreeLabel: 'Nama yang berulang tahun',
+    honoreePlaceholder: 'Contoh: Nara',
+    photoLabel: 'Foto yang berulang tahun',
+    storyLabel: 'Cerita ulang tahun',
+    storyPlaceholder: 'Tuliskan cerita atau harapan ulang tahun...',
+  },
+  'Baby Shower': {
+    honoreeLabel: 'Nama calon orang tua / keluarga',
+    honoreePlaceholder: 'Contoh: Aulia dan keluarga',
+    photoLabel: 'Foto calon ibu / keluarga',
+    storyLabel: 'Cerita menyambut buah hati',
+    storyPlaceholder: 'Ceritakan momen menantikan kehadiran buah hati...',
+  },
+  'Gender Reveal': {
+    honoreeLabel: 'Nama calon orang tua',
+    honoreePlaceholder: 'Contoh: Aulia & Farhan',
+    photoLabel: 'Foto calon orang tua',
+    storyLabel: 'Cerita menantikan buah hati',
+    storyPlaceholder: 'Ceritakan momen menantikan kejutan bersama...',
+  },
+  Wisuda: {
+    honoreeLabel: 'Nama wisudawan / wisudawati',
+    honoreePlaceholder: 'Contoh: Naira Putri',
+    photoLabel: 'Foto wisuda',
+    storyLabel: 'Cerita perjalanan pendidikan',
+    storyPlaceholder: 'Ceritakan perjalanan menuju kelulusan...',
+  },
+  Kelulusan: {
+    honoreeLabel: 'Nama wisudawan / wisudawati',
+    honoreePlaceholder: 'Contoh: Naira Putri',
+    photoLabel: 'Foto kelulusan',
+    storyLabel: 'Cerita perjalanan pendidikan',
+    storyPlaceholder: 'Ceritakan perjalanan menuju kelulusan...',
+  },
+};
 const eWalletProviders = ['GoPay', 'DANA', 'OVO', 'ShopeePay', 'LinkAja'];
 const musicCatalog = [
   { id: 'piano-romantis', genre: 'Romantis', name: 'Piano Romantis', url: '/music/piano-romantis.wav' },
@@ -768,6 +875,13 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
     ? regionalInvitationTemplates.filter((template) => template.province === form.province)
     : getTemplatesForEvent(invitationTemplates, form.event_type);
   const selectedEditorTemplate = editorTemplates.find((template) => template.id === form.template_id);
+  const eventFormProfile = eventFormProfiles[form.event_type] || {
+    honoreeLabel: organizerEventTypes.includes(form.event_type) ? 'Nama penyelenggara / komunitas' : `Nama ${form.event_type.toLowerCase()} / yang dirayakan`,
+    honoreePlaceholder: organizerEventTypes.includes(form.event_type) ? 'Contoh: Komunitas ...' : `Contoh: nama ${form.event_type.toLowerCase()}`,
+    photoLabel: `Foto ${form.event_type.toLowerCase()}`,
+    storyLabel: `Cerita ${form.event_type.toLowerCase()}`,
+    storyPlaceholder: `Tuliskan cerita tentang ${form.event_type.toLowerCase()}...`,
+  };
   const quoteFieldLabel = form.custom_design
     ? 'Kutipan pilihan'
     : selectedEditorTemplate?.category === 'Islami'
@@ -1978,12 +2092,12 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                   </div>
                 </>
               ) : form.event_type === 'Anniversary' ? (
-                <label>Nama pasangan yang merayakan
-                  <input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder="Contoh: Aulia & Farhan" />
+                <label>{eventFormProfile.honoreeLabel}
+                  <input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder={eventFormProfile.honoreePlaceholder} />
                 </label>
               ) : (
-                <label>{organizerEventTypes.includes(form.event_type) ? 'Nama penyelenggara / komunitas' : `Nama ${form.event_type.toLowerCase()} / yang dirayakan`}
-                  <input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder={organizerEventTypes.includes(form.event_type) ? 'Contoh: Komunitas ...' : `Contoh: nama ${form.event_type.toLowerCase()}`} />
+                <label>{eventFormProfile.honoreeLabel}
+                  <input value={form.honoree_name} onChange={(event) => updateField('honoree_name', event.target.value)} placeholder={eventFormProfile.honoreePlaceholder} />
                 </label>
               )}
               {weddingEventTypes.includes(form.event_type) ? (
@@ -2003,9 +2117,9 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
               ) : (
                 <section className="account-panel template-content-fields">
                   <h3>Konten khusus · {selectedEditorTemplate?.name || 'Template undangan'}</h3>
-                  <p className="form-hint">Foto ini akan ditampilkan bersama nama dan cerita acara.</p>
+                  <p className="form-hint">Lengkapi foto dan cerita sesuai karakter acara. Pilihan template akan mempertahankan gaya visualnya.</p>
                   <div className="media-upload-field">
-                    <label>Foto {form.event_type.toLowerCase()}<input type="file" accept="image/*" onChange={(event) => handleTemplatePhotoUpload(event, 'honoree_photo', `Foto ${form.event_type}`)} /></label>
+                    <label>{eventFormProfile.photoLabel}<input type="file" accept="image/*" onChange={(event) => handleTemplatePhotoUpload(event, 'honoree_photo', eventFormProfile.photoLabel)} /></label>
                     <label>URL foto<input type="url" value={form.honoree_photo.startsWith('data:') ? '' : form.honoree_photo} onChange={(event) => updateField('honoree_photo', event.target.value)} placeholder="https://..." /></label>
                     <small className="form-hint">Maksimal 5 MB. Kosongkan jika tidak ingin menampilkan foto khusus.</small>
                   </div>
@@ -2077,7 +2191,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                 <p className="form-hint">Perubahan langsung terlihat di pratinjau dan tersimpan saat undangan disimpan.</p>
               </div>
               <label>Salam pembuka<textarea value={form.opening_text} onChange={(event) => updateField('opening_text', event.target.value)} rows={2} placeholder="Dengan penuh sukacita kami mengundang..." /></label>
-              <label>{weddingEventTypes.includes(form.event_type) ? 'Cerita pasangan' : `Cerita ${form.event_type.toLowerCase()}`}<textarea value={form.story} onChange={(event) => updateField('story', event.target.value)} rows={4} placeholder={weddingEventTypes.includes(form.event_type) ? 'Tuliskan cerita pasangan...' : `Tuliskan cerita tentang ${form.event_type.toLowerCase()}...`} /></label>
+              <label>{weddingEventTypes.includes(form.event_type) ? 'Cerita pasangan' : eventFormProfile.storyLabel}<textarea value={form.story} onChange={(event) => updateField('story', event.target.value)} rows={4} placeholder={weddingEventTypes.includes(form.event_type) ? 'Tuliskan cerita pasangan...' : eventFormProfile.storyPlaceholder} /></label>
               <div className="music-input-field">
                 <label>Musik pilihan berdasarkan genre
                   <select
