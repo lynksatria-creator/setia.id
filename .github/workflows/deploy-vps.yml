@@ -231,6 +231,27 @@ jobs:
                 mongo_service="mongod.service"
               fi
               systemctl is-active --quiet "$mongo_service"
+              if [[ "$mongo_service" == "mongod.service" ]] &&
+                grep -Eq '^[[:space:]]*bindIp:[[:space:]]*127\.0\.0\.1[[:space:]]*$' /etc/mongod.conf; then
+                python3 <<'PY'
+          import re
+          from pathlib import Path
+
+          config = Path("/etc/mongod.conf")
+          text = config.read_text(encoding="utf-8")
+          updated, replacements = re.subn(
+              r"(?m)^(\s*bindIp:\s*)127\.0\.0\.1(\s*)$",
+              r'\g<1>"127.0.0.1,::1"\g<2>',
+              text,
+              count=1,
+          )
+          if replacements != 1:
+              raise SystemExit("Could not safely enable MongoDB IPv6 loopback.")
+          config.write_text(updated, encoding="utf-8")
+          PY
+                systemctl restart "$mongo_service"
+                systemctl is-active --quiet "$mongo_service"
+              fi
               echo "MongoDB service is active."
               python3 - "$mongo_port" <<'PY'
           import socket
