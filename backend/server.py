@@ -33,7 +33,25 @@ load_dotenv(ROOT_DIR / ".env")
 
 mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 db_name = os.environ.get("DB_NAME", "undangan_id")
-client = AsyncIOMotorClient(mongo_url)
+
+
+def normalize_mongo_url(uri: str) -> str:
+    parsed = urlparse(uri)
+    user_info, separator, host_list = parsed.netloc.rpartition("@")
+    hosts = host_list.split(",")
+    normalized_hosts = [
+        "127.0.0.1" + host[len("localhost"):]
+        if host.lower() == "localhost" or host.lower().startswith("localhost:")
+        else host
+        for host in hosts
+    ]
+    if normalized_hosts == hosts:
+        return uri
+    netloc = f"{user_info}{separator}{','.join(normalized_hosts)}"
+    return parsed._replace(netloc=netloc).geturl()
+
+
+client = AsyncIOMotorClient(normalize_mongo_url(mongo_url))
 db = client[db_name]
 
 

@@ -12,6 +12,31 @@ from pydantic import ValidationError
 from backend import server
 
 
+@pytest.mark.parametrize(
+    ("mongo_url", "expected"),
+    [
+        (
+            "mongodb://localhost:27018/undangan_id",
+            "mongodb://127.0.0.1:27018/undangan_id",
+        ),
+        (
+            "mongodb://user:pass@localhost:27018/undangan_id?authSource=admin",
+            "mongodb://user:pass@127.0.0.1:27018/undangan_id?authSource=admin",
+        ),
+        (
+            "mongodb://127.0.0.1:27018/undangan_id",
+            "mongodb://127.0.0.1:27018/undangan_id",
+        ),
+        (
+            "mongodb://mongo.example.net:27018/undangan_id",
+            "mongodb://mongo.example.net:27018/undangan_id",
+        ),
+    ],
+)
+def test_local_mongo_urls_use_ipv4_loopback(mongo_url, expected):
+    assert server.normalize_mongo_url(mongo_url) == expected
+
+
 class FakeHttpResponse:
     def __init__(self, payload):
         self.payload = payload
