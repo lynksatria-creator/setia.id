@@ -322,6 +322,36 @@ jobs:
               ;;
           esac
           npm install
+          api_python="$(python3 - <<'PY'
+          import re
+          import subprocess
+          from pathlib import Path
+
+          result = subprocess.run(
+              ["systemctl", "show", "auroramedia-api.service", "--property=ExecStart", "--value"],
+              capture_output=True,
+              text=True,
+              check=True,
+          )
+          match = re.search(r"\bpath=([^ ;}]+)", result.stdout)
+          if not match:
+              raise SystemExit("Could not identify the Python interpreter running auroramedia-api.service.")
+          executable = Path(match.group(1))
+          if executable.name.startswith("python"):
+              candidates = [executable]
+          else:
+              candidates = [executable.with_name("python"), executable.with_name("python3")]
+          interpreter = next((candidate for candidate in candidates if candidate.is_file()), None)
+          if interpreter is None:
+              raise SystemExit("Could not locate the API virtual-environment Python interpreter.")
+          print(interpreter)
+          PY
+          )"
+          if [[ -z "$api_python" || ! -x "$api_python" ]]; then
+            echo "::error::Could not identify an executable API Python interpreter."
+            exit 1
+          fi
+          "$api_python" -m pip install --disable-pip-version-check --upgrade -r backend/requirements.txt
           BACKEND_FILE=/opt/auroramedia-api/app/server.py
           cp -a "$BACKEND_FILE" "$BACKEND_FILE.bak-$(date +%Y%m%d%H%M%S)"
           cp -a backend/server.py "$BACKEND_FILE"
@@ -332,12 +362,12 @@ jobs:
           systemctl restart auroramedia-api.service
           if ! curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/api/public/portal-ads; then
             echo "::error::API health check failed. Recent service exception types and sanitized connection indicators:"
-            journalctl -u auroramedia-api.service --since "10 minutes ago" --no-pager --output=cat 2>/dev/null |
+            journalctl -u auroramedia-api.service --since "3 minutes ago" --no-pager --output=cat 2>/dev/null |
               python3 -c '
           import re
           import sys
 
-          pattern = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception))(?::|$)")
+          pattern = re.compile(r"\b([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception))(?::|$)")
           indicators = {
               "connection_refused": ("connection refused", "errno 111"),
               "dns_resolution": ("temporary failure in name resolution", "name or service not known", "getaddrinfo failed"),
