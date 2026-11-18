@@ -169,6 +169,7 @@ const templateCopy = {
 };
 
 export default function PublicInvitation({ slug, invitation: initialInvitation = null }) {
+  const recipientName = new URLSearchParams(window.location.search).get('to')?.trim() || '';
   const [invitation, setInvitation] = useState(initialInvitation);
   const [error, setError] = useState('');
   const [inviteeName, setInviteeName] = useState('');
@@ -181,7 +182,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [musicPlaybackMessage, setMusicPlaybackMessage] = useState('');
   const [guestbook, setGuestbook] = useState([]);
-  const [guestForm, setGuestForm] = useState({ name: '', message: '', attendance: 'attending', guests: 1 });
+  const [guestForm, setGuestForm] = useState(() => ({ name: recipientName, message: '', attendance: 'attending', guests: 1 }));
   const [guestMessage, setGuestMessage] = useState('');
   const [isGuestSubmitting, setIsGuestSubmitting] = useState(false);
   const musicRef = useRef(null);
@@ -199,6 +200,29 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       .catch((requestError) => { if (active) setError(requestError.message); });
     return () => { active = false; };
   }, [initialInvitation, slug]);
+
+  useEffect(() => {
+    let favicon = document.head.querySelector('link[rel="icon"]');
+    const existedFavicon = Boolean(favicon);
+    if (!favicon) {
+      favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      document.head.appendChild(favicon);
+    }
+    const previousFaviconHref = favicon.getAttribute('href');
+    const previousFaviconType = favicon.getAttribute('type');
+    favicon.href = '/undangan-favicon.svg';
+    favicon.type = 'image/svg+xml';
+    return () => {
+      if (existedFavicon) {
+        favicon.setAttribute('href', previousFaviconHref || '');
+        if (previousFaviconType === null) favicon.removeAttribute('type');
+        else favicon.setAttribute('type', previousFaviconType);
+      } else {
+        favicon.remove();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!invitation) return undefined;
@@ -240,6 +264,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
         if (!active) return;
         setInviteeName(ticket.name);
         setInviteeTicket(ticket);
+        setGuestForm((current) => ({ ...current, name: current.name || ticket.name }));
       })
       .catch((requestError) => {
         if (!active) return;
@@ -306,7 +331,6 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const schedule = Array.isArray(content.schedule) ? content.schedule : (content.demo_template ? defaultSchedule : []);
   const coupleNames = (content.couple_names || '').trim();
   const [groomName, brideName] = coupleNames.split(/\s*&\s*/);
-  const recipientName = new URLSearchParams(window.location.search).get('to')?.trim() || '';
   const prefersReducedMotion = typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const isCoupleEvent = Boolean(content.couple_names)
@@ -474,9 +498,9 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       <div ref={contentRef} className="wedding-content" aria-hidden={!isOpened}>
         <section className="wedding-section wedding-greeting"><p className="wedding-eyebrow">{content.event_type || copy.kicker}</p><p>{greeting}</p><span className="gold-divider">{theme.ornament}</span></section>
 
-        {isCoupleEvent ? <section className="wedding-section wedding-quote"><p>“{copy.quote}”</p><strong>{copy.source}</strong></section> : null}
+        {isCoupleEvent ? <section className="wedding-section wedding-quote"><p>“{content.quote || copy.quote}”</p><strong>{content.quote_source || copy.source}</strong></section> : null}
 
-        {isCoupleEvent ? coupleProfileItems.length ? <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid">{coupleProfileItems.map((person, index) => <div className="wedding-person" key={`${person.relationship}-${index}`}>{person.photo ? <img src={person.photo} alt={person.name || person.alt} style={{ objectPosition: `${galleryPositionX}% ${galleryPositionY}%`, transform: `scale(${galleryZoom / 100})` }} /> : null}{person.name ? <h3>{person.name}</h3> : null}{person.parents ? <p>{person.relationship} dari<br />{person.parents}</p> : null}{person.instagram ? <a href={`https://instagram.com/${person.instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{person.instagram}</a> : null}</div>)}</div></section> : null : content.honoree_name || content.story ? <section className="wedding-section wedding-honoree"><p className="wedding-eyebrow">ACARA SPESIAL</p>{content.honoree_name ? <h2>{content.honoree_name}</h2> : null}{content.story ? <p>{content.story}</p> : null}</section> : null}
+        {isCoupleEvent ? coupleProfileItems.length ? <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid">{coupleProfileItems.map((person, index) => <div className="wedding-person" key={`${person.relationship}-${index}`}>{person.photo ? <img src={person.photo} alt={person.name || person.alt} style={{ objectPosition: `${galleryPositionX}% ${galleryPositionY}%`, transform: `scale(${galleryZoom / 100})` }} /> : null}{person.name ? <h3>{person.name}</h3> : null}{person.parents ? <p>{person.relationship} dari<br />{person.parents}</p> : null}{person.instagram ? <a href={`https://instagram.com/${person.instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{person.instagram}</a> : null}</div>)}</div></section> : null : content.honoree_name || content.honoree_photo || content.story ? <section className="wedding-section wedding-honoree"><p className="wedding-eyebrow">ACARA SPESIAL</p>{content.honoree_photo ? <img className="wedding-honoree-photo" src={content.honoree_photo} alt={content.honoree_name || `Foto ${eventLabel.toLowerCase()}`} loading="lazy" /> : null}{content.honoree_name ? <h2>{content.honoree_name}</h2> : null}{content.story ? <p>{content.story}</p> : null}</section> : null}
 
         {content.event_date ? <section className="wedding-section wedding-countdown"><p className="wedding-eyebrow">{isCoupleEvent ? 'MENUJU HARI BAHAGIA' : 'MENUJU ACARA'}</p><h2>{isCoupleEvent ? 'Our special day' : 'Hitung mundur acara'}</h2><div className="countdown-grid">{Object.entries(countdown).map(([label, value]) => <div key={label}><strong>{String(value).padStart(2, '0')}</strong><span>{label}</span></div>)}</div><a className="wedding-calendar-button" href={calendarUrl(content, invitation)} target="_blank" rel="noreferrer">TAMBAHKAN KE KALENDER</a></section> : null}
 

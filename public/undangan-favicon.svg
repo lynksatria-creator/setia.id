@@ -1,12 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
-  <title id="title">Invite</title>
-  <circle cx="256" cy="256" r="238" fill="#fffdf7" stroke="#c6a45e" stroke-width="14"/>
-  <circle cx="256" cy="256" r="216" fill="none" stroke="#102653" stroke-width="12"/>
-  <circle cx="256" cy="256" r="180" fill="#173e70"/>
-  <rect x="187" y="119" width="138" height="266" rx="22" fill="#fffdf7" stroke="#c6a45e" stroke-width="12"/>
-  <rect x="204" y="145" width="104" height="198" rx="8" fill="#f5f0e2"/>
-  <path d="M221 178h70M221 198h54M221 228h70M221 248h54" fill="none" stroke="#c6a45e" stroke-width="9" stroke-linecap="round"/>
-  <path d="m161 257 95 69 95-69v84l-95 70-95-70Z" fill="#102653" stroke="#c6a45e" stroke-width="12" stroke-linejoin="round"/>
-  <path d="m161 257 95 71 95-71" fill="none" stroke="#fffdf7" stroke-width="10" stroke-linejoin="round"/>
-  <circle cx="256" cy="366" r="7" fill="#c6a45e"/>
+  <title id="title">Nuansa Invite</title>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff0b0"/>
+      <stop offset=".45" stop-color="#d89a32"/>
+      <stop offset="1" stop-color="#ffe7a0"/>
+    </linearGradient>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b3473"/>
+      <stop offset="1" stop-color="#02091e"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="248" fill="#030d26" stroke="url(#gold)" stroke-width="16"/>
+  <circle cx="256" cy="256" r="220" fill="url(#navy)" stroke="#d7a348" stroke-width="5"/>
+  <path d="M92 174h328v188H92z" fill="#092653" stroke="url(#gold)" stroke-width="12" stroke-linejoin="round"/>
+  <path d="m92 174 164 126 164-126" fill="none" stroke="#fff0bd" stroke-width="13" stroke-linejoin="round"/>
+  <path d="m92 362 118-101m210 101L302 261" fill="none" stroke="url(#gold)" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="256" cy="314" r="44" fill="url(#gold)" stroke="#fff0bd" stroke-width="7"/>
+  <path d="M256 332s-22-13-22-27c0-13 16-18 22-5 6-13 22-8 22 5 0 14-22 27-22 27Z" fill="#092653"/>
+  <path d="m187 123 8 21 21 8-21 8-8 21-8-21-21-8 21-8Z" fill="url(#gold)"/>
+  <path d="m364 118 5 13 13 5-13 5-5 13-5-13-13-5 13-5Z" fill="url(#gold)"/>
 </svg>

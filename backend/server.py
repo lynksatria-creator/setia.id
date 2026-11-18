@@ -18,14 +18,14 @@ import bcrypt
 import httpx
 import jwt
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 
 ROOT_DIR = Path(__file__).parent
@@ -460,7 +460,9 @@ class NunuyConsultationStatusUpdate(BaseModel):
 
 class InvitationTicketRecipient(BaseModel):
     name: str = Field(min_length=2, max_length=120)
-    phone: str = Field(pattern=r"^[0-9]{8,15}$")
+    phone: str = Field(pattern=r"^628[0-9]{7,11}$")
+    category: str | None = Field(default=None, max_length=80)
+    whatsapp_consent: bool = False
 
     @field_validator("name")
     @classmethod
@@ -470,9 +472,19 @@ class InvitationTicketRecipient(BaseModel):
             raise ValueError("Nama penerima minimal 2 karakter.")
         return name
 
+    @field_validator("category")
+    @classmethod
+    def normalize_category(cls, value: str | None):
+        return value.strip() or None if value is not None else None
+
 
 class InvitationTicketBatch(BaseModel):
     recipients: list[InvitationTicketRecipient] = Field(min_length=1, max_length=1000)
+    bulk_upload: bool = False
+
+
+class InvitationTicketDeliveryUpdate(BaseModel):
+    status: Literal["pending", "sent", "failed"]
 
 
 class InvitationTicketCheckIn(BaseModel):
@@ -902,14 +914,16 @@ async def set_payment_status(payment, status: str, provider_status: str | None =
     was_paid = payment.get("status") == "paid"
     if was_paid and status != "paid":
         return
-    await db.payment_orders.update_one(
-        {"id": payment["id"]},
+    result = await db.payment_orders.update_one(
+        {"id": payment["id"], "status": payment.get("status")},
         {"$set": {
             "status": status,
             "provider_status": provider_status,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
+    if result.matched_count == 0:
+        return
     if status == "paid" and not was_paid:
         await activate_invitation(payment)
         if payment.get("order_type") == "reseller":
@@ -2483,6 +2497,8 @@ async def create_invitation_tickets(
         raise HTTPException(status_code=409, detail="Publish undangan yang masih aktif sebelum membuat tiket barcode.")
     entitlements = invitation_entitlements(invitation)
     bulk_upload_enabled = invitation.get("plan_id") in {"premium", "business"} and entitlements["bulk_upload_enabled"]
+    if payload.bulk_upload and not bulk_upload_enabled:
+        raise HTTPException(status_code=403, detail="Paket aktif tidak memiliki limit bulk upload. Aktifkan paket dengan fitur bulk upload terlebih dahulu.")
     if not bulk_upload_enabled and len(payload.recipients) > 1:
         raise HTTPException(status_code=403, detail="Paket ini tidak mengaktifkan upload massal; buat satu tiket penerima per permintaan.")
     if len(payload.recipients) > entitlements["max_recipients"]:
@@ -2506,12 +2522,21 @@ async def create_invitation_tickets(
         }
         ticket = await tickets_collection.find_one(identity, {"_id": 0})
         if ticket is None:
+            now = datetime.now(timezone.utc).isoformat()
             ticket = {
                 "id": str(uuid.uuid4()),
                 **identity,
                 "owner_id": invitation["owner_id"],
                 "token": secrets.token_urlsafe(32),
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "category": recipient.category or "Umum",
+                "bulk_upload": payload.bulk_upload,
+                "delivery_status": "pending",
+                "whatsapp_consent": recipient.whatsapp_consent,
+                "created_at": now,
+                **({
+                    "whatsapp_consent_recorded_at": now,
+                    "whatsapp_consent_recorded_by": current_user["id"],
+                } if recipient.whatsapp_consent else {}),
             }
             try:
                 await tickets_collection.insert_one(ticket)
@@ -2519,12 +2544,31 @@ async def create_invitation_tickets(
                 ticket = await tickets_collection.find_one(identity, {"_id": 0})
                 if ticket is None:
                     raise
+        else:
+            ticket_updates = {}
+            if recipient.category:
+                ticket_updates["category"] = recipient.category
+            if payload.bulk_upload:
+                ticket_updates["bulk_upload"] = True
+            if recipient.whatsapp_consent and not ticket.get("whatsapp_consent"):
+                ticket_updates.update({
+                    "whatsapp_consent": True,
+                    "whatsapp_consent_recorded_at": datetime.now(timezone.utc).isoformat(),
+                    "whatsapp_consent_recorded_by": current_user["id"],
+                })
+            if ticket_updates:
+                await tickets_collection.update_one(identity, {"$set": ticket_updates})
+                ticket.update(ticket_updates)
         tickets.append({
             "id": ticket["id"],
             "name": ticket["name"],
             "phone": ticket["phone"],
+            "category": ticket.get("category", "Umum"),
+            "whatsapp_consent": ticket.get("whatsapp_consent", False),
             "token": ticket["token"],
+            "delivery_status": ticket.get("delivery_status", "pending"),
             "checked_in_at": ticket.get("checked_in_at"),
+            "created_at": ticket.get("created_at"),
         })
     return {"tickets": tickets}
 
@@ -2534,15 +2578,288 @@ async def list_invitation_tickets(invitation_id: str, current_user=Depends(get_c
     await get_dashboard_invitation(invitation_id, current_user)
     tickets = await db.invitation_tickets.find(
         {"invitation_id": invitation_id},
-        {"_id": 0, "id": 1, "name": 1, "phone": 1, "checked_in_at": 1, "created_at": 1},
+        {"_id": 0, "id": 1, "name": 1, "phone": 1, "category": 1, "whatsapp_consent": 1, "delivery_status": 1, "delivery_error": 1, "sent_at": 1, "checked_in_at": 1, "created_at": 1},
     ).sort("created_at", -1).to_list(length=5000)
     return {"tickets": [{
         "id": ticket["id"],
         "name": ticket["name"],
         "phone": ticket["phone"],
+        "category": ticket.get("category", "Umum"),
+        "whatsapp_consent": ticket.get("whatsapp_consent", False),
+        "delivery_status": ticket.get("delivery_status", "pending"),
+        "delivery_error": ticket.get("delivery_error"),
+        "sent_at": ticket.get("sent_at"),
         "checked_in_at": ticket.get("checked_in_at"),
         "created_at": ticket.get("created_at"),
     } for ticket in tickets]}
+
+
+@api_router.patch("/invitations/{invitation_id}/tickets/{ticket_id}")
+async def update_invitation_ticket_delivery(
+    invitation_id: str,
+    ticket_id: str,
+    payload: InvitationTicketDeliveryUpdate,
+    current_user=Depends(get_current_user),
+):
+    if current_user.get("role") != "user":
+        raise HTTPException(status_code=403, detail="Hanya pemilik undangan yang dapat memperbarui status pengiriman.")
+    await get_dashboard_invitation(invitation_id, current_user)
+    ticket = await db.invitation_tickets.find_one(
+        {"id": ticket_id, "invitation_id": invitation_id},
+        {"_id": 0, "id": 1},
+    )
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Tiket undangan tidak ditemukan.")
+    now = datetime.now(timezone.utc).isoformat()
+    updates = {
+        "delivery_status": payload.status,
+        "delivery_updated_at": now,
+    }
+    if payload.status == "sent":
+        updates["sent_at"] = now
+    elif payload.status == "failed":
+        updates["delivery_error"] = "Status ditandai gagal oleh pemilik undangan."
+    else:
+        updates["delivery_error"] = None
+    await db.invitation_tickets.update_one(
+        {"id": ticket_id, "invitation_id": invitation_id},
+        {"$set": updates},
+    )
+    return {"id": ticket_id, "delivery_status": payload.status}
+
+
+def meta_whatsapp_configuration():
+    access_token = os.environ.get("META_WHATSAPP_ACCESS_TOKEN", "").strip()
+    phone_number_id = os.environ.get("META_WHATSAPP_PHONE_NUMBER_ID", "").strip()
+    api_version = os.environ.get("META_WHATSAPP_API_VERSION", "v23.0").strip()
+    template_name = os.environ.get("META_WHATSAPP_TEMPLATE_NAME", "").strip()
+    template_language = os.environ.get("META_WHATSAPP_TEMPLATE_LANGUAGE", "id").strip()
+    public_app_url = os.environ.get("PUBLIC_APP_URL", "").strip().rstrip("/")
+    parsed_public_url = urlparse(public_app_url)
+    ready = bool(
+        access_token
+        and phone_number_id
+        and re.fullmatch(r"v[0-9]+\.[0-9]+", api_version)
+        and template_name
+        and template_language
+        and parsed_public_url.scheme == "https"
+        and parsed_public_url.netloc
+    )
+    return {
+        "ready": ready,
+        "template_name": template_name or None,
+        "template_language": template_language or None,
+    }
+
+
+async def send_meta_whatsapp_template(invitation, ticket):
+    config = meta_whatsapp_configuration()
+    if not config["ready"]:
+        raise HTTPException(
+            status_code=503,
+            detail="Meta WhatsApp Cloud API belum dikonfigurasi lengkap. Periksa token, phone number ID, template, dan URL publik HTTPS.",
+        )
+    access_token = os.environ["META_WHATSAPP_ACCESS_TOKEN"].strip()
+    phone_number_id = os.environ["META_WHATSAPP_PHONE_NUMBER_ID"].strip()
+    api_version = os.environ.get("META_WHATSAPP_API_VERSION", "v23.0").strip()
+    public_app_url = os.environ["PUBLIC_APP_URL"].strip().rstrip("/")
+    invitation_url = (
+        f"{public_app_url}/undangan/{quote(invitation['slug'], safe='')}"
+        f"?to={quote(ticket['name'], safe='')}&ticket={quote(ticket['token'], safe='')}"
+    )
+    request_payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": ticket["phone"],
+        "type": "template",
+        "template": {
+            "name": config["template_name"],
+            "language": {"code": config["template_language"]},
+            "components": [{
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": ticket["name"]},
+                    {"type": "text", "text": invitation["title"]},
+                    {"type": "text", "text": invitation_url},
+                ],
+            }],
+        },
+        "biz_opaque_callback_data": f"nuansa-ticket:{ticket['id']}",
+    }
+    request_url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
+    try:
+        async with httpx.AsyncClient(timeout=20) as client_http:
+            response = await client_http.post(
+                request_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                json=request_payload,
+            )
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as error:
+        logging.getLogger(__name__).warning(
+            "Meta WhatsApp Cloud API menolak pengiriman (HTTP %s).",
+            error.response.status_code,
+        )
+        raise HTTPException(status_code=502, detail="Meta WhatsApp Cloud API menolak pengiriman pesan.") from error
+    except httpx.RequestError as error:
+        logging.getLogger(__name__).warning("Meta WhatsApp Cloud API tidak dapat dijangkau: %s", error)
+        raise HTTPException(status_code=502, detail="Meta WhatsApp Cloud API tidak dapat dijangkau.") from error
+    except ValueError as error:
+        raise HTTPException(status_code=502, detail="Respons Meta WhatsApp Cloud API tidak valid.") from error
+
+
+@api_router.get("/whatsapp/cloud-status")
+async def get_whatsapp_cloud_status(_current_user=Depends(get_current_user)):
+    return meta_whatsapp_configuration()
+
+
+@api_router.post("/invitations/{invitation_id}/tickets/{ticket_id}/send-whatsapp")
+async def send_invitation_ticket_whatsapp(
+    invitation_id: str,
+    ticket_id: str,
+    current_user=Depends(get_current_user),
+):
+    if current_user.get("role") != "user":
+        raise HTTPException(status_code=403, detail="Hanya pemilik undangan yang dapat mengirim undangan.")
+    invitation = await get_dashboard_invitation(invitation_id, current_user)
+    if invitation.get("status") != "published" or datetime.fromisoformat(invitation["active_until"]) <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=409, detail="Publish undangan yang masih aktif sebelum mengirim pesan.")
+    entitlements = invitation_entitlements(invitation)
+    if invitation.get("plan_id") not in {"premium", "business"} or not entitlements["bulk_upload_enabled"]:
+        raise HTTPException(status_code=403, detail="Paket aktif tidak memiliki limit bulk upload. Aktifkan paket dengan fitur bulk upload terlebih dahulu.")
+    if not meta_whatsapp_configuration()["ready"]:
+        raise HTTPException(status_code=503, detail="Meta WhatsApp Cloud API belum dikonfigurasi untuk pengiriman.")
+
+    ticket = await db.invitation_tickets.find_one(
+        {"id": ticket_id, "invitation_id": invitation_id},
+        {"_id": 0},
+    )
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Tiket undangan tidak ditemukan.")
+    if not ticket.get("bulk_upload"):
+        raise HTTPException(status_code=403, detail="Tiket ini tidak dibuat dari bulk upload yang telah diaktifkan.")
+    if not ticket.get("whatsapp_consent"):
+        raise HTTPException(status_code=403, detail="Persetujuan penerima untuk menerima pesan WhatsApp belum tercatat.")
+    previous_status = ticket.get("delivery_status", "pending")
+    if previous_status not in {"pending", "failed"}:
+        raise HTTPException(status_code=409, detail="Pesan sudah dikirim atau sedang diproses.")
+    await db.invitation_tickets.create_index("whatsapp_message_id", unique=True, sparse=True)
+    now = datetime.now(timezone.utc).isoformat()
+    claim = await db.invitation_tickets.update_one(
+        {
+            "id": ticket_id,
+            "invitation_id": invitation_id,
+            "delivery_status": ticket.get("delivery_status"),
+            "whatsapp_consent": True,
+        },
+        {
+            "$set": {"delivery_status": "sending", "send_started_at": now},
+            "$unset": {"delivery_error": ""},
+        },
+    )
+    if claim.matched_count == 0:
+        raise HTTPException(status_code=409, detail="Pengiriman penerima ini sedang diproses oleh permintaan lain.")
+
+    try:
+        result = await send_meta_whatsapp_template(invitation, ticket)
+        messages = result.get("messages") if isinstance(result, dict) else None
+        message_id = messages[0].get("id") if messages and isinstance(messages[0], dict) else None
+        if not message_id:
+            raise HTTPException(status_code=502, detail="Meta tidak mengembalikan ID pesan; status pengiriman tidak dapat diverifikasi.")
+    except HTTPException:
+        await db.invitation_tickets.update_one(
+            {"id": ticket_id, "delivery_status": "sending"},
+            {"$set": {
+                "delivery_status": "failed",
+                "delivery_error": "Meta Cloud API gagal menerima pesan.",
+                "delivery_updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        raise
+
+    sent_at = datetime.now(timezone.utc).isoformat()
+    await db.invitation_tickets.update_one(
+        {"id": ticket_id, "delivery_status": "sending"},
+        {"$set": {
+            "delivery_status": "sent",
+            "whatsapp_message_id": message_id,
+            "sent_at": sent_at,
+            "delivery_updated_at": sent_at,
+        }, "$unset": {"delivery_error": ""}},
+    )
+    return {"id": ticket_id, "delivery_status": "sent", "whatsapp_message_id": message_id}
+
+
+@api_router.get("/whatsapp/webhook")
+async def verify_whatsapp_webhook(request: Request):
+    verify_token = os.environ.get("META_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "").strip()
+    if not verify_token:
+        raise HTTPException(status_code=503, detail="Webhook WhatsApp belum dikonfigurasi.")
+    query = request.query_params
+    if query.get("hub.mode") != "subscribe" or not hmac.compare_digest(query.get("hub.verify_token", ""), verify_token):
+        raise HTTPException(status_code=403, detail="Verifikasi webhook WhatsApp gagal.")
+    return Response(content=query.get("hub.challenge", ""), media_type="text/plain")
+
+
+@api_router.post("/whatsapp/webhook")
+async def receive_whatsapp_webhook(request: Request):
+    app_secret = os.environ.get("META_WHATSAPP_APP_SECRET", "").strip()
+    if not app_secret:
+        raise HTTPException(status_code=503, detail="Secret webhook WhatsApp belum dikonfigurasi.")
+    body = await request.body()
+    expected_signature = "sha256=" + hmac.new(app_secret.encode(), body, hashlib.sha256).hexdigest()
+    received_signature = request.headers.get("x-hub-signature-256", "")
+    if not hmac.compare_digest(received_signature, expected_signature):
+        raise HTTPException(status_code=403, detail="Tanda tangan webhook WhatsApp tidak valid.")
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as error:
+        raise HTTPException(status_code=400, detail="Payload webhook WhatsApp tidak valid.") from error
+
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            for status_item in value.get("statuses", []):
+                message_id = status_item.get("id")
+                provider_status = str(status_item.get("status", "")).lower()
+                if not message_id or provider_status not in {"sent", "delivered", "read", "failed"}:
+                    continue
+                ticket = await db.invitation_tickets.find_one(
+                    {"whatsapp_message_id": message_id},
+                    {"_id": 0, "id": 1, "delivery_status": 1},
+                )
+                if ticket is None:
+                    continue
+                current_status = ticket.get("delivery_status", "pending")
+                if current_status in {"read", "failed"} and provider_status != current_status:
+                    continue
+                status_order = {"pending": 0, "sending": 0, "sent": 1, "delivered": 2, "read": 3}
+                if provider_status != "failed" and status_order.get(current_status, 0) > status_order[provider_status]:
+                    continue
+                if provider_status == "failed" and current_status in {"delivered", "read"}:
+                    continue
+                update = {
+                    "delivery_status": provider_status,
+                    "delivery_updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                errors = status_item.get("errors", [])
+                if provider_status == "failed":
+                    first_error = errors[0] if errors else {}
+                    error_message = (
+                        first_error.get("title") or first_error.get("message")
+                        if isinstance(first_error, dict)
+                        else None
+                    )
+                    update["delivery_error"] = str(error_message or "Pesan gagal dikirim.")[:300]
+                    mongo_update = {"$set": update}
+                else:
+                    mongo_update = {"$set": update, "$unset": {"delivery_error": ""}}
+                await db.invitation_tickets.update_one(
+                    {"id": ticket["id"], "delivery_status": current_status},
+                    mongo_update,
+                )
+    return {"status": "ok"}
 
 
 async def ensure_ticket_guestbook_entry(ticket, invitation_id: str, owner_id: str):
@@ -2661,6 +2978,8 @@ async def create_invitation_payment_locked(invitation_id: str, payload: PaymentC
     method = next((item for item in config["payment_methods"] if item["id"] == payload.payment_method_id and item.get("enabled", True)), None)
     if plan is None or method is None:
         raise HTTPException(status_code=422, detail="Paket atau metode pembayaran tidak tersedia.")
+    if plan.get("bulk_upload_enabled") and method.get("provider") != "midtrans":
+        raise HTTPException(status_code=422, detail="Pembelian paket dengan limit bulk upload wajib menggunakan Midtrans Snap.")
     if method["provider"] == "manual" and not method.get("account_number"):
         raise HTTPException(status_code=503, detail="Detail metode transfer belum diatur oleh admin.")
 

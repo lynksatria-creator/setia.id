@@ -1,72 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" role="img" aria-labelledby="title desc">
-  <title id="title">Invite - Undangan Online</title>
-  <desc id="desc">Logo undangan online dengan bingkai floral navy dan emas.</desc>
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <ellipse cx="500" cy="320" rx="424" ry="282" stroke="#c6a45e" stroke-width="12"/>
-    <ellipse cx="500" cy="320" rx="405" ry="264" stroke="#112653" stroke-width="9"/>
-    <path d="M245 534C145 470 119 365 150 263c20-67 58-118 111-158" stroke="#c6a45e" stroke-width="7"/>
-  </g>
-  <g fill="#173e70" stroke="#c6a45e" stroke-width="3" stroke-linejoin="round">
-    <path d="M177 465c-39-5-61-27-68-65 37 4 60 26 68 65Z"/>
-    <path d="M151 405c-38-11-55-37-54-75 36 11 54 36 54 75Z"/>
-    <path d="M145 337c-32-20-42-49-31-85 31 19 42 47 31 85Z"/>
-    <path d="M164 272c-25-27-26-57-7-88 25 26 27 55 7 88Z"/>
-    <path d="M203 213c-15-33-7-61 20-84 15 32 8 60-20 84Z"/>
-    <path d="M249 171c-4-36 12-60 44-73 4 35-11 60-44 73Z"/>
-    <path d="M211 501c-34 2-57-16-69-51 34-2 57 15 69 51Z"/>
-    <path d="M194 444c-34-5-54-26-59-62 34 5 54 26 59 62Z"/>
-    <path d="M184 380c-31-14-45-39-39-75 31 14 45 39 39 75Z"/>
-    <path d="M188 315c-27-22-34-50-19-84 27 22 34 50 19 84Z"/>
-    <path d="M213 255c-20-29-18-58 5-87 20 29 18 58-5 87Z"/>
-    <path d="M260 202c-9-33 3-60 33-78 9 33-2 59-33 78Z"/>
-  </g>
-  <g fill="#c6a45e">
-    <circle cx="111" cy="398" r="8"/><circle cx="119" cy="318" r="7"/>
-    <circle cx="158" cy="239" r="8"/><circle cx="213" cy="172" r="7"/>
-    <circle cx="269" cy="126" r="8"/>
-  </g>
-  <g transform="translate(1000 0) scale(-1 1)">
-    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M245 534C145 470 119 365 150 263c20-67 58-118 111-158" stroke="#c6a45e" stroke-width="7"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Nuansa Invite</title>
+  <desc id="desc">Logo undangan digital bernuansa biru navy dan emas dengan amplop serta kartu undangan.</desc>
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06102a"/>
+      <stop offset=".55" stop-color="#092b61"/>
+      <stop offset="1" stop-color="#02091e"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff0b0"/>
+      <stop offset=".28" stop-color="#d89a32"/>
+      <stop offset=".52" stop-color="#fff1bc"/>
+      <stop offset=".78" stop-color="#bb771e"/>
+      <stop offset="1" stop-color="#ffe7a0"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffaf0"/>
+      <stop offset="1" stop-color="#edd4a1"/>
+    </linearGradient>
+    <clipPath id="circle">
+      <circle cx="256" cy="256" r="242"/>
+    </clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="248" fill="url(#navy)" stroke="url(#gold)" stroke-width="9"/>
+  <circle cx="256" cy="256" r="232" fill="none" stroke="#d7a348" stroke-width="2"/>
+  <g clip-path="url(#circle)">
+    <path d="M-20 92 116 6h162L13 271Zm360-106h186L228 298H74Z" fill="#174b92" opacity=".35"/>
+    <path d="M48 193c31-31 45-62 48-92 23 24 31 52 24 83 21-14 40-20 57-18-17 19-28 41-31 65" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M82 170c-19-3-31-13-36-30 20 1 32 10 36 30Zm19-34c-15-9-21-23-18-41 15 9 21 22 18 41Zm24 37c-5-18 1-32 18-42 5 18-1 32-18 42Z" fill="#d8a34d" stroke="#ffeab0" stroke-width="2"/>
+    <path d="M405 79 412 98l19 7-19 7-7 19-7-19-19-7 19-7Z" fill="url(#gold)"/>
+    <circle cx="375" cy="130" r="4" fill="#ffe4a0"/>
+    <circle cx="427" cy="151" r="3" fill="#ffe4a0"/>
+    <g transform="rotate(-8 256 146)">
+      <rect x="163" y="71" width="188" height="142" rx="8" fill="#09234e" stroke="url(#gold)" stroke-width="5"/>
+      <rect x="175" y="60" width="174" height="135" rx="7" fill="url(#card)" stroke="#d99c3b" stroke-width="4"/>
+      <path d="M194 88c18-14 32-14 46 0 14-14 28-14 46 0" fill="none" stroke="#b37b2b" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="244" cy="121" r="12" fill="none" stroke="#a66c20" stroke-width="3"/>
+      <circle cx="264" cy="121" r="12" fill="none" stroke="#a66c20" stroke-width="3"/>
+      <path d="M201 151h124M213 165h100" stroke="#c58b32" stroke-width="4" stroke-linecap="round"/>
     </g>
-    <g fill="#173e70" stroke="#c6a45e" stroke-width="3" stroke-linejoin="round">
-      <path d="M177 465c-39-5-61-27-68-65 37 4 60 26 68 65Z"/>
-      <path d="M151 405c-38-11-55-37-54-75 36 11 54 36 54 75Z"/>
-      <path d="M145 337c-32-20-42-49-31-85 31 19 42 47 31 85Z"/>
-      <path d="M164 272c-25-27-26-57-7-88 25 26 27 55 7 88Z"/>
-      <path d="M203 213c-15-33-7-61 20-84 15 32 8 60-20 84Z"/>
-      <path d="M249 171c-4-36 12-60 44-73 4 35-11 60-44 73Z"/>
-      <path d="M211 501c-34 2-57-16-69-51 34-2 57 15 69 51Z"/>
-      <path d="M194 444c-34-5-54-26-59-62 34 5 54 26 59 62Z"/>
-      <path d="M184 380c-31-14-45-39-39-75 31 14 45 39 39 75Z"/>
-      <path d="M188 315c-27-22-34-50-19-84 27 22 34 50 19 84Z"/>
-      <path d="M213 255c-20-29-18-58 5-87 20 29 18 58-5 87Z"/>
-      <path d="M260 202c-9-33 3-60 33-78 9 33-2 59-33 78Z"/>
-    </g>
-    <g fill="#c6a45e">
-      <circle cx="111" cy="398" r="8"/><circle cx="119" cy="318" r="7"/>
-      <circle cx="158" cy="239" r="8"/><circle cx="213" cy="172" r="7"/>
-      <circle cx="269" cy="126" r="8"/>
-    </g>
+    <path d="m109 176 147 99 147-99v88L256 366 109 264Z" fill="#082653" stroke="url(#gold)" stroke-width="6" stroke-linejoin="round"/>
+    <path d="m109 176 147 113 147-113" fill="none" stroke="#f8dda0" stroke-width="5" stroke-linejoin="round"/>
+    <path d="m233 270 23 17 23-17v27l-23 17-23-17Z" fill="url(#gold)" stroke="#fff1bc" stroke-width="2"/>
+    <path d="M241 281c0-7 9-10 15-2 6-8 15-5 15 2 0 8-15 17-15 17s-15-9-15-17Z" fill="#fff3c9"/>
+    <text x="256" y="339" text-anchor="middle" fill="#e4b65d" font-family="Georgia, 'Times New Roman', serif" font-size="17" font-weight="700" letter-spacing="8">NUANSA</text>
+    <text x="256" y="379" text-anchor="middle" fill="url(#gold)" font-family="Georgia, 'Times New Roman', serif" font-size="48" font-weight="700" letter-spacing="2">INVITE</text>
+    <path d="m112 390 20-12h248l20 12-20 27H132Z" fill="url(#gold)" stroke="#fff0bd" stroke-width="3"/>
+    <path d="m133 397 7 7-7 7-7-7Zm246 0 7 7-7 7-7-7Z" fill="#09214a"/>
+    <text x="256" y="407" text-anchor="middle" fill="#071631" font-family="Georgia, 'Times New Roman', serif" font-size="15" font-weight="700" letter-spacing="2">UNDANGAN ONLINE</text>
+    <path d="M206 448h100m-50-8 8 8-8 8-8-8Zm-15 0-17 7 17 1m45-8 17 7-17 1" fill="none" stroke="url(#gold)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
-  <text x="500" y="228" text-anchor="middle" fill="#102653" font-family="Georgia, 'Times New Roman', serif" font-size="148" font-weight="600">INVITE</text>
-  <g transform="rotate(-13 438 356)">
-    <rect x="365" y="276" width="132" height="176" rx="21" fill="#173e70" stroke="#c6a45e" stroke-width="8"/>
-    <rect x="378" y="294" width="106" height="137" rx="8" fill="#f8f6ef"/>
-    <path d="M394 319h73M394 336h58M394 373h73M394 390h58" stroke="#c6a45e" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="431" cy="441" r="5" fill="#f8f6ef"/>
-  </g>
-  <g transform="rotate(9 562 342)">
-    <rect x="500" y="262" width="129" height="163" rx="7" fill="#fffdf7" stroke="#c6a45e" stroke-width="7"/>
-    <path d="M520 296h87M520 316h72M520 360h87M520 380h63" stroke="#173e70" stroke-width="5" stroke-linecap="round"/>
-    <path d="m548 262 16 21 17-21" fill="#f2e7c9" stroke="#c6a45e" stroke-width="4"/>
-  </g>
-  <path d="m402 375 98 67 98-67v65l-98 59-98-59Z" fill="#173e70" stroke="#c6a45e" stroke-width="8" stroke-linejoin="round"/>
-  <path d="m402 375 98 71 98-71" fill="none" stroke="#f3dfae" stroke-width="7" stroke-linejoin="round"/>
-  <g fill="#c6a45e">
-    <path d="m330 278 7 18 18 7-18 7-7 18-7-18-18-7 18-7Z"/>
-    <path d="m672 286 5 13 13 5-13 5-5 13-5-13-13-5 13-5Z"/>
-    <circle cx="360" cy="345" r="5"/><circle cx="644" cy="356" r="5"/>
-  </g>
-  <text x="500" y="526" text-anchor="middle" fill="#102653" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="700">UNDANGAN ONLINE</text>
 </svg>

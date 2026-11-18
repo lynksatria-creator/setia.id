@@ -51,8 +51,15 @@ class FakeCollection:
     async def find_one(self, _query, _projection=None):
         return copy.deepcopy(self.document)
 
-    async def update_one(self, _query, update):
+    async def update_one(self, query, update):
+        if self.document is None or any(self.document.get(key) != value for key, value in query.items()):
+            return SimpleNamespace(matched_count=0, modified_count=0)
+        previous = copy.deepcopy(self.document)
         self.document.update(update["$set"])
+        return SimpleNamespace(
+            matched_count=1,
+            modified_count=int(self.document != previous),
+        )
 
     async def create_index(self, *_args, **_kwargs):
         return None
@@ -151,13 +158,26 @@ class FakeTicketCollection:
 
     async def update_one(self, query, update):
         for document in self.documents:
-            if document.get("id") != query.get("id"):
+            matches = True
+            for key, value in query.items():
+                if isinstance(value, dict) and "$exists" in value:
+                    if (key in document) != value["$exists"]:
+                        matches = False
+                        break
+                elif document.get(key) != value:
+                    matches = False
+                    break
+            if not matches:
                 continue
-            if query.get("checked_in_at") == {"$exists": False} and "checked_in_at" in document:
-                return SimpleNamespace(modified_count=0)
-            document.update(update["$set"])
-            return SimpleNamespace(modified_count=1)
-        return SimpleNamespace(modified_count=0)
+            previous = copy.deepcopy(document)
+            document.update(update.get("$set", {}))
+            for key in update.get("$unset", {}):
+                document.pop(key, None)
+            return SimpleNamespace(
+                matched_count=1,
+                modified_count=int(document != previous),
+            )
+        return SimpleNamespace(matched_count=0, modified_count=0)
 
 
 class FakeGuestbookCollection:
@@ -1159,6 +1179,35 @@ def test_midtrans_webhook_verifies_transaction_before_activating_invitation(monk
     assert payment_collection.document["status"] == "paid"
 
 
+def test_concurrent_paid_updates_activate_and_extend_once(monkeypatch):
+    payment = {
+        "id": "payment-1",
+        "invitation_id": "invitation-1",
+        "status": "pending",
+        "plan_id": "basic",
+        "duration_days": 365,
+    }
+    payment_collection = FakeCollection(payment)
+    invitation_collection = FakeCollection({"id": "invitation-1", "active_until": None})
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        payment_orders=payment_collection,
+        invitations=invitation_collection,
+    ))
+    started_at = datetime.now(timezone.utc)
+
+    async def mark_paid_twice():
+        await asyncio.gather(
+            server.set_payment_status(copy.deepcopy(payment), "paid", "settlement"),
+            server.set_payment_status(copy.deepcopy(payment), "paid", "settlement"),
+        )
+
+    asyncio.run(mark_paid_twice())
+
+    expiry = datetime.fromisoformat(invitation_collection.document["active_until"])
+    assert payment_collection.document["status"] == "paid"
+    assert started_at + timedelta(days=365) <= expiry <= datetime.now(timezone.utc) + timedelta(days=365)
+
+
 def test_midtrans_webhook_rejects_invalid_signature(monkeypatch):
     monkeypatch.setenv("MIDTRANS_SERVER_KEY", "test-midtrans-server-key")
     response = TestClient(server.app).post("/api/payments/midtrans/webhook", json={
@@ -1228,14 +1277,32 @@ def test_draft_payment_uses_package_selected_at_activation(monkeypatch):
 
     asyncio.run(server.create_invitation_payment_locked(
         "invitation-1",
-        server.PaymentCreate(payment_method_id="bank-transfer", plan_id="premium"),
+        server.PaymentCreate(payment_method_id="bank-transfer", plan_id="basic"),
         {"id": "owner-1"},
         {"id": "invitation-1", "plan_id": "basic", "status": "draft"},
     ))
 
-    assert payments.document["plan_id"] == "premium"
-    assert payments.document["amount"] == 249000
-    assert payments.document["duration_days"] == 365
+    assert payments.document["plan_id"] == "basic"
+    assert payments.document["amount"] == 99000
+    assert payments.document["duration_days"] == 30
+
+
+def test_bulk_upload_package_rejects_manual_payment(monkeypatch):
+    config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    transfer = next(method for method in config["payment_methods"] if method["id"] == "bank-transfer")
+    transfer.update(enabled=True, account_number="123456", bank_name="Bank", account_name="Owner")
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=FakeCollection(config)))
+
+    with pytest.raises(server.HTTPException) as error:
+        asyncio.run(server.create_invitation_payment_locked(
+            "invitation-1",
+            server.PaymentCreate(payment_method_id="bank-transfer", plan_id="premium"),
+            {"id": "owner-1"},
+            {"id": "invitation-1", "plan_id": "basic", "status": "draft"},
+        ))
+
+    assert error.value.status_code == 422
+    assert "wajib menggunakan Midtrans Snap" in error.value.detail
 
 
 def test_reseller_access_uses_entitlements_on_active_plan_snapshots(monkeypatch):
@@ -1257,7 +1324,7 @@ def test_reseller_access_uses_entitlements_on_active_plan_snapshots(monkeypatch)
 
 def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
-    user = {"id": "owner-1", "full_name": "Event Owner", "email": "owner@example.com"}
+    user = {"id": "owner-1", "full_name": "Event Owner", "email": "owner@example.com", "role": "user"}
     invitation = {
         "id": "invitation-1",
         "owner_id": "owner-1",
@@ -1301,9 +1368,24 @@ def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(mon
         "id": ticket["id"],
         "name": "Alya",
         "phone": "6281234567890",
+        "category": "Umum",
+        "whatsapp_consent": False,
+        "delivery_status": "pending",
+        "delivery_error": None,
+        "sent_at": None,
         "checked_in_at": None,
         "created_at": tickets.documents[0]["created_at"],
     }]
+
+    marked_sent = client.patch(
+        f"/api/invitations/invitation-1/tickets/{ticket['id']}",
+        headers=headers,
+        json={"status": "sent"},
+    )
+    assert marked_sent.status_code == 200
+    assert marked_sent.json()["delivery_status"] == "sent"
+    recipients_after_send = client.get("/api/invitations/invitation-1/tickets", headers=headers)
+    assert recipients_after_send.json()["tickets"][0]["delivery_status"] == "sent"
 
     public_ticket = client.get(f"/api/public/invitation-tickets/{ticket['token']}")
     assert public_ticket.status_code == 200
@@ -1329,6 +1411,117 @@ def test_invitation_ticket_is_unique_and_scanning_records_idempotent_checkin(mon
     checked_in_recipients = client.get("/api/invitations/invitation-1/tickets", headers=headers)
     assert checked_in_recipients.status_code == 200
     assert checked_in_recipients.json()["tickets"][0]["checked_in_at"] == check_in.json()["entry"]["checked_in_at"]
+
+
+def test_meta_webhook_delivery_status_is_monotonic(monkeypatch):
+    app_secret = "test-meta-app-secret"
+    monkeypatch.setenv("META_WHATSAPP_APP_SECRET", app_secret)
+    tickets = FakeTicketCollection()
+    tickets.documents.extend([
+        {"id": "ticket-1", "whatsapp_message_id": "wamid-1", "delivery_status": "sent"},
+        {"id": "ticket-2", "whatsapp_message_id": "wamid-2", "delivery_status": "sent"},
+    ])
+    monkeypatch.setattr(server, "db", SimpleNamespace(invitation_tickets=tickets))
+    client = TestClient(server.app)
+
+    def post_statuses(statuses):
+        body = server.json.dumps({"entry": [{"changes": [{"value": {"statuses": statuses}}]}]}).encode()
+        signature = "sha256=" + server.hmac.new(app_secret.encode(), body, server.hashlib.sha256).hexdigest()
+        return client.post(
+            "/api/whatsapp/webhook",
+            content=body,
+            headers={"x-hub-signature-256": signature, "content-type": "application/json"},
+        )
+
+    delivered_and_late_sent = post_statuses([
+        {"id": "wamid-1", "status": "delivered"},
+        {"id": "wamid-1", "status": "sent"},
+    ])
+    assert delivered_and_late_sent.status_code == 200
+    assert tickets.documents[0]["delivery_status"] == "delivered"
+
+    read_and_late_statuses = post_statuses([
+        {"id": "wamid-1", "status": "read"},
+        {"id": "wamid-1", "status": "delivered"},
+        {"id": "wamid-1", "status": "failed"},
+    ])
+    assert read_and_late_statuses.status_code == 200
+    assert tickets.documents[0]["delivery_status"] == "read"
+
+    failed = post_statuses([{
+        "id": "wamid-2",
+        "status": "failed",
+        "errors": [{"title": "Recipient unavailable"}],
+    }])
+    assert failed.status_code == 200
+    assert tickets.documents[1]["delivery_status"] == "failed"
+    assert tickets.documents[1]["delivery_error"] == "Recipient unavailable"
+    assert post_statuses([{"id": "wamid-2", "status": "sent"}]).status_code == 200
+    assert tickets.documents[1]["delivery_status"] == "failed"
+
+
+def test_meta_bulk_send_requires_consent_and_records_message_id(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+    monkeypatch.setenv("META_WHATSAPP_ACCESS_TOKEN", "test-access-token")
+    monkeypatch.setenv("META_WHATSAPP_PHONE_NUMBER_ID", "test-phone-number-id")
+    monkeypatch.setenv("META_WHATSAPP_API_VERSION", "v23.0")
+    monkeypatch.setenv("META_WHATSAPP_TEMPLATE_NAME", "nuansa_invitation")
+    monkeypatch.setenv("META_WHATSAPP_TEMPLATE_LANGUAGE", "id")
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://invite.example.com")
+    user = {"id": "owner-1", "role": "user", "email": "owner@example.com"}
+    invitation = {
+        "id": "invitation-1",
+        "owner_id": "owner-1",
+        "title": "Hari Bahagia",
+        "slug": "hari-bahagia",
+        "plan_id": "premium",
+        "package_entitlements": {"bulk_upload_enabled": True, "max_recipients": 10},
+        "status": "published",
+        "active_until": "9999-12-31T23:59:59+00:00",
+    }
+    tickets = FakeTicketCollection()
+    tickets.documents.append({
+        "id": "ticket-1",
+        "invitation_id": "invitation-1",
+        "name": "Alya",
+        "phone": "6281234567890",
+        "token": "ticket-token",
+        "bulk_upload": True,
+        "whatsapp_consent": False,
+        "delivery_status": "pending",
+    })
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        users=FakeCollection(user),
+        invitations=FakeCollection(invitation),
+        invitation_tickets=tickets,
+    ))
+    sent = []
+
+    async def send_template(_invitation, _ticket):
+        sent.append(True)
+        return {"messages": [{"id": "wamid-test"}]}
+
+    monkeypatch.setattr(server, "send_meta_whatsapp_template", send_template)
+    headers = {"Authorization": f"Bearer {server.create_access_token('owner-1')}"}
+    client = TestClient(server.app)
+
+    denied = client.post(
+        "/api/invitations/invitation-1/tickets/ticket-1/send-whatsapp",
+        headers=headers,
+    )
+    assert denied.status_code == 403
+    assert sent == []
+
+    tickets.documents[0]["whatsapp_consent"] = True
+    delivered_to_meta = client.post(
+        "/api/invitations/invitation-1/tickets/ticket-1/send-whatsapp",
+        headers=headers,
+    )
+    assert delivered_to_meta.status_code == 200
+    assert delivered_to_meta.json()["delivery_status"] == "sent"
+    assert tickets.documents[0]["whatsapp_message_id"] == "wamid-test"
+    assert tickets.documents[0].get("delivery_error") is None
+    assert sent == [True]
 
 
 @pytest.mark.parametrize(

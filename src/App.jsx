@@ -3165,6 +3165,7 @@ function App() {
   if (path === '/gibrig' || path.startsWith('/gibrig/')) return <GibrigHome path={path} />;
   if (path === '/nunuy-nadhifa-wedding' || path.startsWith('/nunuy-nadhifa-wedding/')) return <NunuyHome path={path} />;
   if (Object.hasOwn(invitationPages, path)) return <InvitationHome path={path} />;
+  if (path.startsWith('/undangan/')) return <PublicInvitation slug={path.slice('/undangan/'.length)} />;
   if (path === '/beriklan') return <PortalInfoPage page="advertise" />;
   if (path === '/iklan') return <PortalAdsPage />;
   if (path === '/kontak') return <PortalInfoPage page="contact" />;

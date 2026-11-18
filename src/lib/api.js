@@ -110,12 +110,21 @@ export const guestbookApi = {
   listPublic: (slug) => apiRequest(`/public/invitations/${encodeURIComponent(slug)}/guestbook`),
   createPublic: (slug, data) => apiRequest(`/public/invitations/${encodeURIComponent(slug)}/guestbook`, { method: 'POST', body: JSON.stringify(data) }),
   listOwner: (token, invitationId) => apiRequest(`/invitations/${invitationId}/guestbook`, { token }),
-  createTickets: (token, invitationId, recipients) => apiRequest(`/invitations/${invitationId}/tickets`, {
+  createTickets: (token, invitationId, recipients, bulkUpload = false) => apiRequest(`/invitations/${invitationId}/tickets`, {
     token,
     method: 'POST',
-    body: JSON.stringify({ recipients }),
+    body: JSON.stringify({ recipients, bulk_upload: bulkUpload }),
   }),
   listTickets: (token, invitationId) => apiRequest(`/invitations/${invitationId}/tickets`, { token }),
+  updateTicketDelivery: (token, invitationId, ticketId, status) => apiRequest(
+    `/invitations/${invitationId}/tickets/${ticketId}`,
+    { token, method: 'PATCH', body: JSON.stringify({ status }) },
+  ),
+  whatsappCloudStatus: (token) => apiRequest('/whatsapp/cloud-status', { token }),
+  sendBulkWhatsApp: (token, invitationId, ticketId) => apiRequest(
+    `/invitations/${invitationId}/tickets/${ticketId}/send-whatsapp`,
+    { token, method: 'POST' },
+  ),
   checkInTicket: (token, invitationId, ticketToken) => apiRequest(`/invitations/${invitationId}/check-in`, {
     token,
     method: 'POST',

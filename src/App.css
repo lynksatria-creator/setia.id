@@ -3882,6 +3882,125 @@ input {
   gap: 20px;
 }
 
+.delivery-dashboard-summary {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding: 20px;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  background: #fbfaf7;
+}
+
+.delivery-dashboard-summary h2 {
+  margin: 4px 0 0;
+  color: #29473a;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.55rem;
+}
+
+.delivery-dashboard-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.delivery-dashboard-counts > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(32, 53, 46, 0.1);
+  background: #fff;
+}
+
+.delivery-dashboard-counts strong {
+  color: #29473a;
+  font-size: 1.35rem;
+}
+
+.delivery-dashboard-counts span {
+  color: #6b786f;
+  font-size: 0.8rem;
+}
+
+.delivery-dashboard-actions,
+.recipient-preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recipient-preview-toolbar > label {
+  display: grid;
+  gap: 5px;
+  min-width: min(100%, 220px);
+}
+
+.recipient-preview-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid rgba(32, 53, 46, 0.12);
+  background: #fff;
+}
+
+.recipient-preview-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.recipient-preview-table th,
+.recipient-preview-table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(32, 53, 46, 0.1);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.recipient-preview-table th {
+  color: #29473a;
+  background: #f5f2eb;
+}
+
+.recipient-preview-table td input:not([type="checkbox"]) {
+  width: 100%;
+  min-width: 100px;
+  padding: 7px;
+  border: 1px solid rgba(32, 53, 46, 0.2);
+}
+
+.recipient-preview-table td input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #29473a;
+}
+
+.recipient-preview-table tr.is-invalid {
+  background: #fff5f4;
+}
+
+.recipient-preview-error,
+.recipient-preview-warning,
+.recipient-preview-valid {
+  display: inline-block;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.recipient-preview-error {
+  color: #a42b24;
+}
+
+.recipient-preview-warning {
+  color: #8a641a;
+}
+
+.recipient-preview-valid {
+  color: #286440;
+}
+
 .invitation-whatsapp-form {
   display: grid;
   gap: 12px;
@@ -5174,6 +5293,16 @@ input {
 
 .wedding-honoree {
   max-width: 720px;
+}
+
+.wedding-honoree-photo {
+  width: min(250px, 72vw);
+  aspect-ratio: 1;
+  margin: 0 auto 24px;
+  border: 7px solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  box-shadow: 0 18px 34px rgba(91, 65, 35, 0.16);
+  object-fit: cover;
 }
 
 .wedding-honoree > p:last-child {
