@@ -14,6 +14,8 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          MIDTRANS_SERVER_KEY: ${{ secrets.MIDTRANS_SERVER_KEY }}
+          MIDTRANS_IS_SANDBOX: ${{ secrets.MIDTRANS_IS_SANDBOX }}
         run: |
           set -euo pipefail
           if [[ -z "$VPS_HOST" || -z "$VPS_USER" || -z "$VPS_SSH_KEY" ]]; then
@@ -395,3 +397,29 @@ jobs:
             exit 1
           fi
           REMOTE
+
+          if [[ -z "$MIDTRANS_SERVER_KEY" ]]; then
+            echo "::warning::Midtrans is not configured. Add MIDTRANS_SERVER_KEY to Actions secrets; MIDTRANS_IS_SANDBOX defaults to true."
+          else
+            midtrans_sandbox="${MIDTRANS_IS_SANDBOX:-true}"
+            if [[ "$midtrans_sandbox" != "true" && "$midtrans_sandbox" != "false" ]]; then
+              echo "::error::MIDTRANS_IS_SANDBOX must be true or false."
+              exit 1
+            fi
+            printf '%s\0%s' "$MIDTRANS_SERVER_KEY" "$midtrans_sandbox" |
+              ssh \
+                -o BatchMode=yes \
+                -o IdentitiesOnly=yes \
+                -o StrictHostKeyChecking=yes \
+                -o UserKnownHostsFile="$known_hosts_file" \
+                -i "$key_file" \
+                "$VPS_USER@$VPS_HOST" 'python3 /opt/setia.id/backend/deploy_midtrans_config.py'
+            ssh \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$known_hosts_file" \
+              -i "$key_file" \
+              "$VPS_USER@$VPS_HOST" \
+              'systemctl restart auroramedia-api.service && curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/api/public/portal-ads'
+          fi
