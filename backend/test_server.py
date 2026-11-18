@@ -1012,6 +1012,36 @@ def test_registration_otp_is_sent_through_mailtarget(monkeypatch):
     assert "123456" in captured["json"]["bodyText"]
 
 
+def test_registration_otp_failure_reports_mailtarget_status_without_provider_body(monkeypatch, caplog):
+    monkeypatch.setenv("MAILTARGET_API_KEY", "test-mailtarget-key")
+    monkeypatch.setenv("MAILTARGET_FROM_EMAIL", "hello@example.com")
+
+    class MailtargetClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, url, **_kwargs):
+            request = server.httpx.Request("POST", url)
+            return server.httpx.Response(401, request=request, text="provider-secret-details")
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", MailtargetClient)
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(server.HTTPException) as error:
+            asyncio.run(server.send_registration_code_email("recipient@example.com", "Test User", "123456"))
+
+    assert error.value.status_code == 502
+    assert "HTTP 401" in error.value.detail
+    assert "HTTP 401" in caplog.text
+    assert "provider-secret-details" not in caplog.text
+
+
 def test_registration_verifies_email_otp_before_creating_session(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
     users = FakeUsersCollection()
@@ -1860,6 +1890,28 @@ def test_invitation_links_are_generated_when_owner_does_not_choose_a_slug(monkey
 
     assert response.status_code == 200
     assert response.json()["slug"].startswith("hari-bahagia-")
+
+
+def test_create_invitation_rejects_documents_over_mongodb_limit(monkeypatch):
+    invitations = FakeCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        platform_settings=FakeCollection(copy.deepcopy(server.DEFAULT_BILLING_CONFIG)),
+        invitations=invitations,
+    ))
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: {
+        "id": "owner-1",
+        "role": "user",
+    })
+
+    response = TestClient(server.app).post("/api/invitations", json={
+        "plan_id": "basic",
+        "title": "Hari Bahagia",
+        "content": {"cover_image": "x" * server.MAX_INVITATION_DOCUMENT_SIZE},
+    })
+
+    assert response.status_code == 413
+    assert "15 MB" in response.json()["detail"]
+    assert invitations.document is None
 
 
 @pytest.mark.parametrize("plan_id", ["premium", "business"])

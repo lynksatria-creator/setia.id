@@ -661,7 +661,7 @@ test('presents the wedding journey in order without replacing the selected theme
 });
 
 test('opens the invitation and scrolls to RSVP when the link includes the RSVP fragment', async () => {
-  window.history.pushState({}, '', '/i/aulia-farhan-6bcd575#rsvp');
+  window.history.pushState({}, '', '/undangan/aulia-farhan-6bcd575#rsvp');
   const scrollIntoView = vi.fn();
   const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
@@ -1193,7 +1193,7 @@ test('guestbook separates RSVP responses from the full ticket recipient list', a
   expect(screen.getAllByText('Sampai bertemu.').length).toBeGreaterThan(0);
 });
 
-test('owner can copy the generated RSVP link and edit a premium invitation slug', async () => {
+test('owner can copy the dashboard RSVP link and open the generated public RSVP link', async () => {
   const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
@@ -1206,7 +1206,12 @@ test('owner can copy the generated RSVP link and edit a premium invitation slug'
   expect(writeText).toHaveBeenCalledWith(ownerGuestbookUrl);
 
   fireEvent.click(screen.getByRole('button', { name: 'Edit', exact: true }));
-  expect(screen.getByLabelText('Link dashboard RSVP otomatis').value).toBe(ownerGuestbookUrl);
+  const generatedRsvpLink = screen.getByLabelText('Link RSVP otomatis');
+  expect(generatedRsvpLink.readOnly).toBe(true);
+  expect(generatedRsvpLink.value).toBe(`${window.location.origin}/undangan/hari-bahagia#rsvp`);
+  expect(screen.queryByLabelText('Link RSVP', { exact: true })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Buka RSVP ↗' }).getAttribute('href')).toBe(`${window.location.origin}/undangan/hari-bahagia#rsvp`);
+  expect(screen.getByRole('link', { name: 'Buka link RSVP ↗' }).getAttribute('href')).toBe('/undangan/hari-bahagia#rsvp');
   if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
   else delete navigator.clipboard;
   sessionStorage.clear();

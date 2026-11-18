@@ -15,6 +15,7 @@ import uuid
 from typing import Literal
 
 import bcrypt
+from bson import BSON
 import httpx
 import jwt
 from dotenv import load_dotenv
@@ -33,6 +34,15 @@ load_dotenv(ROOT_DIR / ".env")
 
 mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 db_name = os.environ.get("DB_NAME", "undangan_id")
+MAX_INVITATION_DOCUMENT_SIZE = 15 * 1024 * 1024
+
+
+def ensure_invitation_document_size(invitation):
+    if len(BSON.encode(invitation)) > MAX_INVITATION_DOCUMENT_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail="Ukuran data undangan terlalu besar. Batas maksimum 15 MB. Hapus beberapa media lalu coba lagi.",
+        )
 
 
 def normalize_mongo_url(uri: str) -> str:
@@ -599,8 +609,15 @@ async def send_registration_code_email(email, full_name, code):
                 json=payload,
             )
         response.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as error:
-        logging.getLogger(__name__).warning("Pengiriman OTP Mailtarget gagal (%s).", type(error).__name__)
+    except httpx.HTTPStatusError as error:
+        status_code = error.response.status_code
+        logging.getLogger(__name__).warning("Mailtarget menolak pengiriman OTP (HTTP %s).", status_code)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Email OTP gagal dikirim melalui Mailtarget (HTTP {status_code}). Coba lagi beberapa saat.",
+        ) from None
+    except httpx.RequestError as error:
+        logging.getLogger(__name__).warning("Koneksi pengiriman OTP Mailtarget gagal (%s).", type(error).__name__)
         raise HTTPException(status_code=502, detail="Email OTP gagal dikirim. Coba lagi beberapa saat.") from None
 
 
@@ -2207,6 +2224,7 @@ async def create_invitation(payload: InvitationCreate, current_user=Depends(get_
         "created_at": now,
         "updated_at": now,
     }
+    ensure_invitation_document_size(invitation)
     try:
         await db.invitations.insert_one(invitation)
     except DuplicateKeyError:
@@ -2250,6 +2268,7 @@ async def update_my_invitation(invitation_id: str, payload: InvitationUpdate, cu
 
     updates = {key: value for key, value in updates.items() if value is not None}
     if updates:
+        ensure_invitation_document_size({**invitation, **updates})
         updates["updated_at"] = datetime.now(timezone.utc).isoformat()
         try:
             await db.invitations.update_one({"id": invitation_id}, {"$set": updates})

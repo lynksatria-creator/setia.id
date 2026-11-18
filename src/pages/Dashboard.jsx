@@ -9,6 +9,8 @@ import { createWhatsAppUrl } from '../lib/whatsapp';
 import { regionalInvitationTemplates } from '../lib/regionalInvitationTemplates';
 import { createTicketCheckInMessage } from '../lib/ticketCheckInMessage';
 
+const MAX_INVITATION_REQUEST_BYTES = 14 * 1024 * 1024;
+
 const emptyForm = {
   title: '',
   plan_id: 'basic',
@@ -55,7 +57,6 @@ const emptyForm = {
   music_url: '',
   music_catalog_id: '',
   video_url: '',
-  rsvp_url: '',
   gallery: '',
   digital_envelope: {
     bank: { enabled: false, name: '', account_name: '', account_number: '' },
@@ -943,7 +944,6 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       music_url: form.music_url,
       music_catalog_id: form.music_catalog_id,
       video_url: form.video_url,
-      rsvp_url: form.rsvp_url,
       digital_envelope: form.digital_envelope,
       gallery: form.gallery.trim() ? form.gallery.split('\n').map((url) => url.trim()).filter(Boolean) : [
         'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1000&q=85',
@@ -1034,7 +1034,6 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       music_url: content.music_url || '',
       music_catalog_id: content.music_catalog_id || musicCatalog.find((track) => track.url === content.music_url)?.id || '',
       video_url: content.video_url || '',
-      rsvp_url: content.rsvp_url || '',
       gallery: Array.isArray(content.gallery) ? content.gallery.join('\n') : '',
     });
     setError('');
@@ -1082,9 +1081,46 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
     reader.readAsDataURL(file);
   };
 
-  const readImageFile = (file) => new Promise((resolve, reject) => {
+  const readImageFile = (file, { compress = true } = {}) => new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUrl) {
+        reject(new Error('Gambar tidak dapat dibaca.'));
+        return;
+      }
+      if (!compress || file.size <= 512 * 1024) {
+        resolve(dataUrl);
+        return;
+      }
+
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
+          if (!longestSide) {
+            reject(new Error('Gambar tidak dapat diproses.'));
+            return;
+          }
+          const scale = Math.min(1, 1920 / longestSide);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const context = canvas.getContext('2d');
+          if (!context) {
+            resolve(dataUrl);
+            return;
+          }
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const compressed = canvas.toDataURL('image/webp', 0.82);
+          resolve(compressed.startsWith('data:image/webp,') ? compressed : dataUrl);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      image.onerror = () => reject(new Error('Gambar tidak dapat diproses.'));
+      image.src = dataUrl;
+    };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -1102,7 +1138,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
     }
     setError('');
     try {
-      const imageUrl = await readImageFile(file);
+      const imageUrl = await readImageFile(file, { compress: false });
       updateEnvelopeField('qris', 'image_url', imageUrl);
       setMessage('Gambar QRIS berhasil dimuat. Simpan undangan untuk menerapkannya.');
     } catch {
@@ -1190,7 +1226,6 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
     }
     setError('');
     setMessage('');
-    setIsSaving(true);
     const content = {
       event_type: form.event_type,
       province: form.province,
@@ -1235,7 +1270,6 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       music_url: form.music_url,
       music_catalog_id: form.music_catalog_id,
       video_url: form.video_url,
-      rsvp_url: form.rsvp_url,
       gallery: form.gallery.split('\n').map((url) => url.trim()).filter(Boolean),
       digital_envelope: {
         bank: {
@@ -1267,6 +1301,12 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       payload.slug = form.slug;
     }
 
+    if (new Blob([JSON.stringify(payload)]).size > MAX_INVITATION_REQUEST_BYTES) {
+      setError('Ukuran total data undangan melebihi 14 MB. Hapus beberapa foto, musik, atau video, lalu simpan kembali.');
+      return;
+    }
+
+    setIsSaving(true);
     try {
       const saved = editingId
         ? await invitationsApi.update(token, editingId, payload)
@@ -2051,9 +2091,9 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
               {user.role === 'affiliate' ? <label>Paket kuota<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId)} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · kuota tersisa {(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}</option>)}</select></label> : null}
               {selectedPlan?.id !== 'basic' ? <label>Link undangan (opsional, dapat diedit)<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} minLength={3} maxLength={64} placeholder={form.title ? form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : 'nama-acara'} /><small>Kosongkan untuk membuat link otomatis saat disimpan. Anda tetap dapat mengubah link ini nanti.</small></label> : <p className="form-hint">Paket Basic menggunakan link otomatis yang dibuat sistem.</p>}
               <div className="generated-rsvp-link">
-                <label>Link dashboard RSVP otomatis<input readOnly value={editingInvitation ? createOwnerGuestbookUrl(editingInvitation.slug) : 'Link dashboard RSVP dibuat setelah draft disimpan'} /></label>
-                {editingInvitation ? <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(editingInvitation, '#rsvp')}>Salin link dashboard RSVP</button> : null}
-                <small className="form-hint">Tautan ini membuka pengelolaan RSVP dan buku tamu di dashboard pemilik. Tamu mengisi RSVP melalui link undangan.</small>
+                <label>Link RSVP otomatis<input readOnly value={editingInvitation ? `${buildPersonalizedInvitationUrl(editingInvitation.slug, '')}#rsvp` : 'Link RSVP dibuat otomatis setelah draft disimpan'} /></label>
+                {editingInvitation?.status === 'published' ? <a className="secondary-btn" href={`${buildPersonalizedInvitationUrl(editingInvitation.slug, '')}#rsvp`} target="_blank" rel="noreferrer">Buka RSVP ↗</a> : null}
+                <small className="form-hint">Tautan ini membuka langsung bagian konfirmasi kehadiran tamu. Link aktif setelah undangan dipublikasikan.</small>
               </div>
               <label>Undangan ini untuk acara apa?<select value={form.event_type} onChange={(event) => { const eventType = event.target.value; const group = eventGroups.find((item) => item.options.includes(eventType))?.label || ''; const recommendedTemplate = getTemplatesForEvent(invitationTemplates, eventType)[0]; setSetupGroup(group); setForm((current) => ({ ...current, event_type: eventType, province: '', template_id: recommendedTemplate?.id || current.template_id, custom_design: false })); }} >{eventGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option}>{option}</option>)}</optgroup>)}</select></label>
               <label>Inspirasi daerah<select value={form.province} onChange={(event) => { const province = event.target.value; const regionalTemplate = regionalInvitationTemplates.find((template) => template.province === province); const recommendedTemplate = getTemplatesForEvent(invitationTemplates, form.event_type)[0]; setForm((current) => ({ ...current, province, template_id: regionalTemplate?.id || recommendedTemplate?.id || current.template_id, custom_design: false })); }}><option value="">Tidak memakai gaya daerah khusus</option>{provinceGroups.map((group) => <optgroup key={group} label={group}>{regionalInvitationTemplates.filter((template) => template.islandGroup === group).map((template) => <option key={template.province} value={template.province}>{template.province} · {template.inspiration}</option>)}</optgroup>)}</select></label>
@@ -2220,7 +2260,6 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                 {form.video_url.startsWith('data:video/') ? <video className="media-upload-preview" src={form.video_url} controls preload="metadata" /> : null}
                 <small className="form-hint">Video YouTube/Vimeo atau tautan langsung didukung. Upload MP4, WebM, atau Ogg maksimal 4 MB.</small>
               </div>
-              <label>Link RSVP<input type="url" value={form.rsvp_url} onChange={(event) => updateField('rsvp_url', event.target.value)} placeholder="https://forms.google.com/..." /></label>
               <div className="media-upload-field"><label>Link galeri, satu URL per baris<textarea value={form.gallery} onChange={(event) => updateField('gallery', event.target.value)} rows={3} placeholder="https://foto-1.jpg\nhttps://foto-2.jpg" /></label><label>Atau upload foto galeri<input type="file" accept="image/*" multiple onChange={handleGalleryUpload} /></label><small className="form-hint">Pilih beberapa foto sekaligus. Maksimal 5 MB per foto.</small></div>
               <section className="digital-envelope-editor">
                 <div><span className="eyebrow">Amplop digital</span><h3>Atur cara tamu mengirim hadiah</h3><p className="form-hint">Aktifkan metode yang ingin ditampilkan. Detail metode yang tidak aktif tidak akan dibagikan kepada tamu.</p></div>
@@ -2354,7 +2393,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                           {activationBulkEnabled ? <p className="form-hint">Limit {getPackageEntitlements({ plan_id: activationPlan?.id }, activationPlan).maxRecipients} penerima dibeli bersama paket dan hanya dapat diaktifkan melalui Midtrans Snap.</p> : null}
                           <button className="primary-btn" disabled={!activationPlan || !activationPaymentMethods.some((method) => method.id === paymentMethodId)} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(activationPlan?.price || 0).toLocaleString('id-ID')}</button>
                         </> : null}
-                        {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/undangan/${invitation.slug}`} target="_blank" rel="noreferrer">Buka link ↗</a> : null}
+                        {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/undangan/${invitation.slug}#rsvp`} target="_blank" rel="noreferrer">Buka link RSVP ↗</a> : null}
                         {user.role === 'user' && invitation.status === 'published' ? <>
                           <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(invitation, '#rsvp')}>Salin link dashboard RSVP</button>
                           <button className="secondary-btn" type="button" onClick={() => { setShareDialogInvitationId(invitation.id); setShareDialogType('invitation'); }}>Bagikan undangan</button>
