@@ -1005,7 +1005,7 @@ def test_registration_otp_is_sent_through_mailtarget(monkeypatch):
 
     asyncio.run(server.send_registration_code_email("recipient@example.com", "Test User", "123456"))
 
-    assert captured["url"] == "https://transmission.mailtarget.co/v1/layang/transmissions"
+    assert captured["url"] == "https://apiconfig.mailtarget.co/v1/layang/transmissions"
     assert captured["headers"]["Authorization"] == "Bearer test-mailtarget-key"
     assert captured["json"]["from"]["email"] == "hello@example.com"
     assert captured["json"]["to"] == [{"email": "recipient@example.com", "name": "Test User"}]

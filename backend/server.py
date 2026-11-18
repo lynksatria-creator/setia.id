@@ -604,7 +604,7 @@ async def send_registration_code_email(email, full_name, code):
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(
-                "https://transmission.mailtarget.co/v1/layang/transmissions",
+                "https://apiconfig.mailtarget.co/v1/layang/transmissions",
                 headers={"Authorization": f"Bearer {settings['api_key']}"},
                 json=payload,
             )
