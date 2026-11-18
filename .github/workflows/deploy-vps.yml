@@ -57,5 +57,21 @@ jobs:
           nginx -t
           systemctl reload nginx
           systemctl restart auroramedia-api.service
-          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/api/public/portal-ads
+          if ! curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/api/public/portal-ads; then
+            echo "::error::API health check failed. Recent service exception types:"
+            journalctl -u auroramedia-api.service --since "10 minutes ago" --no-pager --output=cat 2>/dev/null |
+              python3 -c '
+          import re
+          import sys
+
+          pattern = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception))(?::|$)")
+          exception_types = set()
+          for line in sys.stdin:
+              match = pattern.match(line)
+              if match:
+                  exception_types.add(match.group(1))
+          print(", ".join(sorted(exception_types)) if exception_types else "No exception type found in service journal.")
+          '
+            exit 1
+          fi
           REMOTE
