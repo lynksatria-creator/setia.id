@@ -58,19 +58,33 @@ jobs:
           systemctl reload nginx
           systemctl restart auroramedia-api.service
           if ! curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/api/public/portal-ads; then
-            echo "::error::API health check failed. Recent service exception types:"
+            echo "::error::API health check failed. Recent service exception types and sanitized connection indicators:"
             journalctl -u auroramedia-api.service --since "10 minutes ago" --no-pager --output=cat 2>/dev/null |
               python3 -c '
           import re
           import sys
 
           pattern = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception))(?::|$)")
+          indicators = {
+              "connection_refused": ("connection refused", "errno 111"),
+              "dns_resolution": ("temporary failure in name resolution", "name or service not known", "getaddrinfo failed"),
+              "network_unreachable": ("network is unreachable", "no route to host"),
+              "authentication": ("authentication failed", "authenticationfailure", "bad auth"),
+              "tls": ("ssl handshake", "tlsv1 alert", "certificate verify failed"),
+              "timeout": ("timed out", "timeout"),
+          }
           exception_types = set()
+          connection_indicators = set()
           for line in sys.stdin:
               match = pattern.match(line)
               if match:
                   exception_types.add(match.group(1))
+              lowered = line.lower()
+              for indicator, phrases in indicators.items():
+                  if any(phrase in lowered for phrase in phrases):
+                      connection_indicators.add(indicator)
           print(", ".join(sorted(exception_types)) if exception_types else "No exception type found in service journal.")
+          print("Sanitized connection indicators: " + (", ".join(sorted(connection_indicators)) if connection_indicators else "none found"))
           '
             exit 1
           fi
