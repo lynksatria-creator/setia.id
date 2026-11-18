@@ -28,6 +28,10 @@ from backend import server
             "mongodb://127.0.0.1:27018/undangan_id",
         ),
         (
+            "mongodb://[::1]:27018/undangan_id",
+            "mongodb://[::1]:27018/undangan_id",
+        ),
+        (
             "mongodb://mongo.example.net:27018/undangan_id",
             "mongodb://mongo.example.net:27018/undangan_id",
         ),

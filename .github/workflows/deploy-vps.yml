@@ -252,6 +252,41 @@ jobs:
                 systemctl restart "$mongo_service"
                 systemctl is-active --quiet "$mongo_service"
               fi
+              if [[ "$mongo_service" == "mongod.service" ]] && [[ -f /etc/mongod.conf ]]; then
+                mongo_config_changed="$(python3 - "$mongo_port" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          config = Path("/etc/mongod.conf")
+          text = config.read_text(encoding="utf-8")
+          port_updated, port_replacements = re.subn(
+              r"(?m)^([ \t]*port:[ \t]*)\d+([ \t]*(?:#.*)?)$",
+              rf"\g<1>{int(sys.argv[1])}\g<2>",
+              text,
+              count=1,
+          )
+          bind_updated, _ = re.subn(
+              r'(?m)^([ \t]*bindIp:[ \t]*)(?:"127\.0\.0\.1(?:,[ \t]*::1)?"|127\.0\.0\.1(?:,[ \t]*::1)?)([ \t]*(?:#.*)?)$',
+              r"\g<1>127.0.0.1",
+              port_updated,
+              count=1,
+          )
+          if port_replacements != 1:
+              raise SystemExit("Could not safely configure MongoDB on the requested local port.")
+          if bind_updated != text:
+              config.write_text(bind_updated, encoding="utf-8")
+              print("changed")
+          else:
+              print("unchanged")
+          PY
+                )"
+                if [[ "$mongo_config_changed" == "changed" ]]; then
+                  echo "Restricting local MongoDB to IPv4 loopback and the configured port."
+                  systemctl restart "$mongo_service"
+                  systemctl is-active --quiet "$mongo_service"
+                fi
+              fi
               echo "MongoDB service is active."
               python3 - "$mongo_port" <<'PY'
           import socket
