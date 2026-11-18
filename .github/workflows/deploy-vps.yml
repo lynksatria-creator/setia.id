@@ -99,7 +99,7 @@ jobs:
           if mongo_url is None and environment_files and environment_files != "-":
               paths = re.findall(r"([^\s]+) \(ignore_errors=(?:yes|no)\)", environment_files)
               if not paths:
-                  print("unknown")
+                  print("unknown-env-files")
                   raise SystemExit
               for path in paths:
                   configured_url = env_file_value(path)
@@ -112,16 +112,16 @@ jobs:
           if mongo_url is None:
               print("default-local")
           elif not mongo_url.strip():
-              print("unknown")
+              print("unknown-empty-url")
           else:
               try:
                   parsed = urlsplit(mongo_url)
                   port = parsed.port
               except ValueError:
-                  print("unknown")
+                  print("unknown-invalid-uri")
               else:
                   if parsed.scheme not in {"mongodb", "mongodb+srv"} or not parsed.hostname:
-                      print("unknown")
+                      print("unknown-unsupported-uri")
                   else:
                       try:
                           local_host = parsed.hostname.lower() == "localhost" or ipaddress.ip_address(parsed.hostname).is_loopback
@@ -131,7 +131,7 @@ jobs:
                           if parsed.scheme == "mongodb" and port in {None, 27017}:
                               print("local")
                           else:
-                              print("unknown")
+                              print("unknown-loopback-endpoint")
                       else:
                           print("external")
           PY
@@ -203,8 +203,12 @@ jobs:
             external)
               echo "Using the configured external MongoDB endpoint; no local database will be installed or started."
               ;;
+            unknown*)
+              echo "::error::MongoDB endpoint configuration could not be safely classified ($mongo_target); refusing to install or replace a database."
+              exit 1
+              ;;
             *)
-              echo "::error::MongoDB endpoint configuration could not be safely classified; refusing to install or replace a database."
+              echo "::error::Unexpected MongoDB target classification; refusing to install or replace a database."
               exit 1
               ;;
           esac
