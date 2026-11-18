@@ -277,7 +277,7 @@ def test_saved_mayar_checkout_config_migrates_to_midtrans(monkeypatch):
 
     assert migrated["payment_methods"][0]["provider"] == "midtrans"
     assert migrated["payment_methods"][0]["name"] == "Midtrans checkout"
-    assert migrated["schema_version"] == 4
+    assert migrated["schema_version"] == 5
 
 
 def test_legacy_billing_config_gets_package_and_reseller_entitlements(monkeypatch):
@@ -294,7 +294,7 @@ def test_legacy_billing_config_gets_package_and_reseller_entitlements(monkeypatc
     migrated = asyncio.run(server.get_billing_config())
 
     plans = {plan["id"]: plan for plan in migrated["plans"]}
-    assert migrated["schema_version"] == 4
+    assert migrated["schema_version"] == 5
     assert plans["basic"]["max_invitations"] == 1
     assert plans["basic"]["bulk_upload_enabled"] is False
     assert plans["basic"]["max_recipients"] == 1
@@ -304,6 +304,37 @@ def test_legacy_billing_config_gets_package_and_reseller_entitlements(monkeypatc
     assert plans["business"]["reseller_enabled"] is True
     assert plans["business"]["max_reseller_customers"] == 1000
     assert plans["business"]["reseller_commission_percent"] == 10
+
+
+def test_billing_migration_keeps_basic_active_and_marks_premium_and_business_under_development(monkeypatch):
+    config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    config["schema_version"] = 4
+    for plan in config["plans"]:
+        plan["enabled"] = True
+    config["key"] = "billing"
+    settings = FakeCollection(config)
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=settings))
+
+    migrated = asyncio.run(server.get_billing_config())
+    plans = {plan["id"]: plan for plan in migrated["plans"]}
+
+    assert migrated["schema_version"] == 5
+    assert plans["basic"]["enabled"] is True
+    assert plans["premium"]["enabled"] is False
+    assert plans["business"]["enabled"] is False
+    assert settings.document["schema_version"] == 5
+
+
+def test_public_billing_config_includes_disabled_plans_with_availability(monkeypatch):
+    config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=FakeCollection(config)))
+
+    result = asyncio.run(server.get_public_billing_config())
+
+    plans = {plan["id"]: plan for plan in result["plans"]}
+    assert plans["basic"]["enabled"] is True
+    assert plans["premium"]["enabled"] is False
+    assert plans["business"]["enabled"] is False
 
 
 def test_package_capacity_lock_serializes_concurrent_order_attempts(monkeypatch):
@@ -1289,6 +1320,7 @@ def test_draft_payment_uses_package_selected_at_activation(monkeypatch):
 
 def test_bulk_upload_package_rejects_manual_payment(monkeypatch):
     config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    next(plan for plan in config["plans"] if plan["id"] == "premium")["enabled"] = True
     transfer = next(method for method in config["payment_methods"] if method["id"] == "bank-transfer")
     transfer.update(enabled=True, account_number="123456", bank_name="Bank", account_name="Owner")
     monkeypatch.setattr(server, "db", SimpleNamespace(platform_settings=FakeCollection(config)))
@@ -1780,8 +1812,10 @@ def test_test_account_can_use_any_package_without_payment(monkeypatch, plan_id):
 @pytest.mark.parametrize("plan_id", ["basic", "premium", "business"])
 def test_invitation_links_are_generated_when_owner_does_not_choose_a_slug(monkeypatch, plan_id):
     invitation_collection = FakeCollection()
+    config = copy.deepcopy(server.DEFAULT_BILLING_CONFIG)
+    next(plan for plan in config["plans"] if plan["id"] == plan_id)["enabled"] = True
     monkeypatch.setattr(server, "db", SimpleNamespace(
-        platform_settings=FakeCollection(copy.deepcopy(server.DEFAULT_BILLING_CONFIG)),
+        platform_settings=FakeCollection(config),
         invitations=invitation_collection,
     ))
     monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: {
@@ -1797,6 +1831,29 @@ def test_invitation_links_are_generated_when_owner_does_not_choose_a_slug(monkey
 
     assert response.status_code == 200
     assert response.json()["slug"].startswith("hari-bahagia-")
+
+
+@pytest.mark.parametrize("plan_id", ["premium", "business"])
+def test_regular_user_cannot_create_invitation_with_under_development_plan(monkeypatch, plan_id):
+    invitations = FakeCollection()
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        platform_settings=FakeCollection(copy.deepcopy(server.DEFAULT_BILLING_CONFIG)),
+        invitations=invitations,
+    ))
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: {
+        "id": "owner-1",
+        "role": "user",
+    })
+
+    response = TestClient(server.app).post("/api/invitations", json={
+        "plan_id": plan_id,
+        "title": "Hari Bahagia",
+        "content": {},
+    })
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Paket tidak tersedia."
+    assert invitations.document is None
 
 
 def test_test_account_access_requires_a_valid_expiry():

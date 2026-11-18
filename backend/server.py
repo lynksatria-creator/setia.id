@@ -505,8 +505,8 @@ bearer_scheme = HTTPBearer(auto_error=False)
 DEFAULT_BILLING_CONFIG = {
     "plans": [
         {"id": "basic", "name": "Basic", "price": 99000, "duration_days": 30, "max_invitations": 1, "slug_mode": "generated", "enabled": True, "features": ["1 undangan aktif", "Template dasar", "Link undangan otomatis"], "bulk_upload_enabled": False, "max_recipients": 1, "reseller_enabled": False, "max_resellers": 0, "max_reseller_customers": 0, "reseller_max_markup_percent": 0, "reseller_commission_percent": 0},
-        {"id": "premium", "name": "Premium", "price": 249000, "duration_days": 365, "max_invitations": 5, "slug_mode": "custom", "enabled": True, "features": ["5 undangan aktif", "Link otomatis dan dapat diedit", "RSVP dan buku tamu"], "bulk_upload_enabled": True, "max_recipients": 1000, "reseller_enabled": False, "max_resellers": 0, "max_reseller_customers": 0, "reseller_max_markup_percent": 0, "reseller_commission_percent": 0},
-        {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": True, "features": ["100 undangan aktif", "Link otomatis dan dapat diedit", "Statistik lengkap"], "bulk_upload_enabled": True, "max_recipients": 1000, "reseller_enabled": True, "max_resellers": 100, "max_reseller_customers": 1000, "reseller_max_markup_percent": 100, "reseller_commission_percent": 10},
+        {"id": "premium", "name": "Premium", "price": 249000, "duration_days": 365, "max_invitations": 5, "slug_mode": "custom", "enabled": False, "features": ["5 undangan aktif", "Link otomatis dan dapat diedit", "RSVP dan buku tamu"], "bulk_upload_enabled": True, "max_recipients": 1000, "reseller_enabled": False, "max_resellers": 0, "max_reseller_customers": 0, "reseller_max_markup_percent": 0, "reseller_commission_percent": 0},
+        {"id": "business", "name": "Business", "price": 599000, "duration_days": 365, "max_invitations": 100, "slug_mode": "custom", "enabled": False, "features": ["100 undangan aktif", "Link otomatis dan dapat diedit", "Statistik lengkap"], "bulk_upload_enabled": True, "max_recipients": 1000, "reseller_enabled": True, "max_resellers": 100, "max_reseller_customers": 1000, "reseller_max_markup_percent": 100, "reseller_commission_percent": 10},
     ],
     "payment_methods": [
         {"id": "midtrans", "name": "Midtrans checkout", "provider": "midtrans", "enabled": True},
@@ -519,7 +519,7 @@ DEFAULT_BILLING_CONFIG = {
         {"id": "premium-3", "name": "3 Premium", "basic": 0, "premium": 3},
         {"id": "basic-8", "name": "8 Basic", "basic": 8, "premium": 0},
     ],
-    "schema_version": 4,
+    "schema_version": 5,
 }
 
 def get_jwt_secret():
@@ -636,7 +636,17 @@ async def get_billing_config():
                 method.pop("gateway", None)
         saved.setdefault("dashboard_admin_limit", DEFAULT_BILLING_CONFIG["dashboard_admin_limit"])
         saved.setdefault("affiliate_combinations", DEFAULT_BILLING_CONFIG["affiliate_combinations"])
-        saved["schema_version"] = 4
+        if previous_schema_version < 5:
+            for plan in saved.get("plans", []):
+                if plan.get("id") == "basic":
+                    plan["enabled"] = True
+                elif plan.get("id") in {"premium", "business"}:
+                    plan["enabled"] = False
+            await db.platform_settings.update_one(
+                {"key": "billing"},
+                {"$set": {"plans": saved.get("plans", []), "schema_version": 5}},
+            )
+        saved["schema_version"] = 5
         return saved
     await db.platform_settings.update_one(
         {"key": "billing"},
@@ -1275,7 +1285,7 @@ async def admin_login(payload: AdminLogin):
 async def get_public_billing_config():
     config = await get_billing_config()
     return {
-        "plans": [plan for plan in config["plans"] if plan.get("enabled", True)],
+        "plans": config["plans"],
         "payment_methods": [method for method in config["payment_methods"] if method.get("enabled", True)],
     }
 
@@ -1289,7 +1299,7 @@ async def get_admin_billing_config(_admin=Depends(require_admin)):
 @api_router.put("/admin/billing/config")
 async def update_admin_billing_config(payload: BillingConfigUpdate, _admin=Depends(require_admin)):
     config = payload.model_dump()
-    config["schema_version"] = 4
+    config["schema_version"] = 5
     previous_config = await get_billing_config()
     previous_plans = {plan["id"]: plan for plan in previous_config["plans"]}
     default_plans = {plan["id"]: plan for plan in DEFAULT_BILLING_CONFIG["plans"]}
@@ -1423,7 +1433,7 @@ async def update_admin_affiliate_account(
 @api_router.post("/admin/demo-accounts")
 async def create_demo_account(payload: DemoAccountCreate, _admin=Depends(require_admin)):
     config = await get_billing_config()
-    plan = next((item for item in config["plans"] if item["id"] == payload.plan_id and item.get("enabled", True)), None)
+    plan = next((item for item in config["plans"] if item["id"] == payload.plan_id), None)
     if plan is None:
         raise HTTPException(status_code=422, detail="Paket demo tidak tersedia.")
     selected_combination = None
@@ -2115,7 +2125,14 @@ async def list_public_advertisements():
 @api_router.post("/invitations")
 async def create_invitation(payload: InvitationCreate, current_user=Depends(get_current_user)):
     config = await get_billing_config()
-    plan = next((item for item in config["plans"] if item["id"] == payload.plan_id and item.get("enabled", True)), None)
+    plan = next((
+        item for item in config["plans"]
+        if item["id"] == payload.plan_id and (
+            item.get("enabled", True)
+            or current_user.get("is_test_account")
+            or (current_user.get("is_demo") and current_user.get("demo_plan_id") == item["id"])
+        )
+    ), None)
     if plan is None:
         raise HTTPException(status_code=422, detail="Paket tidak tersedia.")
     owner_id = current_user["id"]

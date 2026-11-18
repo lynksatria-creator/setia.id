@@ -14,6 +14,7 @@ import PublicInvitation from './pages/PublicInvitation';
 import { createPreviewInvitation } from './pages/Templates';
 import { PublicTestimonials, TestimonialModeration } from './components/PublicTestimonials';
 import NunuyConsultationAdmin from './components/NunuyConsultationAdmin';
+import Pricing from './pages/Pricing';
 
 const renderApp = () => render(<AuthProvider><App /></AuthProvider>);
 const SUPER_ADMIN_TEST_TOKEN = 'header.eyJyb2xlIjoiYWRtaW4iLCJzY29wZSI6ImFsbCJ9.signature';
@@ -356,12 +357,42 @@ test('normalizes portal ad fields to API limits', () => {
   expect(normalized.midFeed.imageWidth).toBe(20);
 });
 
-test('routes Nuansa Invite login to the development page', () => {
+test('routes Nuansa Invite login to the working login form', () => {
+  sessionStorage.removeItem('undangan.id.session');
   window.history.pushState({}, '', '/undangan-auth?mode=login');
   renderApp();
 
-  expect(screen.getByRole('heading', { name: 'Peluncuran Resmi Platform' })).toBeDefined();
-  expect(screen.getByText('MASIH DALAM PROSES PENGEMBANGAN')).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Masuk ke akun' })).toBeDefined();
+  expect(screen.getByLabelText('Email')).toBeDefined();
+  expect(screen.getByLabelText('Kata sandi')).toBeDefined();
+  expect(screen.queryByText('MASIH DALAM PROSES PENGEMBANGAN')).toBeNull();
+});
+
+test('keeps Basic purchasable and marks Premium and Business under development', () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ plans: [] }),
+  })));
+  const onChoose = vi.fn();
+  const page = render(<Pricing plans={[
+    { id: 'basic', name: 'Basic', enabled: true, price: 99000, features: [] },
+    { id: 'premium', name: 'Premium', enabled: false, price: 249000, features: [] },
+    { id: 'business', name: 'Business', enabled: false, price: 599000, features: [] },
+  ]} onChoose={onChoose} />);
+
+  expect(screen.getAllByText('Under Development')).toHaveLength(2);
+  const basicButton = screen.getByRole('button', { name: 'Pilih paket Basic' });
+  const premiumButton = screen.getByRole('button', { name: 'Segera hadir untuk Premium' });
+  const businessButton = screen.getByRole('button', { name: 'Segera hadir untuk Business' });
+  expect(basicButton.disabled).toBe(false);
+  expect(premiumButton.disabled).toBe(true);
+  expect(businessButton.disabled).toBe(true);
+  fireEvent.click(basicButton);
+  expect(onChoose).toHaveBeenCalledWith(expect.objectContaining({ id: 'basic' }));
+  page.unmount();
+  vi.unstubAllGlobals();
 });
 
 test('shows active affiliate advertisements on the Nuansa Invite homepage', async () => {
@@ -767,13 +798,15 @@ test('template preview content follows its selected event category', () => {
   });
 });
 
-test('routes Nuansa Invite registration to the development page', () => {
+test('routes Nuansa Invite registration to the account creation form', () => {
   sessionStorage.clear();
   window.history.pushState({}, '', '/undangan-auth?mode=register');
   renderApp();
 
-  expect(screen.getByRole('heading', { name: 'Peluncuran Resmi Platform' })).toBeDefined();
-  expect(screen.getByText('MASIH DALAM PROSES PENGEMBANGAN')).toBeDefined();
+  expect(screen.getByRole('heading', { name: 'Buat akun' })).toBeDefined();
+  expect(screen.getByLabelText('Nama lengkap')).toBeDefined();
+  expect(screen.getByLabelText('Email')).toBeDefined();
+  expect(screen.queryByText('MASIH DALAM PROSES PENGEMBANGAN')).toBeNull();
 });
 
 test('requires email OTP verification before completing Nuansa Invite registration', async () => {

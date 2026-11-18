@@ -568,11 +568,13 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
     premium: invitations.filter((invitation) => invitation.plan_id === 'premium').length,
   };
   const availablePlans = user?.role === 'affiliate'
-    ? billing.plans.filter((plan) => ['basic', 'premium'].includes(plan.id)
+    ? billing.plans.filter((plan) => plan.enabled !== false && ['basic', 'premium'].includes(plan.id)
       && affiliatePlanCounts[plan.id] < (user[`${plan.id}_quota`] || 0))
     : user?.is_demo
       ? billing.plans.filter((plan) => plan.id === user.demo_plan_id)
-    : billing.plans;
+      : user?.is_test_account
+        ? billing.plans
+        : billing.plans.filter((plan) => plan.enabled !== false);
 
   useEffect(() => {
     if (user?.role === 'affiliate' && !editingId && !availablePlans.some((plan) => plan.id === form.plan_id) && availablePlans[0]) {
@@ -756,7 +758,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       ? user.demo_plan_id
       : user?.is_test_account && billing.plans.some((plan) => plan.id === 'business')
         ? 'business'
-        : billing.plans[0]?.id || 'basic' });
+        : billing.plans.find((plan) => plan.enabled !== false)?.id || 'basic' });
   };
 
   const setupTemplates = setupProvince

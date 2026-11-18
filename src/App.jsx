@@ -4,10 +4,10 @@ import './pages/Gibrig.css';
 import './pages/Invitation.css';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import InvitationUnderDevelopment from './pages/InvitationUnderDevelopment';
 import Blog, { articleSlug } from './pages/Blog';
 import BlogDetail from './pages/BlogDetail';
 import Pricing from './pages/Pricing';
+import Auth from './pages/Auth';
 import Templates, { createPreviewInvitation, slugify } from './pages/Templates';
 import Dashboard from './pages/Dashboard';
 import AdminBilling from './pages/AdminBilling';
@@ -570,9 +570,9 @@ const defaultInvitationData = {
     { title: 'Music & Maps', description: 'Tambahkan musik, lokasi, dan fitur share yang praktis untuk tamu.' },
   ],
   pricingPlans: [
-    { name: 'Basic', price: 'Rp 99.000', features: ['1 undangan aktif', 'Template dasar', 'RSVP', 'Buku tamu', 'Ucapan & doa'], highlight: false },
-    { name: 'Premium', price: 'Rp 249.000', features: ['Semua fitur Basic', 'Template premium', 'Custom nama tamu', 'Statistik', 'QR code', 'Custom domain'], highlight: true },
-    { name: 'Business', price: 'Rp 599.000', features: ['Bulk undangan', 'Bulk tamu', 'Bulk template', 'Statistik lengkap', 'Branding & API'], highlight: false },
+    { id: 'basic', name: 'Basic', enabled: true, price: 'Rp 99.000', features: ['1 undangan aktif', 'Template dasar', 'RSVP', 'Buku tamu', 'Ucapan & doa'], highlight: false },
+    { id: 'premium', name: 'Premium', enabled: false, price: 'Rp 249.000', features: ['Semua fitur Basic', 'Template premium', 'Custom nama tamu', 'Statistik', 'QR code', 'Custom domain'], highlight: true },
+    { id: 'business', name: 'Business', enabled: false, price: 'Rp 599.000', features: ['Bulk undangan', 'Bulk tamu', 'Bulk template', 'Statistik lengkap', 'Branding & API'], highlight: false },
   ],
   testimonials: [],
   seo: SEO_DEFAULTS.invitation,
@@ -3057,7 +3057,11 @@ function App() {
   };
 
   if (path === '/undangan-auth') {
-    return <InvitationUnderDevelopment />;
+    const requestedPath = new URLSearchParams(window.location.search).get('next');
+    const nextPath = requestedPath?.startsWith('/') && !requestedPath.startsWith('//')
+      ? requestedPath
+      : '/undangan-dashboard';
+    return <Auth onBack={() => navigate('/undangan')} onSuccess={() => navigate(nextPath)} />;
   }
 
   if (path === '/undangan-dashboard') {

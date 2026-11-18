@@ -1016,6 +1016,24 @@ button {
   margin: 10px 0;
 }
 
+.pricing-development-badge {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border: 1px solid #d5dfec;
+  border-radius: 999px;
+  background: #eef4fb;
+  color: #53657d;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.price-card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 ul {
   margin: 0;
   padding-left: 1.2rem;
