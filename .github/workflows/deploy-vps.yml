@@ -48,6 +48,96 @@ jobs:
           git fetch origin
           git checkout main
           git reset --hard origin/main
+          mongo_target="$(python3 - <<'PY'
+          import ipaddress
+          import re
+          import shlex
+          import subprocess
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          unit = "auroramedia-api.service"
+
+          def systemd_property(name):
+              result = subprocess.run(
+                  ["systemctl", "show", unit, f"--property={name}", "--value"],
+                  capture_output=True,
+                  text=True,
+                  check=False,
+              )
+              return result.stdout.strip() if result.returncode == 0 else None
+
+          def env_file_value(path):
+              try:
+                  lines = Path(path).read_text(encoding="utf-8").splitlines()
+              except OSError:
+                  return None
+              value = None
+              for line in lines:
+                  line = line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  if line.startswith("export "):
+                      line = line[7:].lstrip()
+                  key, separator, candidate = line.partition("=")
+                  if separator and key.strip() == "MONGO_URL":
+                      candidate = candidate.strip()
+                      if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in "\"'":
+                          candidate = candidate[1:-1]
+                      value = candidate
+              return value
+
+          mongo_url = None
+          environment = systemd_property("Environment")
+          if environment:
+              for entry in shlex.split(environment):
+                  key, separator, value = entry.partition("=")
+                  if separator and key == "MONGO_URL":
+                      mongo_url = value
+
+          environment_files = systemd_property("EnvironmentFiles")
+          if mongo_url is None and environment_files and environment_files != "-":
+              paths = re.findall(r"([^\s]+) \(ignore_errors=(?:yes|no)\)", environment_files)
+              if not paths:
+                  print("unknown")
+                  raise SystemExit
+              for path in paths:
+                  configured_url = env_file_value(path)
+                  if configured_url is not None:
+                      mongo_url = configured_url
+
+          if mongo_url is None:
+              mongo_url = env_file_value("/opt/auroramedia-api/app/.env")
+
+          if mongo_url is None:
+              print("default-local")
+          elif not mongo_url.strip():
+              print("unknown")
+          else:
+              try:
+                  parsed = urlsplit(mongo_url)
+                  port = parsed.port
+              except ValueError:
+                  print("unknown")
+              else:
+                  if parsed.scheme not in {"mongodb", "mongodb+srv"} or not parsed.hostname:
+                      print("unknown")
+                  else:
+                      try:
+                          local_host = parsed.hostname.lower() == "localhost" or ipaddress.ip_address(parsed.hostname).is_loopback
+                      except ValueError:
+                          local_host = False
+                      if local_host:
+                          if parsed.scheme == "mongodb" and port in {None, 27017}:
+                              print("local")
+                          else:
+                              print("unknown")
+                      else:
+                          print("external")
+          PY
+          )"
+          printf 'MongoDB target classification: %s\n' "$mongo_target"
+
           mongo_service=""
           for candidate in mongod mongodb; do
             if systemctl cat "$candidate.service" >/dev/null 2>&1; then
@@ -55,16 +145,69 @@ jobs:
               break
             fi
           done
-          if [[ -n "$mongo_service" ]]; then
-            if ! systemctl is-active --quiet "$mongo_service"; then
-              echo "Starting inactive MongoDB service."
-              systemctl start "$mongo_service"
-            fi
-            systemctl is-active --quiet "$mongo_service"
-            echo "MongoDB systemd service is active."
-          else
-            echo "::warning::No local MongoDB systemd service found; verify the configured MongoDB endpoint is reachable."
-          fi
+
+          case "$mongo_target" in
+            local|default-local)
+              if [[ -n "$mongo_service" ]]; then
+                if ! systemctl is-active --quiet "$mongo_service"; then
+                  echo "Starting inactive MongoDB service."
+                  systemctl start "$mongo_service"
+                fi
+                systemctl is-active --quiet "$mongo_service"
+              else
+                existing_data=false
+                for data_dir in /var/lib/mongodb /data/db; do
+                  if [[ -d "$data_dir" ]] && find "$data_dir" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+                    existing_data=true
+                    break
+                  fi
+                done
+                if command -v mongod >/dev/null 2>&1 || [[ -f /etc/mongod.conf ]] || [[ "$existing_data" == true ]]; then
+                  echo "::error::MongoDB files or data exist but no systemd service is installed. Refusing to replace or initialize the database automatically."
+                  exit 1
+                fi
+
+                . /etc/os-release
+                case "${ID}:${VERSION_ID}" in
+                  ubuntu:22.04) mongo_repo_distribution="jammy" ;;
+                  ubuntu:24.04) mongo_repo_distribution="noble" ;;
+                  debian:12) mongo_repo_distribution="bookworm" ;;
+                  *)
+                    echo "::error::Automatic MongoDB installation is supported only on Ubuntu 22.04/24.04 and Debian 12."
+                    exit 1
+                    ;;
+                esac
+                mongo_architecture="$(dpkg --print-architecture)"
+                if [[ "$mongo_architecture" != "amd64" && "$mongo_architecture" != "arm64" ]]; then
+                  echo "::error::Automatic MongoDB installation is not supported on this VPS architecture."
+                  exit 1
+                fi
+
+                echo "Installing MongoDB 8.0 because the backend targets localhost and no existing MongoDB data/configuration was found."
+                apt-get update
+                DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg
+                install -d -m 0755 /usr/share/keyrings
+                curl --fail --silent --show-error https://pgp.mongodb.com/server-8.0.asc |
+                  gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-8.0.gpg
+                printf 'deb [ arch=%s signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/%s %s/mongodb-org/8.0 multiverse\n' \
+                  "$mongo_architecture" "$ID" "$mongo_repo_distribution" \
+                  > /etc/apt/sources.list.d/mongodb-org-8.0.list
+                apt-get update
+                DEBIAN_FRONTEND=noninteractive apt-get install -y mongodb-org
+                systemctl enable --now mongod.service
+                mongo_service="mongod.service"
+              fi
+              systemctl is-active --quiet "$mongo_service"
+              echo "MongoDB service is active."
+              ;;
+            external)
+              echo "Using the configured external MongoDB endpoint; no local database will be installed or started."
+              ;;
+            *)
+              echo "::error::MongoDB endpoint configuration could not be safely classified; refusing to install or replace a database."
+              exit 1
+              ;;
+          esac
           npm install
           BACKEND_FILE=/opt/auroramedia-api/app/server.py
           cp -a "$BACKEND_FILE" "$BACKEND_FILE.bak-$(date +%Y%m%d%H%M%S)"
