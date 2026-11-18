@@ -130,7 +130,7 @@ def provision_application_user(uri, db_name, mongo_port, client_factory=MongoCli
     )
     try:
         try:
-            users = local_client.admin.command({"usersInfo": 1, "forAllDBs": True}).get("users", [])
+            users = local_client.admin.command({"usersInfo": {"forAllDBs": True}}).get("users", [])
         except PyMongoError as error:
             raise SystemExit(
                 "MongoDB rejected unauthenticated user inspection "
