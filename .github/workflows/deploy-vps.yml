@@ -232,6 +232,26 @@ jobs:
               fi
               systemctl is-active --quiet "$mongo_service"
               echo "MongoDB service is active."
+              python3 - "$mongo_port" <<'PY'
+          import socket
+          import sys
+
+          port = int(sys.argv[1])
+          reachable = False
+          for label, address in (("IPv4", "127.0.0.1"), ("IPv6", "::1")):
+              family = socket.AF_INET6 if ":" in address else socket.AF_INET
+              try:
+                  with socket.socket(family, socket.SOCK_STREAM) as connection:
+                      connection.settimeout(2)
+                      connection.connect((address, port))
+                  endpoint_reachable = True
+              except OSError:
+                  endpoint_reachable = False
+              reachable = reachable or endpoint_reachable
+              print(f"MongoDB {label} loopback probe: {'reachable' if endpoint_reachable else 'unavailable'}")
+          if not reachable:
+              raise SystemExit("MongoDB service is active but not listening on the configured loopback port.")
+          PY
               ;;
             external)
               echo "Using the configured external MongoDB endpoint; no local database will be installed or started."
