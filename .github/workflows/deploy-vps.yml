@@ -128,15 +128,28 @@ jobs:
                       except ValueError:
                           local_host = False
                       if local_host:
-                          if parsed.scheme == "mongodb" and port in {None, 27017}:
-                              print("local")
-                          else:
+                          if parsed.scheme != "mongodb":
                               print("unknown-loopback-endpoint")
+                          elif port in {None, 27017}:
+                              print("local")
+                          elif port:
+                              print(f"local-custom:{port}")
+                          else:
+                              print("unknown-invalid-port")
                       else:
                           print("external")
           PY
           )"
-          printf 'MongoDB target classification: %s\n' "$mongo_target"
+          mongo_port=27017
+          if [[ "$mongo_target" == local-custom:* ]]; then
+            mongo_port="${mongo_target#local-custom:}"
+            if [[ ! "$mongo_port" =~ ^[0-9]{1,5}$ ]] || (( mongo_port < 1 || mongo_port > 65535 )); then
+              echo "::error::MongoDB local port is invalid."
+              exit 1
+            fi
+            mongo_target="local"
+          fi
+          printf 'MongoDB target classification: %s (port %s)\n' "$mongo_target" "$mongo_port"
 
           mongo_service=""
           for candidate in mongod mongodb; do
@@ -194,6 +207,26 @@ jobs:
                   > /etc/apt/sources.list.d/mongodb-org-8.0.list
                 apt-get update
                 DEBIAN_FRONTEND=noninteractive apt-get install -y mongodb-org
+                if [[ "$mongo_port" != "27017" ]]; then
+                  systemctl stop mongod.service
+                  python3 - "$mongo_port" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          config = Path("/etc/mongod.conf")
+          text = config.read_text(encoding="utf-8")
+          updated, replacements = re.subn(
+              r"(?m)^(\s*port:\s*)27017(\s*(?:#.*)?)$",
+              rf"\g<1>{int(sys.argv[1])}\g<2>",
+              text,
+              count=1,
+          )
+          if replacements != 1:
+              raise SystemExit("Could not safely set the MongoDB port in its default configuration.")
+          config.write_text(updated, encoding="utf-8")
+          PY
+                fi
                 systemctl enable --now mongod.service
                 mongo_service="mongod.service"
               fi
