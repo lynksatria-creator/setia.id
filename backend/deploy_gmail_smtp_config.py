@@ -6,11 +6,16 @@ import sys
 import tempfile
 from pathlib import Path
 
-from email_validator import EmailNotValidError, validate_email
-
 
 ENV_FILE = Path("/opt/auroramedia-api/app/.env")
 CONFIG_KEY_PATTERN = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
+LEGACY_CONFIG_KEYS = {
+    "MAILTARGET_API_KEY",
+    "MAILTARGET_FROM_EMAIL",
+    "MAILTARGET_FROM_NAME",
+    "SMTP_FROM_EMAIL",
+    "SMTP_FROM_NAME",
+}
 
 
 def api_service_owner():
@@ -30,7 +35,7 @@ def api_service_owner():
         check=False,
     )
     if user_result.returncode != 0 or group_result.returncode != 0:
-        raise SystemExit("Could not determine the API service account for the Mailtarget environment file.")
+        raise SystemExit("Could not determine the API service account for the Gmail SMTP environment file.")
 
     username = user_result.stdout.strip() or "root"
     try:
@@ -38,41 +43,34 @@ def api_service_owner():
         group_name = group_result.stdout.strip()
         group_id = grp.getgrnam(group_name).gr_gid if group_name else account.pw_gid
     except KeyError:
-        raise SystemExit("Could not resolve the API service account for the Mailtarget environment file.") from None
+        raise SystemExit("Could not resolve the API service account for the Gmail SMTP environment file.") from None
     return account.pw_uid, group_id
 
 
 def dotenv_value(value):
     if any(character in value for character in ("\0", "\r", "\n")):
-        raise ValueError("Mailtarget settings cannot contain line breaks or null characters.")
+        raise ValueError("Gmail SMTP settings cannot contain line breaks or null characters.")
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
-def update_env_contents(contents, api_key, sender, sender_name):
-    if not api_key or api_key != api_key.strip():
-        raise ValueError("Mailtarget API key cannot be empty or have surrounding whitespace.")
-    if len(api_key) > 4096:
-        raise ValueError("Mailtarget API key is too long.")
-    if len(sender) > 254:
-        raise ValueError("Mailtarget sender must be a valid email address.")
-    try:
-        validate_email(sender, check_deliverability=False)
-    except EmailNotValidError:
-        raise ValueError("Mailtarget sender must be a valid email address.") from None
-    sender_name = sender_name.strip() or "Nuansa Invite"
-    if len(sender_name) > 128:
-        raise ValueError("Mailtarget sender name is too long.")
+def update_env_contents(contents, app_password):
+    if not app_password or app_password != app_password.strip():
+        raise ValueError("Gmail SMTP App Password cannot be empty or have surrounding whitespace.")
+    if any(character.isspace() and character != " " for character in app_password):
+        raise ValueError("Gmail SMTP App Password can contain spaces but not other whitespace.")
 
-    values = {
-        "MAILTARGET_API_KEY": dotenv_value(api_key),
-        "MAILTARGET_FROM_EMAIL": dotenv_value(sender),
-        "MAILTARGET_FROM_NAME": dotenv_value(sender_name),
-    }
+    app_password = app_password.replace(" ", "")
+    if len(app_password) > 256:
+        raise ValueError("Gmail SMTP App Password is too long.")
+
+    values = {"GMAIL_SMTP_APP_PASSWORD": dotenv_value(app_password)}
     found = set()
     updated = []
     for line in contents.splitlines():
         match = CONFIG_KEY_PATTERN.match(line)
         key = match.group(1) if match else None
+        if key in LEGACY_CONFIG_KEYS:
+            continue
         if key not in values:
             updated.append(line)
         elif key not in found:
@@ -86,7 +84,7 @@ def update_env_contents(contents, api_key, sender, sender_name):
     return "\n".join(updated) + "\n"
 
 
-def write_env_file(path, api_key, sender, sender_name, owner=None):
+def write_env_file(path, app_password, owner=None):
     path = Path(path)
     if not path.parent.is_dir():
         raise SystemExit("API environment directory does not exist.")
@@ -95,11 +93,11 @@ def write_env_file(path, api_key, sender, sender_name, owner=None):
 
     try:
         contents = path.read_text(encoding="utf-8") if path.exists() else ""
-        updated = update_env_contents(contents, api_key, sender, sender_name)
+        updated = update_env_contents(contents, app_password)
     except (OSError, ValueError) as error:
         raise SystemExit(str(error)) from None
 
-    descriptor, temporary_path = tempfile.mkstemp(prefix=".mailtarget-", dir=path.parent)
+    descriptor, temporary_path = tempfile.mkstemp(prefix=".gmail-smtp-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as temporary_file:
             temporary_file.write(updated)
@@ -113,16 +111,13 @@ def write_env_file(path, api_key, sender, sender_name, owner=None):
 
 
 def main():
-    fields = sys.stdin.buffer.read().split(b"\0")
-    if len(fields) != 3:
-        raise SystemExit("Expected the Mailtarget API key, sender email, and sender name through standard input.")
     try:
-        api_key, sender, sender_name = (field.decode("utf-8") for field in fields)
+        app_password = sys.stdin.buffer.read().decode("utf-8")
     except UnicodeDecodeError:
-        raise SystemExit("Mailtarget configuration must be valid UTF-8.") from None
+        raise SystemExit("Gmail SMTP configuration must be valid UTF-8.") from None
 
-    write_env_file(ENV_FILE, api_key, sender, sender_name, api_service_owner())
-    print("Mailtarget configuration was updated on the API server.")
+    write_env_file(ENV_FILE, app_password, api_service_owner())
+    print("Gmail SMTP configuration was updated on the API server.")
 
 
 if __name__ == "__main__":

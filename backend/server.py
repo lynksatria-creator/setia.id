@@ -2,6 +2,9 @@ from contextlib import asynccontextmanager
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from email.message import EmailMessage
+from email.policy import SMTP as SMTP_POLICY
+from email.utils import formataddr
 from html import escape
 import hashlib
 import hmac
@@ -11,6 +14,8 @@ import os
 from pathlib import Path
 import re
 import secrets
+import smtplib
+import ssl
 import uuid
 from typing import Literal
 
@@ -35,6 +40,10 @@ load_dotenv(ROOT_DIR / ".env")
 mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 db_name = os.environ.get("DB_NAME", "undangan_id")
 MAX_INVITATION_DOCUMENT_SIZE = 15 * 1024 * 1024
+GMAIL_SMTP_HOST = "smtp.gmail.com"
+GMAIL_SMTP_PORT = 587
+GMAIL_SMTP_USERNAME = "nuansainvite.site@gmail.com"
+GMAIL_SMTP_FROM_NAME = "Nuansa Invite"
 
 
 def ensure_invitation_document_size(invitation):
@@ -557,18 +566,14 @@ def get_jwt_secret():
     return secret
 
 
-def get_mailtarget_settings():
-    api_key = os.environ.get("MAILTARGET_API_KEY", "").strip()
-    sender = os.environ.get("MAILTARGET_FROM_EMAIL", os.environ.get("SMTP_FROM_EMAIL", "")).strip()
-    if not api_key or not sender:
+def get_gmail_smtp_settings():
+    app_password = os.environ.get("GMAIL_SMTP_APP_PASSWORD", "").strip().replace(" ", "")
+    if not app_password:
         raise HTTPException(
             status_code=503,
-            detail="MAILTARGET_API_KEY dan MAILTARGET_FROM_EMAIL harus dikonfigurasi untuk mengirim OTP.",
+            detail="GMAIL_SMTP_APP_PASSWORD harus dikonfigurasi untuk mengirim OTP.",
         )
-    sender_name = os.environ.get("MAILTARGET_FROM_NAME", os.environ.get("SMTP_FROM_NAME", "Nuansa Invite")).strip()
-    if sender_name.casefold() == "undangan.id":
-        sender_name = "Nuansa Invite"
-    return {"api_key": api_key, "sender": sender, "sender_name": sender_name or "Nuansa Invite"}
+    return {"app_password": app_password}
 
 
 def ensure_utc(value):
@@ -578,7 +583,7 @@ def ensure_utc(value):
 
 
 async def send_registration_code_email(email, full_name, code):
-    settings = get_mailtarget_settings()
+    settings = get_gmail_smtp_settings()
     text_body = (
         f"Halo {full_name},\n\n"
         f"Kode OTP pendaftaran Nuansa Invite Anda adalah: {code}\n\n"
@@ -594,31 +599,45 @@ async def send_registration_code_email(email, full_name, code):
         "Jangan bagikan kode ini kepada siapa pun.</p>"
         "<p>Jika Anda tidak merasa mendaftar, abaikan email ini.</p>"
     )
-    payload = {
-        "subject": "Kode OTP pendaftaran Nuansa Invite",
-        "from": {"email": settings["sender"], "name": settings["sender_name"]},
-        "to": [{"email": email, "name": full_name}],
-        "bodyText": text_body,
-        "bodyHtml": html_body,
-    }
+    message = EmailMessage(policy=SMTP_POLICY)
+    message["Subject"] = "Kode OTP pendaftaran Nuansa Invite"
+    message["From"] = formataddr((GMAIL_SMTP_FROM_NAME, GMAIL_SMTP_USERNAME))
+    message["To"] = email
+    message.set_content(text_body)
+    message.add_alternative(html_body, subtype="html")
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.post(
-                "https://apiconfig.mailtarget.co/v1/layang/transmissions",
-                headers={"Authorization": f"Bearer {settings['api_key']}"},
-                json=payload,
-            )
-        response.raise_for_status()
-    except httpx.HTTPStatusError as error:
-        status_code = error.response.status_code
-        logging.getLogger(__name__).warning("Mailtarget menolak pengiriman OTP (HTTP %s).", status_code)
+        await asyncio.to_thread(
+            _send_gmail_smtp_message,
+            message,
+            settings["app_password"],
+        )
+    except smtplib.SMTPAuthenticationError as error:
+        logging.getLogger(__name__).warning(
+            "Gmail SMTP menolak autentikasi untuk OTP (SMTP %s).",
+            error.smtp_code,
+        )
         raise HTTPException(
             status_code=502,
-            detail=f"Email OTP gagal dikirim melalui Mailtarget (HTTP {status_code}). Coba lagi beberapa saat.",
+            detail="Email OTP gagal dikirim karena autentikasi Gmail SMTP ditolak. Periksa Google App Password.",
         ) from None
-    except httpx.RequestError as error:
-        logging.getLogger(__name__).warning("Koneksi pengiriman OTP Mailtarget gagal (%s).", type(error).__name__)
-        raise HTTPException(status_code=502, detail="Email OTP gagal dikirim. Coba lagi beberapa saat.") from None
+    except (smtplib.SMTPException, OSError) as error:
+        logging.getLogger(__name__).warning(
+            "Pengiriman OTP Gmail SMTP gagal (%s).",
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Email OTP gagal dikirim melalui Gmail SMTP. Coba lagi beberapa saat.",
+        ) from None
+
+
+def _send_gmail_smtp_message(message, app_password):
+    with smtplib.SMTP(GMAIL_SMTP_HOST, GMAIL_SMTP_PORT, timeout=15) as client:
+        client.ehlo()
+        client.starttls(context=ssl.create_default_context())
+        client.ehlo()
+        client.login(GMAIL_SMTP_USERNAME, app_password)
+        client.send_message(message)
 
 
 def create_access_token(user_id: str, role: str = "user", scope: str | None = None):

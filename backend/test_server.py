@@ -958,11 +958,9 @@ def test_registration_requires_jwt_secret(monkeypatch):
     assert "JWT_SECRET" in response.json()["detail"]
 
 
-def test_registration_requires_configured_mailtarget(monkeypatch):
+def test_registration_requires_configured_gmail_smtp(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
-    monkeypatch.delenv("MAILTARGET_API_KEY", raising=False)
-    monkeypatch.delenv("MAILTARGET_FROM_EMAIL", raising=False)
-    monkeypatch.delenv("SMTP_FROM_EMAIL", raising=False)
+    monkeypatch.delenv("GMAIL_SMTP_APP_PASSWORD", raising=False)
     monkeypatch.setattr(server, "db", SimpleNamespace(
         users=FakeUsersCollection(),
         registration_otps=FakeRegistrationOtpCollection(),
@@ -975,71 +973,85 @@ def test_registration_requires_configured_mailtarget(monkeypatch):
     })
 
     assert response.status_code == 503
-    assert "MAILTARGET_API_KEY" in response.json()["detail"]
+    assert "GMAIL_SMTP_APP_PASSWORD" in response.json()["detail"]
 
 
-def test_registration_otp_is_sent_through_mailtarget(monkeypatch):
-    monkeypatch.setenv("MAILTARGET_API_KEY", "test-mailtarget-key")
-    monkeypatch.setenv("MAILTARGET_FROM_EMAIL", "hello@example.com")
+def test_registration_otp_is_sent_through_gmail_smtp(monkeypatch):
+    monkeypatch.setenv("GMAIL_SMTP_APP_PASSWORD", "abcd efgh ijkl mnop")
     captured = {}
 
-    class MailtargetResponse:
-        def raise_for_status(self):
-            return None
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            captured.update(host=host, port=port, timeout=timeout)
 
-    class MailtargetClient:
-        def __init__(self, **_kwargs):
-            pass
-
-        async def __aenter__(self):
+        def __enter__(self):
             return self
 
-        async def __aexit__(self, *_args):
+        def __exit__(self, *_args):
             return None
 
-        async def post(self, url, **kwargs):
-            captured.update(url=url, **kwargs)
-            return MailtargetResponse()
+        def ehlo(self):
+            return None
 
-    monkeypatch.setattr(server.httpx, "AsyncClient", MailtargetClient)
+        def starttls(self, context):
+            captured["tls_context"] = context
+
+        def login(self, username, password):
+            captured.update(username=username, password=password)
+
+        def send_message(self, message):
+            captured["message"] = message
+
+    monkeypatch.setattr(server.smtplib, "SMTP", FakeSMTP)
 
     asyncio.run(server.send_registration_code_email("recipient@example.com", "Test User", "123456"))
 
-    assert captured["url"] == "https://apiconfig.mailtarget.co/v1/layang/transmissions"
-    assert captured["headers"]["Authorization"] == "Bearer test-mailtarget-key"
-    assert captured["json"]["from"]["email"] == "hello@example.com"
-    assert captured["json"]["to"] == [{"email": "recipient@example.com", "name": "Test User"}]
-    assert "123456" in captured["json"]["bodyText"]
+    message = captured["message"]
+    assert captured["host"] == "smtp.gmail.com"
+    assert captured["port"] == 587
+    assert captured["timeout"] == 15
+    assert captured["username"] == "nuansainvite.site@gmail.com"
+    assert captured["password"] == "abcdefghijklmnop"
+    assert isinstance(captured["tls_context"], server.ssl.SSLContext)
+    assert message["From"] == "Nuansa Invite <nuansainvite.site@gmail.com>"
+    assert message["To"] == "recipient@example.com"
+    assert "123456" in message.get_body(preferencelist=("plain",)).get_content()
+    html_part = next(part for part in message.walk() if part.get_content_type() == "text/html")
+    assert "123456" in html_part.get_content()
 
 
-def test_registration_otp_failure_reports_mailtarget_status_without_provider_body(monkeypatch, caplog):
-    monkeypatch.setenv("MAILTARGET_API_KEY", "test-mailtarget-key")
-    monkeypatch.setenv("MAILTARGET_FROM_EMAIL", "hello@example.com")
+def test_registration_otp_gmail_auth_failure_does_not_log_credentials(monkeypatch, caplog):
+    monkeypatch.setenv("GMAIL_SMTP_APP_PASSWORD", "test-app-password")
 
-    class MailtargetClient:
-        def __init__(self, **_kwargs):
+    class FakeSMTP:
+        def __init__(self, *_args, **_kwargs):
             pass
 
-        async def __aenter__(self):
+        def __enter__(self):
             return self
 
-        async def __aexit__(self, *_args):
+        def __exit__(self, *_args):
             return None
 
-        async def post(self, url, **_kwargs):
-            request = server.httpx.Request("POST", url)
-            return server.httpx.Response(401, request=request, text="provider-secret-details")
+        def ehlo(self):
+            return None
 
-    monkeypatch.setattr(server.httpx, "AsyncClient", MailtargetClient)
+        def starttls(self, **_kwargs):
+            return None
+
+        def login(self, *_args):
+            raise server.smtplib.SMTPAuthenticationError(535, b"test-app-password")
+
+    monkeypatch.setattr(server.smtplib, "SMTP", FakeSMTP)
 
     with caplog.at_level("WARNING"):
         with pytest.raises(server.HTTPException) as error:
             asyncio.run(server.send_registration_code_email("recipient@example.com", "Test User", "123456"))
 
     assert error.value.status_code == 502
-    assert "HTTP 401" in error.value.detail
-    assert "HTTP 401" in caplog.text
-    assert "provider-secret-details" not in caplog.text
+    assert "App Password" in error.value.detail
+    assert "535" in caplog.text
+    assert "test-app-password" not in caplog.text
 
 
 def test_registration_verifies_email_otp_before_creating_session(monkeypatch):
