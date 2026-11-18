@@ -6,10 +6,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+from email_validator import EmailNotValidError, validate_email
+
 
 ENV_FILE = Path("/opt/auroramedia-api/app/.env")
 CONFIG_KEY_PATTERN = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
-SENDER_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def api_service_owner():
@@ -52,8 +53,12 @@ def update_env_contents(contents, api_key, sender, sender_name):
         raise ValueError("Mailtarget API key cannot be empty or have surrounding whitespace.")
     if len(api_key) > 4096:
         raise ValueError("Mailtarget API key is too long.")
-    if not SENDER_PATTERN.fullmatch(sender) or len(sender) > 254:
+    if len(sender) > 254:
         raise ValueError("Mailtarget sender must be a valid email address.")
+    try:
+        validate_email(sender, check_deliverability=False)
+    except EmailNotValidError:
+        raise ValueError("Mailtarget sender must be a valid email address.") from None
     sender_name = sender_name.strip() or "Nuansa Invite"
     if len(sender_name) > 128:
         raise ValueError("Mailtarget sender name is too long.")

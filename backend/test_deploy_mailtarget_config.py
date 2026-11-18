@@ -43,6 +43,10 @@ def test_update_env_contents_removes_duplicate_mailtarget_entries():
         ("", "hello@example.com", "Nuansa Invite"),
         ("key\nMAILTARGET_FROM_EMAIL=attacker@example.com", "hello@example.com", "Nuansa Invite"),
         ("valid-key", "not-an-email", "Nuansa Invite"),
+        ("valid-key", "a..b@example.com", "Nuansa Invite"),
+        ("valid-key", "a@example..com", "Nuansa Invite"),
+        ("valid-key", "a@-bad.example", "Nuansa Invite"),
+        ("valid-key", "a.@example.com", "Nuansa Invite"),
         ("valid-key", "hello@example.com", "name\nMAILTARGET_API_KEY=attacker"),
     ],
 )
