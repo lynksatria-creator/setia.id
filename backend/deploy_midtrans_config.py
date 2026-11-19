@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 
-ENV_FILE = Path("/opt/auroramedia-api/app/.env")
+ENV_FILE = Path("/opt/auroramedia-api/api.env")
 SERVER_KEY_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
 CONFIG_KEY_PATTERN = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
