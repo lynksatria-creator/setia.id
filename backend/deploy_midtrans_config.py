@@ -101,6 +101,8 @@ def main():
         raise SystemExit("Expected the Midtrans key and environment through standard input.")
     try:
         server_key, is_sandbox = (field.decode("utf-8") for field in fields)
+        server_key = server_key.strip()
+        is_sandbox = is_sandbox.strip()
     except UnicodeDecodeError:
         raise SystemExit("Midtrans configuration must be valid UTF-8.") from None
     if not server_key:
