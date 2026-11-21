@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../context/AuthContext';
 import { billingApi, dashboardManagementApi, guestbookApi, invitationsApi, paymentsApi, resellerApi } from '../lib/api';
@@ -70,11 +70,11 @@ const invitationTemplates = [
   { id: 'luxury-gold', name: 'Royal Gold', category: 'Pernikahan', description: 'Hangat dan elegan', colors: ['#c49a3d', '#fffaf5'] },
   { id: 'royal-black-gold', name: 'Royal Black Gold', category: 'Pernikahan', description: 'Megah dan dramatis', colors: ['#111827', '#f5d98b'] },
   { id: 'luxury-maroon', name: 'Luxury Maroon', category: 'Pernikahan', description: 'Mewah dan berani', colors: ['#741f36', '#fff4f1'] },
-  { id: 'classic-wedding', name: 'Classic Wedding', category: 'Pernikahan', description: 'Klasik dan timeless', colors: ['#8c7255', '#fffdf8'] },
+  { id: 'classic-wedding', name: 'Klasik Emas', category: 'Pernikahan', description: 'Klasik dan timeless', colors: ['#8c7255', '#fffdf8'] },
   { id: 'elegant-white-gold', name: 'Elegant White Gold', category: 'Pernikahan', description: 'Bersih dan eksklusif', colors: ['#b28a45', '#ffffff'] },
   { id: 'rose-gold-romance', name: 'Rose Gold Romance', category: 'Pernikahan', description: 'Lembut dan romantis', colors: ['#b76e79', '#fff7f6'] },
   { id: 'emerald-royal', name: 'Emerald Royal', category: 'Pernikahan', description: 'Segar dan premium', colors: ['#18745b', '#f1faf5'] },
-  { id: 'navy-royal', name: 'Navy Royal', category: 'Pernikahan', description: 'Formal dan megah', colors: ['#1e3a5f', '#f3f6fb'] },
+  { id: 'navy-royal', name: 'Royal Sapphire & Gold', category: 'Pernikahan', description: 'Formal dan megah', colors: ['#1e3a5f', '#f3f6fb'] },
   { id: 'garden-luxury', name: 'Garden Luxury', category: 'Pernikahan', description: 'Romantis dan natural', colors: ['#557463', '#f4f8f2'] },
   { id: 'floral-elegant', name: 'Floral Elegant', category: 'Pernikahan', description: 'Floral dan berkelas', colors: ['#a87945', '#fff8ed'] },
   { id: 'minimalist-luxury', name: 'Minimalist Luxury', category: 'Pernikahan', description: 'Sederhana dan premium', colors: ['#4b5563', '#f9fafb'] },
@@ -451,6 +451,82 @@ const copyTextToClipboard = async (value) => {
   input.remove();
   if (!copied) throw new Error('Tautan tidak dapat disalin. Silakan salin secara manual.');
 };
+
+export function GuestShareGenerator({ invitation, isActive = false, isPublished = false }) {
+  const [guestName, setGuestName] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const copyTimer = useRef(null);
+
+  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
+
+  if (!invitation || !isActive) return null;
+
+  const shareUrl = buildPersonalizedInvitationUrl(invitation.slug, guestName);
+  const coupleTitle = invitation.content?.couple_names?.trim() || invitation.title;
+  const recipient = guestName.trim() || 'Tamu Undangan';
+  const whatsappMessage = [
+    `Kepada Yth. Bapak/Ibu/Saudara/i *${recipient}*,`,
+    '',
+    'Dengan hormat, kami mengundang Anda untuk hadir di acara:',
+    `*${coupleTitle}*`,
+    '',
+    'Informasi lengkap acara dapat diakses melalui tautan berikut:',
+    shareUrl,
+    '',
+    'Merupakan kebahagiaan bagi kami apabila Anda berkenan hadir dan memberikan doa restu.',
+    'Terima kasih.',
+  ].join('\n');
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
+
+  const copyShareUrl = async () => {
+    try {
+      await copyTextToClipboard(shareUrl);
+      setStatusMessage('Tautan tamu berhasil disalin.');
+      window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setStatusMessage(''), 2000);
+    } catch (copyError) {
+      setStatusMessage(copyError.message);
+    }
+  };
+
+  return (
+    <section className="guest-share-generator" aria-labelledby={`guest-share-title-${invitation.id}`}>
+      <div className="guest-share-heading">
+        <div>
+          <span className="eyebrow">Distribusi tamu</span>
+          <h4 id={`guest-share-title-${invitation.id}`}>Bagikan undangan personal</h4>
+        </div>
+      </div>
+      <label htmlFor={`guest-share-name-${invitation.id}`}>Nama tamu undangan</label>
+      <input
+        id={`guest-share-name-${invitation.id}`}
+        type="text"
+        value={guestName}
+        onChange={(event) => setGuestName(event.target.value)}
+        placeholder="Contoh: Bpk. Andi Oktora & Keluarga"
+        maxLength={120}
+      />
+      <output className="guest-share-url" aria-label="Link undangan personal">{shareUrl}</output>
+      {!isPublished ? <p className="form-hint">Publikasikan undangan terlebih dahulu agar tautan dapat dibuka tamu.</p> : null}
+      <div className="guest-share-actions">
+        <button type="button" className="secondary-button" onClick={copyShareUrl} disabled={!isPublished}>
+          Salin link tamu
+        </button>
+        {isPublished ? (
+          <a className="primary-btn" href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+            Kirim via WhatsApp
+          </a>
+        ) : (
+          <button type="button" className="primary-btn" disabled>
+            Kirim via WhatsApp
+          </button>
+        )}
+      </div>
+      {statusMessage ? <p className="form-hint" role="status">{statusMessage}</p> : null}
+    </section>
+  );
+}
+
 const downloadGuestbookSpreadsheet = async (entries, filename, tickets = null) => {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
@@ -505,12 +581,16 @@ const downloadGuestbookSpreadsheet = async (entries, filename, tickets = null) =
 
 export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const { user, token, isChecking, logout } = useAuth();
+  const requestedTemplateId = new URLSearchParams(window.location.search).get('template');
+  const requestedTemplate = invitationTemplates.find((template) => template.id === requestedTemplateId);
   const [billing, setBilling] = useState({ plans: [], payment_methods: [] });
   const [invitations, setInvitations] = useState([]);
   const [deliveryTicketsByInvitation, setDeliveryTicketsByInvitation] = useState({});
   const [isLoadingDeliveryTickets, setIsLoadingDeliveryTickets] = useState(false);
-  const [buyerMenu, setBuyerMenu] = useState('dashboard');
+  const [buyerMenu, setBuyerMenu] = useState(requestedTemplate ? 'invitations' : 'dashboard');
   const [previewInvitation, setPreviewInvitation] = useState(null);
+  const [previewDevice, setPreviewDevice] = useState('mobile');
+  const [previewRecipientName, setPreviewRecipientName] = useState(() => new URLSearchParams(window.location.search).get('to') || '');
   const [guestbookInvitation, setGuestbookInvitation] = useState(null);
   const [ownerGuestbook, setOwnerGuestbook] = useState([]);
   const [invitationTickets, setInvitationTickets] = useState([]);
@@ -523,7 +603,9 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const [setupProvince, setSetupProvince] = useState('');
   const [setupEventType, setSetupEventType] = useState('');
   const [setupTemplateId, setSetupTemplateId] = useState('');
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => requestedTemplate
+    ? { ...emptyForm, template_id: requestedTemplate.id }
+    : emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [activationPlanSelections, setActivationPlanSelections] = useState({});
   const [paymentMethodId, setPaymentMethodId] = useState('');
@@ -670,6 +752,17 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
   const showBuyerDashboard = user?.role !== 'user' || buyerMenu === 'dashboard';
   const showBuyerInvitations = user?.role !== 'user' || buyerMenu === 'invitations';
   const showBuyerGuide = user?.role !== 'user' || buyerMenu === 'guide';
+  const isInvitationActive = (invitation) => (
+    ['active', 'published'].includes(invitation.status)
+    && (user?.is_test_account || new Date(invitation.active_until) > new Date())
+  );
+  const activeInvitations = invitations.filter(isInvitationActive);
+  const draftInvitations = invitations.filter((invitation) => !isInvitationActive(invitation));
+  const groupedInvitations = [
+    ...activeInvitations.map((invitation) => ({ invitation, group: 'active' })),
+    ...draftInvitations.map((invitation) => ({ invitation, group: 'draft' })),
+  ];
+  const hasPublishedInvitations = activeInvitations.some((invitation) => invitation.status === 'published');
   const deliverySummary = Object.values(deliveryTicketsByInvitation).flat().reduce((summary, ticket) => {
     const status = ['sent', 'delivered', 'read'].includes(ticket.delivery_status)
       ? 'sent'
@@ -1948,8 +2041,8 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                 </div>
                 <div className="buyer-dashboard-stats">
                   <article><strong>{invitations.length}</strong><span>Total undangan</span></article>
-                  <article><strong>{invitations.filter((invitation) => invitation.status === 'published').length}</strong><span>Sudah dipublikasikan</span></article>
-                  <article><strong>{invitations.filter((invitation) => invitation.status !== 'published').length}</strong><span>Draft / belum tayang</span></article>
+                  <article><strong>{activeInvitations.filter((invitation) => invitation.status === 'published').length}</strong><span>Sudah dipublikasikan</span></article>
+                  <article><strong>{draftInvitations.length}</strong><span>Draft / belum tayang</span></article>
                 </div>
                 <button type="button" className="primary-btn" onClick={() => setBuyerMenu('invitations')}>Buat atau lanjutkan undangan</button>
               </section>
@@ -2341,7 +2434,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
           {error ? <p className="form-error account-error" role="alert">{error}</p> : null}
 
           <section className="account-panel buyer-invitations-view" id="buyer-invitation-list" hidden={!showBuyerInvitations}>
-            {user?.role === 'user' ? <section className="delivery-dashboard-summary" aria-label="Ringkasan pengiriman">
+            {user?.role === 'user' && hasPublishedInvitations ? <section className="delivery-dashboard-summary" aria-label="Ringkasan pengiriman">
               <div><span className="eyebrow">Dashboard pengiriman</span><h2>Status undangan WhatsApp</h2></div>
               <div className="delivery-dashboard-counts">
                 <div><strong>{isLoadingDeliveryTickets ? '…' : deliverySummary.total}</strong><span>Total undangan</span></div>
@@ -2358,7 +2451,8 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
             <div className="account-panel-heading"><div><span className="eyebrow">Koleksi Anda</span><h2>Undangan dan masa aktif</h2></div><button className="text-button" onClick={() => refreshInvitations().catch((requestError) => setError(requestError.message))}>Muat ulang</button></div>
             {!invitations.length ? <p className="form-hint">Belum ada draft. Isi form di atas untuk memulai.</p> : (
               <div className="account-invitation-list">
-                {invitations.map((invitation) => {
+                {groupedInvitations.map(({ invitation, group }, index) => {
+                  const showGroupHeading = group !== groupedInvitations[index - 1]?.group;
                   const plan = billing.plans.find((item) => item.id === invitation.plan_id);
                   const activationPlanId = activationPlanSelections[invitation.id] || invitation.plan_id;
                   const activationPlan = billing.plans.find((item) => item.id === activationPlanId && item.enabled !== false) || plan;
@@ -2366,7 +2460,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                   const activationPaymentMethods = activationBulkEnabled
                     ? billing.payment_methods.filter((method) => method.provider === 'midtrans')
                     : billing.payment_methods;
-                  const active = user.is_test_account || (['active', 'published'].includes(invitation.status) && new Date(invitation.active_until) > new Date());
+                  const active = user.is_test_account || isInvitationActive(invitation);
                   const invitationUrl = buildPersonalizedInvitationUrl(invitation.slug, '');
                   const { bulkUploadEnabled } = getPackageEntitlements(invitation, plan);
                   const supportsBulkUpload = ['premium', 'business'].includes(invitation.plan_id) && bulkUploadEnabled;
@@ -2394,7 +2488,12 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                     )
                     : '';
                   return (
-                    <article className="account-invitation-card" key={invitation.id}>
+                    <Fragment key={invitation.id}>
+                    {showGroupHeading ? <div className="account-invitation-group-heading">
+                      <h3>{group === 'active' ? 'Undangan aktif' : 'Draft / belum aktif'}</h3>
+                      <span>{group === 'active' ? activeInvitations.length : draftInvitations.length}</span>
+                    </div> : null}
+                    <article className="account-invitation-card">
                       <div><span className={`status-label status-${invitation.status}`}>{invitation.status}</span><h3>{invitation.title}</h3><p>{user.is_test_account ? 'Business · aktif selamanya' : `${plan?.name || invitation.plan_id} · aktif sampai ${displayDate(invitation.active_until)}`}</p><p className="invitation-link-label">{active ? buildPersonalizedInvitationUrl(invitation.slug, '') : 'Link share terbuka setelah pembayaran dan publish.'}</p>{invitation.status === 'published' ? <p className="invitation-link-label">Dashboard RSVP: {createOwnerGuestbookUrl(invitation.slug)}</p> : null}</div>
                       <div className="account-card-actions">
                         <button className="secondary-btn" onClick={() => setPreviewInvitation(invitation)}>Preview</button>
@@ -2518,6 +2617,11 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                           ) : null}
                         </div>
                       </div>
+                      <GuestShareGenerator
+                        invitation={invitation}
+                        isActive={active}
+                        isPublished={invitation.status === 'published'}
+                      />
                       {whatsAppInvitationId === invitation.id ? (
                         <div className="invitation-share-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setWhatsAppInvitationId(null); setShareDialogInvitationId(null); } }}>
                           <section className="invitation-share-modal" role="dialog" aria-modal="true" aria-labelledby={`share-dialog-title-${invitation.id}`}>
@@ -2587,6 +2691,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                           </div>
                       ) : null}
                     </article>
+                    </Fragment>
                   );
                 })}
               </div>
@@ -2699,8 +2804,41 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
 
           {previewInvitation ? (
             <section className="account-panel invitation-preview-panel buyer-invitations-view" hidden={!showBuyerInvitations}>
-              <div className="account-panel-heading"><div><span className="eyebrow">Preview untuk calon undangan</span><h2>{previewInvitation.title}</h2></div><button className="text-button" onClick={() => setPreviewInvitation(null)}>Tutup preview</button></div>
-              <div className="invitation-preview-viewport"><PublicInvitation invitation={previewInvitation} slug={previewInvitation.slug} /></div>
+              <div className="account-panel-heading">
+                <div><span className="eyebrow">Preview untuk calon undangan</span><h2>{previewInvitation.title}</h2></div>
+                <button className="text-button" onClick={() => setPreviewInvitation(null)}>Tutup preview</button>
+              </div>
+              <div className="invitation-preview-controls">
+                <div className="invitation-preview-device-switch" role="group" aria-label="Ukuran preview">
+                  {['mobile', 'tablet', 'desktop'].map((device) => (
+                    <button
+                      type="button"
+                      key={device}
+                      className={previewDevice === device ? 'selected' : ''}
+                      aria-pressed={previewDevice === device}
+                      onClick={() => setPreviewDevice(device)}
+                    >
+                      {device === 'mobile' ? 'Mobile' : device === 'tablet' ? 'Tablet' : 'Desktop'}
+                    </button>
+                  ))}
+                </div>
+                <label>Simulasi nama tamu
+                  <input
+                    value={previewRecipientName}
+                    onChange={(event) => setPreviewRecipientName(event.target.value)}
+                    placeholder="Contoh: Bapak Andi & Keluarga"
+                  />
+                </label>
+              </div>
+              <div className={`invitation-preview-frame preview-device-${previewDevice}`}>
+                <div className="invitation-preview-viewport">
+                  <PublicInvitation
+                    invitation={previewInvitation}
+                    slug={previewInvitation.slug}
+                    previewRecipientName={previewRecipientName}
+                  />
+                </div>
+              </div>
             </section>
           ) : null}
         </section>

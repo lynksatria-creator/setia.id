@@ -1,18 +1,18 @@
 .invitation-shell {
-  --primary: #2563eb;
-  --theme-primary: #2563eb;
-  --theme-secondary: #e0f2fe;
-  --theme-accent: #06b6d4;
-  --ink: #0f172a;
-  --muted: #475569;
+  --primary: #b88e44;
+  --theme-primary: #b88e44;
+  --theme-secondary: #faf5eb;
+  --theme-accent: #d0ad68;
+  --ink: #2c2621;
+  --muted: #6e675f;
   --card: #fff;
-  --line: #dbe3ee;
+  --line: #eae4da;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse at 86% 5%, rgba(6, 182, 212, 0.08), transparent 28%),
-    #f4f7fc;
-  color: #0f172a;
-  font-family: 'DM Sans', Arial, sans-serif;
+    radial-gradient(ellipse at 86% 5%, rgba(184, 142, 68, 0.1), transparent 28%),
+    #f8f6f2;
+  color: #2c2621;
+  font-family: 'Plus Jakarta Sans', Arial, sans-serif;
 }
 
 .invitation-shell .container {
@@ -20,9 +20,13 @@
 }
 
 .invitation-topbar {
-  border-color: rgba(203, 213, 225, 0.65);
-  background: rgba(244, 247, 252, 0.86);
-  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.035);
+  position: sticky;
+  z-index: 40;
+  top: 0;
+  border-color: rgba(234, 228, 218, 0.85);
+  background: rgba(248, 246, 242, 0.86);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 26px rgba(44, 38, 33, 0.035);
 }
 
 .invitation-nav-wrap {
@@ -33,14 +37,14 @@
 }
 
 .invitation-nav-wrap .brand {
-  color: #0f172a;
+  color: #2c2621;
   text-decoration: none;
   white-space: nowrap;
 }
 
 .invitation-nav-wrap .logo-mark {
-  background: linear-gradient(135deg, #2563eb, #06b6d4);
-  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.25);
+  background: linear-gradient(135deg, #b88e44, #d6bb81);
+  box-shadow: 0 8px 22px rgba(184, 142, 68, 0.25);
 }
 
 .invitation-nav-wrap .site-logo-image {
@@ -60,7 +64,7 @@
 }
 
 .invitation-nav-wrap .nav-links a {
-  color: #475569;
+  color: #6e675f;
   font-size: 0.72rem;
   font-weight: 700;
   text-decoration: none;
@@ -70,7 +74,7 @@
 .invitation-nav-wrap .nav-links a:hover,
 .invitation-nav-wrap .nav-links a:focus-visible,
 .invitation-nav-wrap .nav-links a[aria-current="page"] {
-  color: #2563eb;
+  color: #9e7632;
 }
 
 .invitation-nav-actions {
@@ -79,8 +83,8 @@
 
 .invitation-nav-actions .primary-btn,
 .invitation-shell .primary-btn {
-  background: linear-gradient(110deg, #2563eb, #3b82f6 55%, #06b6d4);
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.2);
+  background: linear-gradient(110deg, #9e7632, #b88e44 55%, #d0ad68);
+  box-shadow: 0 10px 24px rgba(184, 142, 68, 0.2);
   color: #fff;
   cursor: pointer;
   text-decoration: none;
@@ -88,12 +92,12 @@
 
 .invitation-shell .primary-btn:hover,
 .invitation-shell .primary-btn:focus-visible {
-  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 14px 30px rgba(184, 142, 68, 0.3);
   transform: translateY(-2px);
 }
 
 .invitation-login-link {
-  color: #0f172a;
+  color: #2c2621;
   cursor: pointer;
 }
 
@@ -106,8 +110,8 @@
   overflow: hidden;
   padding: clamp(54px, 7vw, 96px) 0 clamp(68px, 8vw, 112px);
   background:
-    radial-gradient(circle at 54% 17%, rgba(37, 99, 235, 0.13), transparent 34%),
-    linear-gradient(180deg, #f4f7fc 0%, #fff 100%);
+    radial-gradient(circle at 54% 17%, rgba(184, 142, 68, 0.13), transparent 34%),
+    linear-gradient(180deg, #f8f6f2 0%, #fff 100%);
 }
 
 .invitation-home-hero::before,
@@ -117,7 +121,7 @@
   width: 310px;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: rgba(6, 182, 212, 0.1);
+  background: rgba(208, 173, 104, 0.12);
   content: "";
   filter: blur(75px);
   pointer-events: none;
@@ -131,7 +135,7 @@
 .invitation-home-hero::after {
   bottom: -16%;
   left: -7%;
-  background: rgba(37, 99, 235, 0.1);
+  background: rgba(184, 142, 68, 0.1);
 }
 
 .invitation-home-hero > .container {
@@ -153,25 +157,25 @@
   align-items: center;
   gap: 10px;
   padding: 10px 15px;
-  border: 1px solid rgba(37, 99, 235, 0.18);
+  border: 1px solid rgba(184, 142, 68, 0.24);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 8px 25px rgba(37, 99, 235, 0.08);
-  color: #2563eb !important;
+  box-shadow: 0 8px 25px rgba(184, 142, 68, 0.08);
+  color: #9e7632 !important;
 }
 
 .invitation-hero-eyebrow > span {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #06b6d4;
-  box-shadow: 0 0 0 5px rgba(6, 182, 212, 0.12);
+  background: #b88e44;
+  box-shadow: 0 0 0 5px rgba(184, 142, 68, 0.12);
 }
 
 .invitation-home-hero h1 {
   max-width: 690px;
   margin: 25px 0 20px;
-  color: #0f172a;
+  color: #2c2621;
   font-size: clamp(3rem, 6.2vw, 5.4rem);
   font-weight: 700;
   letter-spacing: -0.035em;
@@ -181,7 +185,7 @@
 .invitation-home-hero .invitation-hero-copy > p:not(.eyebrow) {
   max-width: 610px;
   margin: 0;
-  color: #475569;
+  color: #6e675f;
   font-size: clamp(0.94rem, 1.2vw, 1.08rem);
   line-height: 1.8;
 }
@@ -205,9 +209,9 @@
 }
 
 .invitation-home-hero .cta-row .secondary-btn {
-  border: 1px solid #cbd5e1;
+  border: 1px solid #eae4da;
   background: rgba(255, 255, 255, 0.82);
-  color: #0f172a;
+  color: #2c2621;
   text-decoration: none;
 }
 
@@ -920,4 +924,100 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.site-shell.invitation-shell .topbar {
+  border-color: color-mix(in srgb, var(--theme-primary), transparent 84%);
+  background: color-mix(in srgb, var(--theme-background) 90%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.invitation-shell .invitation-home-hero {
+  background:
+    radial-gradient(circle at 54% 17%, color-mix(in srgb, var(--theme-primary), transparent 86%), transparent 34%),
+    linear-gradient(180deg, var(--theme-background) 0%, #fff 100%);
+}
+
+.invitation-shell .invitation-home-hero .hero-micro span {
+  border-color: color-mix(in srgb, var(--theme-primary), transparent 78%);
+  color: var(--theme-text);
+}
+
+.invitation-shell .invitation-home-hero .invitation-visual {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--theme-primary), #2c2621 22%), var(--theme-primary) 58%, var(--theme-accent));
+  box-shadow: 0 32px 70px color-mix(in srgb, var(--theme-primary), transparent 78%);
+}
+
+.invitation-shell .invitation-page-hero {
+  background:
+    radial-gradient(ellipse at 85% 2%, color-mix(in srgb, var(--theme-accent), transparent 80%), transparent 38%),
+    linear-gradient(150deg, var(--theme-secondary), #fff 72%);
+}
+
+.invitation-shell .invitation-page-hero .eyebrow,
+.invitation-shell .invitation-section-head .eyebrow,
+.invitation-shell .invitation-text-link {
+  color: var(--theme-primary);
+}
+
+.invitation-shell .invitation-page-hero h1,
+.invitation-shell .invitation-section-head h2,
+.invitation-shell .invitation-feature-card h3,
+.invitation-shell .template-card h3 {
+  color: var(--theme-text);
+}
+
+.invitation-shell .muted-bg {
+  background: var(--theme-secondary);
+}
+
+.invitation-shell .invitation-feature-card {
+  border-color: color-mix(in srgb, var(--theme-primary), transparent 82%);
+}
+
+.invitation-shell .invitation-feature-card .feature-icon {
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent));
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--theme-primary), transparent 80%);
+}
+
+.invitation-shell .invitation-promo {
+  background: linear-gradient(115deg, color-mix(in srgb, var(--theme-primary), #2c2621 20%), var(--theme-primary) 56%, var(--theme-accent));
+}
+
+.invitation-shell .invitation-promo .eyebrow {
+  color: color-mix(in srgb, #fff, var(--theme-accent) 28%);
+}
+
+.invitation-shell .invitation-promo .primary-btn {
+  color: var(--theme-primary);
+}
+
+.invitation-shell .invitation-home-cta .auth-panel {
+  border-color: color-mix(in srgb, var(--theme-primary), transparent 84%);
+  background: linear-gradient(135deg, #fff, var(--theme-secondary));
+}
+
+.invitation-shell .invitation-home-cta .auth-panel h2 {
+  color: var(--theme-text);
+}
+
+.invitation-shell .invitation-pricing-section {
+  background:
+    radial-gradient(ellipse at 50% 0, color-mix(in srgb, var(--theme-primary), transparent 90%), transparent 42%),
+    var(--theme-secondary);
+}
+
+.invitation-shell .template-card-actions .template-preview-link,
+.invitation-shell .template-qr-panel .template-preview-link {
+  background: linear-gradient(110deg, var(--theme-primary), var(--theme-accent));
+  color: #fff;
+  text-decoration: none;
+}
+
+.invitation-shell .template-card-actions .template-preview-link:hover,
+.invitation-shell .template-card-actions .template-preview-link:focus-visible,
+.invitation-shell .template-qr-panel .template-preview-link:hover,
+.invitation-shell .template-qr-panel .template-preview-link:focus-visible {
+  background: linear-gradient(110deg, color-mix(in srgb, var(--theme-primary), #2c2621 18%), var(--theme-primary));
+  color: #fff;
 }

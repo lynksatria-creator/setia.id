@@ -48,11 +48,11 @@ const templateNames = {
   'luxury-gold': 'Royal Gold',
   'royal-black-gold': 'Royal Black Gold',
   'luxury-maroon': 'Luxury Maroon',
-  'classic-wedding': 'Classic Wedding',
+  'classic-wedding': 'Klasik Emas',
   'elegant-white-gold': 'Elegant White Gold',
   'rose-gold-romance': 'Rose Gold Romance',
   'emerald-royal': 'Emerald Royal',
-  'navy-royal': 'Navy Royal',
+  'navy-royal': 'Royal Sapphire & Gold',
   'garden-luxury': 'Garden Luxury',
   'floral-elegant': 'Floral Elegant',
   'minimalist-luxury': 'Minimalist Luxury',
@@ -168,8 +168,8 @@ const templateCopy = {
   'gen-z-editorial': { kicker: 'Main Character Energy', greeting: 'Save the date! Hari spesial kami bakal makin seru kalau kamu ikut hadir. See you there!', quote: 'Make memories, take pictures, stay a little longer.', source: 'The Moodboard', storyTitle: 'Our Plot Twist', storyText: 'Dari satu momen random, sekarang jadi cerita favorit yang mau kami rayakan bareng kamu.', closing: 'Outfit ready, camera ready, let’s celebrate!' },
 };
 
-export default function PublicInvitation({ slug, invitation: initialInvitation = null }) {
-  const recipientName = new URLSearchParams(window.location.search).get('to')?.trim() || '';
+export default function PublicInvitation({ slug, invitation: initialInvitation = null, previewRecipientName = null }) {
+  const recipientName = previewRecipientName ?? new URLSearchParams(window.location.search).get('to')?.trim() ?? '';
   const [invitation, setInvitation] = useState(initialInvitation);
   const [error, setError] = useState('');
   const [inviteeName, setInviteeName] = useState('');
@@ -200,6 +200,12 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
       .catch((requestError) => { if (active) setError(requestError.message); });
     return () => { active = false; };
   }, [initialInvitation, slug]);
+
+  useEffect(() => {
+    if (previewRecipientName !== null) {
+      setGuestForm((current) => ({ ...current, name: previewRecipientName.trim() }));
+    }
+  }, [previewRecipientName]);
 
   useEffect(() => {
     let favicon = document.head.querySelector('link[rel="icon"]');

@@ -427,7 +427,7 @@ test('shows active affiliate advertisements on the Nuansa Invite homepage', asyn
 });
 
 test('shows a scannable QR code for an invitation template', () => {
-  window.history.pushState({}, '', '/undangan');
+  window.history.pushState({}, '', '/undangan/template');
   renderApp();
 
   fireEvent.click(screen.getAllByRole('button', { name: /lihat qr/i })[0]);
@@ -436,7 +436,7 @@ test('shows a scannable QR code for an invitation template', () => {
 });
 
 test('opens a guest-facing preview beside a template card', () => {
-  window.history.pushState({}, '', '/undangan');
+  window.history.pushState({}, '', '/undangan/template');
   renderApp();
 
   const previewLink = screen.getAllByRole('link', { name: /preview undangan/i })[0];
@@ -810,7 +810,7 @@ test('attempts invitation music automatically and explains when browser playback
 });
 
 test('filters Nuansa Invite templates by category and can show all categories', () => {
-  window.history.pushState({}, '', '/undangan');
+  window.history.pushState({}, '', '/undangan/template');
   const { container } = renderApp();
 
   expect(container.querySelectorAll('.template-card')).toHaveLength(6);

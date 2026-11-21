@@ -77,14 +77,43 @@ export default function Templates({ templates, demos, categories = [] }) {
 
   useEffect(() => {
     const handleHashChange = () => {
-      const nextTemplate = readHashTemplate(templates);
-      setPreviewTemplate(nextTemplate);
-      if (nextTemplate) window.setTimeout(() => document.getElementById('template-preview')?.scrollIntoView({ behavior: 'smooth' }), 80);
+      setPreviewTemplate(readHashTemplate(templates));
     };
     window.addEventListener('hashchange', handleHashChange);
-    if (previewTemplate) window.setTimeout(() => document.getElementById('template-preview')?.scrollIntoView({ behavior: 'smooth' }), 80);
+    handleHashChange();
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [templates, previewTemplate]);
+  }, [templates]);
+
+  useEffect(() => {
+    if (!previewTemplate) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      setPreviewTemplate(null);
+      if (window.location.hash.startsWith('#template-')) {
+        window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [previewTemplate]);
+
+  const openPreview = (template) => {
+    setPreviewTemplate(template);
+    const hash = `#template-${slugify(template.name)}`;
+    if (window.location.hash !== hash) window.location.hash = hash;
+  };
+
+  const closePreview = () => {
+    setPreviewTemplate(null);
+    if (window.location.hash.startsWith('#template-')) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+    }
+  };
 
   return (
     <>
@@ -127,24 +156,39 @@ export default function Templates({ templates, demos, categories = [] }) {
               {visibleTemplates.map((template) => {
               const slug = slugify(template.name);
               const shareUrl = `${window.location.origin}/undangan-preview/${slug}`;
-              const previewUrl = shareUrl;
               const showQr = qrTemplate === template.name;
+              const details = previewDetails(template.category);
 
               return (
                 <article id={`template-${slug}`} key={template.name} className={`template-card invitation-template template-${template.palette}`}>
-                  <div className="template-thumb invitation-thumb" />
+                  <div className="template-thumb invitation-thumb">
+                    <div
+                      className="template-phone-mockup"
+                      style={{
+                        '--template-primary': template.colors?.[0] || '#b88e44',
+                        '--template-background': template.colors?.[1] || '#fffdf8',
+                      }}
+                      aria-hidden="true"
+                    >
+                      <span className="template-phone-kicker">UNDANGAN</span>
+                      <span className="template-phone-ornament">✦</span>
+                      <strong>{details.coupleNames || details.honoreeName || 'Acara Spesial'}</strong>
+                      <span>12 Desember 2026</span>
+                    </div>
+                  </div>
                   <span className="template-tag">{template.category}</span>
                   <h3>{template.name}</h3>
                   <p>{template.description}</p>
                   <div className="template-card-actions">
                     <button aria-expanded={showQr} onClick={() => setQrTemplate(showQr ? null : template.name)}>{showQr ? 'Tutup QR' : 'Lihat QR'}</button>
-                    <a className="template-preview-link" href={previewUrl}>Preview Undangan</a>
+                    <button className="template-preview-link" type="button" onClick={() => openPreview(template)}>Pratinjau di sini</button>
+                    <a className="template-preview-link" href={shareUrl}>Preview Undangan (halaman penuh)</a>
                   </div>
                   {showQr ? (
                     <div className="template-qr-panel">
                       <QRCodeSVG value={shareUrl} size={112} level="M" title={`QR untuk template ${template.name}`} />
                       <span>Pindai untuk membuka template ini</span>
-                      <a className="template-preview-link" href={previewUrl}>Lihat Preview</a>
+                      <button className="template-preview-link" type="button" onClick={() => openPreview(template)}>Lihat Preview</button>
                     </div>
                   ) : null}
                 </article>
@@ -152,9 +196,35 @@ export default function Templates({ templates, demos, categories = [] }) {
               })}
             </div>
           ) : <p className="template-empty-state">Belum ada template aktif untuk kategori {selectedCategory}. Pilih kategori lain untuk melihat template.</p>}
-          {previewTemplate ? <section id="template-preview" className="template-public-preview"><div className="template-public-preview-heading"><div><p className="eyebrow">Preview untuk calon undangan</p><h2>{previewTemplate.name}</h2></div><button onClick={() => setPreviewTemplate(null)}>Tutup Preview</button></div><div className="template-public-preview-viewport"><PublicInvitation invitation={createPreviewInvitation(previewTemplate)} slug={`demo-${slugify(previewTemplate.name)}`} /></div></section> : null}
         </div>
       </section>
+
+      {previewTemplate ? (
+        <div
+          className="template-preview-modal-backdrop"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) closePreview(); }}
+        >
+          <section className="template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title">
+            <header className="template-preview-modal-header">
+              <div><p className="eyebrow">Preview template</p><h2 id="template-preview-title">{previewTemplate.name}</h2></div>
+              <button type="button" className="template-preview-close" aria-label="Tutup preview" onClick={closePreview}>×</button>
+            </header>
+            <div className="template-preview-modal-viewport">
+              <div className="template-preview-phone">
+                <PublicInvitation
+                  invitation={createPreviewInvitation(previewTemplate)}
+                  slug={`demo-${slugify(previewTemplate.name)}`}
+                  previewRecipientName=""
+                />
+              </div>
+            </div>
+            <footer className="template-preview-modal-actions">
+              <button type="button" className="secondary-btn" onClick={closePreview}>Tutup</button>
+              <a className="primary-btn" href={`/undangan-dashboard?template=${encodeURIComponent(templateId(previewTemplate))}`}>Gunakan template ini</a>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
       <section className="section-wrap invitation-demos">
         <div className="container">
