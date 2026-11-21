@@ -1,17 +1,19 @@
 .invitation-shell {
-  --primary: #b88e44;
-  --theme-primary: #b88e44;
-  --theme-secondary: #faf5eb;
-  --theme-accent: #d0ad68;
-  --ink: #2c2621;
-  --muted: #6e675f;
+  --primary: #2585b4;
+  --theme-primary: #2585b4;
+  --theme-secondary: #edf8fd;
+  --theme-accent: #91d3f0;
+  --theme-background: #f5fbfe;
+  --theme-text: #20384c;
+  --ink: #20384c;
+  --muted: #5b7080;
   --card: #fff;
-  --line: #eae4da;
+  --line: #d9edf7;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse at 86% 5%, rgba(184, 142, 68, 0.1), transparent 28%),
-    #f8f6f2;
-  color: #2c2621;
+    radial-gradient(ellipse at 86% 5%, rgba(80, 174, 216, 0.12), transparent 28%),
+    #f3f9fc;
+  color: #20384c;
   font-family: 'Plus Jakarta Sans', Arial, sans-serif;
 }
 
@@ -23,10 +25,10 @@
   position: sticky;
   z-index: 40;
   top: 0;
-  border-color: rgba(234, 228, 218, 0.85);
-  background: rgba(248, 246, 242, 0.86);
+  border-color: rgba(204, 230, 243, 0.88);
+  background: rgba(245, 251, 254, 0.9);
   backdrop-filter: blur(14px);
-  box-shadow: 0 8px 26px rgba(44, 38, 33, 0.035);
+  box-shadow: 0 8px 26px rgba(39, 93, 120, 0.05);
 }
 
 .invitation-nav-wrap {
@@ -37,14 +39,14 @@
 }
 
 .invitation-nav-wrap .brand {
-  color: #2c2621;
+  color: #20384c;
   text-decoration: none;
   white-space: nowrap;
 }
 
 .invitation-nav-wrap .logo-mark {
-  background: linear-gradient(135deg, #b88e44, #d6bb81);
-  box-shadow: 0 8px 22px rgba(184, 142, 68, 0.25);
+  background: linear-gradient(135deg, #2585b4, #91d3f0);
+  box-shadow: 0 8px 22px rgba(37, 133, 180, 0.22);
 }
 
 .invitation-nav-wrap .site-logo-image {
@@ -64,7 +66,7 @@
 }
 
 .invitation-nav-wrap .nav-links a {
-  color: #6e675f;
+  color: #536d80;
   font-size: 0.72rem;
   font-weight: 700;
   text-decoration: none;
@@ -74,7 +76,7 @@
 .invitation-nav-wrap .nav-links a:hover,
 .invitation-nav-wrap .nav-links a:focus-visible,
 .invitation-nav-wrap .nav-links a[aria-current="page"] {
-  color: #9e7632;
+  color: #1c729d;
 }
 
 .invitation-nav-actions {
@@ -83,8 +85,8 @@
 
 .invitation-nav-actions .primary-btn,
 .invitation-shell .primary-btn {
-  background: linear-gradient(110deg, #9e7632, #b88e44 55%, #d0ad68);
-  box-shadow: 0 10px 24px rgba(184, 142, 68, 0.2);
+  background: linear-gradient(110deg, #1d7198, #2585b4 60%, #3b9ac4);
+  box-shadow: 0 10px 24px rgba(37, 133, 180, 0.2);
   color: #fff;
   cursor: pointer;
   text-decoration: none;
@@ -92,12 +94,12 @@
 
 .invitation-shell .primary-btn:hover,
 .invitation-shell .primary-btn:focus-visible {
-  box-shadow: 0 14px 30px rgba(184, 142, 68, 0.3);
+  box-shadow: 0 14px 30px rgba(37, 133, 180, 0.3);
   transform: translateY(-2px);
 }
 
 .invitation-login-link {
-  color: #2c2621;
+  color: #20384c;
   cursor: pointer;
 }
 
@@ -110,8 +112,8 @@
   overflow: hidden;
   padding: clamp(54px, 7vw, 96px) 0 clamp(68px, 8vw, 112px);
   background:
-    radial-gradient(circle at 54% 17%, rgba(184, 142, 68, 0.13), transparent 34%),
-    linear-gradient(180deg, #f8f6f2 0%, #fff 100%);
+    radial-gradient(circle at 54% 17%, rgba(80, 174, 216, 0.16), transparent 34%),
+    linear-gradient(180deg, #f5fbfe 0%, #fff 100%);
 }
 
 .invitation-home-hero::before,
@@ -121,7 +123,7 @@
   width: 310px;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: rgba(208, 173, 104, 0.12);
+  background: rgba(145, 211, 240, 0.22);
   content: "";
   filter: blur(75px);
   pointer-events: none;
@@ -135,7 +137,7 @@
 .invitation-home-hero::after {
   bottom: -16%;
   left: -7%;
-  background: rgba(184, 142, 68, 0.1);
+  background: rgba(80, 174, 216, 0.14);
 }
 
 .invitation-home-hero > .container {
@@ -157,25 +159,25 @@
   align-items: center;
   gap: 10px;
   padding: 10px 15px;
-  border: 1px solid rgba(184, 142, 68, 0.24);
+  border: 1px solid rgba(37, 133, 180, 0.24);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 8px 25px rgba(184, 142, 68, 0.08);
-  color: #9e7632 !important;
+  box-shadow: 0 8px 25px rgba(37, 133, 180, 0.1);
+  color: #1c729d !important;
 }
 
 .invitation-hero-eyebrow > span {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #b88e44;
-  box-shadow: 0 0 0 5px rgba(184, 142, 68, 0.12);
+  background: #2585b4;
+  box-shadow: 0 0 0 5px rgba(37, 133, 180, 0.14);
 }
 
 .invitation-home-hero h1 {
   max-width: 690px;
   margin: 25px 0 20px;
-  color: #2c2621;
+  color: #20384c;
   font-size: clamp(3rem, 6.2vw, 5.4rem);
   font-weight: 700;
   letter-spacing: -0.035em;
@@ -185,7 +187,7 @@
 .invitation-home-hero .invitation-hero-copy > p:not(.eyebrow) {
   max-width: 610px;
   margin: 0;
-  color: #6e675f;
+  color: #5b7080;
   font-size: clamp(0.94rem, 1.2vw, 1.08rem);
   line-height: 1.8;
 }

@@ -58,6 +58,13 @@ const templateFamily = (template) => {
   if (value.includes('rose') || value.includes('pink') || value.includes('floral') || value.includes('romance')) return 'Dusty Rose';
   return 'Klasik Emas';
 };
+const templatePreviewCovers = {
+  'Klasik Emas': 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
+  'Adat & Budaya': 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=800&q=80',
+  'Modern Minimalis': 'https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?auto=format&fit=crop&w=800&q=80',
+  'Royal Sapphire': 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=800&q=80',
+  'Dusty Rose': 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=800&q=80',
+};
 
 const previewDetailsByCategory = {
   pernikahan: { eventType: 'Pernikahan', title: 'Aulia & Farhan', coupleNames: 'Aulia & Farhan' },
@@ -213,6 +220,8 @@ export default function Templates({ templates, demos, categories = [] }) {
               const shareUrl = `${window.location.origin}/undangan-preview/${slug}`;
               const showQr = qrTemplate === template.name;
               const details = previewDetails(template.category);
+              const family = templateFamily(template);
+              const coverImage = templatePreviewCovers[family];
 
               return (
                 <article id={`template-${slug}`} key={template.name} className={`template-card template-showcase-card invitation-template template-${template.palette}`}>
@@ -222,17 +231,22 @@ export default function Templates({ templates, demos, categories = [] }) {
                       style={{
                         '--template-primary': template.colors?.[0] || '#b88e44',
                         '--template-background': template.colors?.[1] || '#fffdf8',
+                        '--template-cover-image': `url("${coverImage}")`,
                       }}
                       aria-hidden="true"
                     >
-                      <span className="template-phone-kicker">UNDANGAN</span>
-                      <span className="template-phone-ornament">✦</span>
-                      <strong>{details.coupleNames || details.honoreeName || 'Acara Spesial'}</strong>
-                      <span>12 Desember 2026</span>
+                      <div className="template-phone-art"><span>✦</span></div>
+                      <div className="template-phone-copy">
+                        <span className="template-phone-kicker">{details.eventType}</span>
+                        <span className="template-phone-ornament">✧ &nbsp; ✦ &nbsp; ✧</span>
+                        <strong>{details.coupleNames || details.honoreeName || 'Acara Spesial'}</strong>
+                        <span className="template-phone-date">12 Desember 2026</span>
+                        <span className="template-phone-action">Buka Undangan</span>
+                      </div>
                     </div>
                   </div>
                   <div className="template-card-body">
-                    <span className="template-tag">{templateFamily(template)}</span>
+                    <span className="template-tag">{family}</span>
                     <h3>{template.name}</h3>
                     <p>{template.description}</p>
                     <div className="template-card-actions">

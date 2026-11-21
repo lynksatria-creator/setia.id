@@ -11,6 +11,16 @@ const template = {
   active: true,
 };
 
+test('shows an illustrated, theme-specific invitation mockup on each template card', () => {
+  const { container } = render(<Templates templates={[template]} demos={[]} />);
+  const mockup = container.querySelector('.template-phone-mockup');
+
+  expect(mockup.querySelector('.template-phone-art')).not.toBeNull();
+  expect(mockup.querySelector('.template-phone-copy strong').textContent).toBe('Aulia & Farhan');
+  expect(mockup.querySelector('.template-phone-action').textContent).toBe('Buka Undangan');
+  expect(mockup.style.getPropertyValue('--template-cover-image')).toContain('images.unsplash.com');
+});
+
 test('opens an accessible template preview modal with a link to use the template', () => {
   window.history.replaceState({}, '', '/templates');
   render(<Templates templates={[template]} demos={[]} />);
