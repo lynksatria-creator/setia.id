@@ -168,7 +168,23 @@ const templateCopy = {
   'gen-z-editorial': { kicker: 'Main Character Energy', greeting: 'Save the date! Hari spesial kami bakal makin seru kalau kamu ikut hadir. See you there!', quote: 'Make memories, take pictures, stay a little longer.', source: 'The Moodboard', storyTitle: 'Our Plot Twist', storyText: 'Dari satu momen random, sekarang jadi cerita favorit yang mau kami rayakan bareng kamu.', closing: 'Outfit ready, camera ready, let’s celebrate!' },
 };
 
-export default function PublicInvitation({ slug, invitation: initialInvitation = null, previewRecipientName = null }) {
+const paletteFamilies = {
+  ivory: { bg: '#F8F6F2', surface: '#FFFFFF', primary: '#B88E44', accent: '#C59B27', text: '#2C2621' },
+  sapphire: { bg: '#EFF4FB', surface: '#FFFFFF', primary: '#1E3A8A', accent: '#C59B27', text: '#1E293B' },
+  traditional: { bg: '#F5EFE6', surface: '#FFFDF9', primary: '#8C5A2B', accent: '#B98745', text: '#2E1F14' },
+  botanical: { bg: '#F2F6F3', surface: '#FFFFFF', primary: '#4A6B53', accent: '#91A68F', text: '#1F2E24' },
+  rose: { bg: '#FAF3F3', surface: '#FFFFFF', primary: '#B56576', accent: '#C88783', text: '#332226' },
+};
+
+const templatePaletteFamily = (templateClass) => {
+  if (templateClass.startsWith('traditional-') || templateClass.startsWith('islamic-')) return 'traditional';
+  if (['navy-royal', 'royal-black-gold', 'corporate-event', 'khitanan-royal', 'birthday-kids'].includes(templateClass)) return 'sapphire';
+  if (['garden-luxury', 'emerald-royal', 'islamic-emerald', 'traditional-sunda', 'minimalist-luxury', 'aqiqah-elegant'].includes(templateClass)) return 'botanical';
+  if (templateClass.includes('rose') || templateClass.includes('pink') || ['anniversary', 'engagement', 'birthday-luxury', 'baby-shower', 'floral-elegant'].includes(templateClass)) return 'rose';
+  return 'ivory';
+};
+
+export default function PublicInvitation({ slug, invitation: initialInvitation = null, previewRecipientName = null, previewMode = false }) {
   const recipientName = previewRecipientName ?? new URLSearchParams(window.location.search).get('to')?.trim() ?? '';
   const [invitation, setInvitation] = useState(initialInvitation);
   const [error, setError] = useState('');
@@ -176,7 +192,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const [inviteeTicket, setInviteeTicket] = useState(null);
   const [inviteeLoading, setInviteeLoading] = useState(false);
   const [inviteeError, setInviteeError] = useState('');
-  const [isOpened, setIsOpened] = useState(false);
+  const [isOpened, setIsOpened] = useState(previewMode);
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [selectedImage, setSelectedImage] = useState(null);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
@@ -185,6 +201,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
   const [guestForm, setGuestForm] = useState(() => ({ name: recipientName, message: '', attendance: 'attending', guests: 1 }));
   const [guestMessage, setGuestMessage] = useState('');
   const [isGuestSubmitting, setIsGuestSubmitting] = useState(false);
+  const [copiedAccount, setCopiedAccount] = useState('');
   const musicRef = useRef(null);
   const contentRef = useRef(null);
   const ticketToken = initialInvitation ? '' : new URLSearchParams(window.location.search).get('ticket') || '';
@@ -397,7 +414,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     : `Dengan hormat, kami mengundang Bapak/Ibu/Saudara/i untuk hadir dalam acara ${eventLabel.toLowerCase()}${honoreeName ? ` untuk ${honoreeName}` : ''}. Kehadiran dan doa Anda merupakan kebahagiaan bagi kami.`;
   const greeting = content.opening_text || (isTemplateDemo && isCoupleEvent ? copy.greeting : defaultGreeting);
   const shouldRenderClosingHonoree = !isCoupleEvent && !content.honoree_name;
-  const theme = templateThemes[templateClass] || (regionTemplate ? {
+  const baseTheme = templateThemes[templateClass] || (regionTemplate ? {
     primary: regionTemplate.colors[0],
     accent: regionTemplate.colors[1],
     background: regionTemplate.colors[2],
@@ -405,6 +422,22 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     cover: `linear-gradient(135deg, ${regionTemplate.colors[0]}, ${regionTemplate.colors[0]} 48%, ${regionTemplate.colors[1]})`,
     ornament: regionTemplate.ornament,
   } : templateThemes['luxury-gold']);
+  const palette = paletteFamilies[templatePaletteFamily(templateClass)];
+  const coverPhotos = {
+    ivory: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1800&q=88',
+    sapphire: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1800&q=88',
+    traditional: 'https://images.unsplash.com/photo-1527529482837-4698179dc6ce?auto=format&fit=crop&w=1800&q=88',
+    botanical: 'https://images.unsplash.com/photo-1465495976277-4387d4b0e4a6?auto=format&fit=crop&w=1800&q=88',
+    rose: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=1800&q=88',
+  };
+  const familyCover = `linear-gradient(135deg, color-mix(in srgb, ${palette.primary}, white 18%), ${palette.bg})`;
+  const theme = {
+    ...baseTheme,
+    primary: palette.primary,
+    accent: palette.accent,
+    background: palette.bg,
+    cover: familyCover,
+  };
   const frameClass = allowedFrameStyles.has(content.frame_style)
     ? content.frame_style
     : content.custom_design ? 'custom' : regionTemplate ? 'regional' : templateFrames[templateClass] || 'classic';
@@ -420,6 +453,13 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
     '--public-primary': content.custom_design ? content.custom_primary || '#294b3e' : theme.primary,
     '--public-accent': content.custom_design ? content.custom_accent || '#995c49' : theme.accent,
     '--public-background': content.custom_design ? content.custom_background || '#f8f5ee' : theme.background,
+    '--inv-bg': palette.bg,
+    '--inv-surface': palette.surface,
+    '--inv-primary': palette.primary,
+    '--inv-primary-accent': palette.accent,
+    '--inv-text': palette.text,
+    '--inv-border': `color-mix(in srgb, ${palette.primary}, white 72%)`,
+    '--inv-cover-photo': `url("${coverPhotos[templatePaletteFamily(templateClass)]}")`,
     '--public-font': 'DM Sans, Avenir Next, Segoe UI, sans-serif',
     '--public-display-font': theme.font,
     '--public-cover': theme.cover,
@@ -455,6 +495,16 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
         setIsMusicPlaying(false);
         setMusicPlaybackMessage('Musik belum dapat diputar. Periksa tautan atau format file musik.');
       });
+    }
+  };
+
+  const copyAccountNumber = async (accountNumber) => {
+    try {
+      await navigator.clipboard.writeText(accountNumber);
+      setCopiedAccount(accountNumber);
+      window.setTimeout(() => setCopiedAccount(''), 1800);
+    } catch {
+      setCopiedAccount('');
     }
   };
 
@@ -506,7 +556,7 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
 
         {isCoupleEvent ? coupleProfileItems.length ? <section className="wedding-section wedding-couple"><p className="wedding-eyebrow">THE HAPPY COUPLE</p><h2>Mempelai</h2><div className="wedding-couple-grid">{coupleProfileItems.map((person, index) => <div className="wedding-person" key={`${person.relationship}-${index}`}>{person.photo ? <img src={person.photo} alt={person.name || person.alt} style={{ objectPosition: `${galleryPositionX}% ${galleryPositionY}%`, transform: `scale(${galleryZoom / 100})` }} /> : null}{person.name ? <h3>{person.name}</h3> : null}{person.parents ? <p>{person.relationship} dari<br />{person.parents}</p> : null}{person.instagram ? <a href={`https://instagram.com/${person.instagram.replace('@', '')}`} target="_blank" rel="noreferrer">{person.instagram}</a> : null}</div>)}</div></section> : null : content.honoree_name || content.honoree_photo || content.story ? <section className="wedding-section wedding-honoree"><p className="wedding-eyebrow">ACARA SPESIAL</p>{content.honoree_photo ? <img className="wedding-honoree-photo" src={content.honoree_photo} alt={content.honoree_name || `Foto ${eventLabel.toLowerCase()}`} loading="lazy" /> : null}{content.honoree_name ? <h2>{content.honoree_name}</h2> : null}{content.story ? <p>{content.story}</p> : null}</section> : null}
 
-        {isCoupleEvent ? <section className="wedding-section wedding-quote"><p>“{content.quote || copy.quote}”</p><strong>{content.quote_source || copy.source}</strong></section> : null}
+        <section className="wedding-section wedding-quote"><span className="wedding-quote-ornament" aria-hidden="true">❦</span><p>“{content.quote || copy.quote}”</p><strong>{content.quote_source || copy.source}</strong></section>
 
         {storyItems.length ? <section className="wedding-section wedding-story"><p className="wedding-eyebrow">{storySectionTitle}</p><h2>{storySectionTitle}</h2><div className="love-story-timeline">{storyItems.map((item, index) => <article key={`${item.title}-${index}`}>{item.date ? <span>{item.date}</span> : null}<div>{item.title ? <h3>{item.title}</h3> : null}{item.text ? <p>{item.text}</p> : null}{item.image ? <img src={item.image} alt={item.title || 'Cerita acara'} loading="lazy" /> : null}</div></article>)}</div></section> : null}
 
@@ -533,8 +583,8 @@ export default function PublicInvitation({ slug, invitation: initialInvitation =
         {content.video_url && !coverVideo ? <section className="wedding-section wedding-video"><p className="wedding-eyebrow">OUR BEAUTIFUL MOMENTS</p><h2>{isCoupleEvent ? 'Film kisah kami' : 'Video acara'}</h2>{isDirectVideoUrl(content.video_url) ? <video src={content.video_url} controls playsInline preload="metadata" /> : <iframe src={videoEmbedUrl(content.video_url)} title="Video undangan" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />}</section> : null}
 
         {hasDigitalEnvelope ? <section className="wedding-section wedding-digital-envelope"><p className="wedding-eyebrow">HADIAH DIGITAL</p><h2>Kirim tanda kasih</h2><p>Doa dan kehadiran Anda adalah hadiah terindah. Jika berkenan, Anda dapat mengirim tanda kasih melalui pilihan berikut.</p><div className="wedding-envelope-options">
-          {digitalEnvelope.bank?.enabled && digitalEnvelope.bank.name && digitalEnvelope.bank.account_name && digitalEnvelope.bank.account_number ? <article><h3>Transfer bank · {digitalEnvelope.bank.name}</h3><p>Atas nama <strong>{digitalEnvelope.bank.account_name}</strong></p><p>Nomor rekening <strong>{digitalEnvelope.bank.account_number}</strong></p></article> : null}
-          {digitalEnvelope.e_wallet?.enabled && digitalEnvelope.e_wallet.provider && digitalEnvelope.e_wallet.account_name && digitalEnvelope.e_wallet.account_number ? <article><h3>{digitalEnvelope.e_wallet.provider}</h3><p>Atas nama <strong>{digitalEnvelope.e_wallet.account_name}</strong></p><p>Nomor akun <strong>{digitalEnvelope.e_wallet.account_number}</strong></p></article> : null}
+          {digitalEnvelope.bank?.enabled && digitalEnvelope.bank.name && digitalEnvelope.bank.account_name && digitalEnvelope.bank.account_number ? <article><h3>Transfer bank · {digitalEnvelope.bank.name}</h3><p>Atas nama <strong>{digitalEnvelope.bank.account_name}</strong></p><p className="wedding-account-number">Nomor rekening <strong>{digitalEnvelope.bank.account_number}</strong></p><button type="button" className="wedding-copy-button" onClick={() => copyAccountNumber(digitalEnvelope.bank.account_number)}>{copiedAccount === digitalEnvelope.bank.account_number ? 'Nomor tersalin ✓' : 'Salin nomor rekening'}</button></article> : null}
+          {digitalEnvelope.e_wallet?.enabled && digitalEnvelope.e_wallet.provider && digitalEnvelope.e_wallet.account_name && digitalEnvelope.e_wallet.account_number ? <article><h3>{digitalEnvelope.e_wallet.provider}</h3><p>Atas nama <strong>{digitalEnvelope.e_wallet.account_name}</strong></p><p className="wedding-account-number">Nomor akun <strong>{digitalEnvelope.e_wallet.account_number}</strong></p><button type="button" className="wedding-copy-button" onClick={() => copyAccountNumber(digitalEnvelope.e_wallet.account_number)}>{copiedAccount === digitalEnvelope.e_wallet.account_number ? 'Nomor tersalin ✓' : 'Salin nomor rekening'}</button></article> : null}
           {digitalEnvelope.qris?.enabled && digitalEnvelope.qris.image_url ? <article><h3>QRIS</h3><img src={digitalEnvelope.qris.image_url} alt="Kode QRIS untuk hadiah digital" loading="lazy" />{digitalEnvelope.qris.instructions ? <p>{digitalEnvelope.qris.instructions}</p> : null}</article> : null}
         </div></section> : null}
 

@@ -3115,7 +3115,12 @@ function App() {
 
   if (path.startsWith('/undangan-preview/')) {
     const templateSlug = path.slice('/undangan-preview/'.length).split('/')[0];
-    const template = defaultInvitationData.templates.find((item) => slugify(item.name) === templateSlug);
+    const invitationData = loadData(storage.invitation, defaultInvitationData);
+    const template = [...(invitationData.templates || []), ...defaultInvitationData.templates].find((item, index, items) =>
+      slugify(item.name) === templateSlug
+      || slugify(item.name).replace(/-romance$/, '') === templateSlug
+      || templateSlug === `${slugify(item.name)}-${item.category}`.toLowerCase()
+    );
     if (template) return <PublicInvitation invitation={createPreviewInvitation(template)} slug={`demo-${templateSlug}`} />;
   }
 

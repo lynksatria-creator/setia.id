@@ -3,7 +3,61 @@ import { QRCodeSVG } from 'qrcode.react';
 import PublicInvitation from './PublicInvitation';
 
 export const slugify = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-const templateId = (template) => ({ gold: 'luxury-gold', pink: 'rose-gold-romance', emerald: 'emerald-royal', champagne: 'elegant-white-gold', navy: 'navy-royal', lilac: 'custom-premium' }[template.palette] || slugify(template.name));
+const templateId = (template) => {
+  const name = String(template.name || '').trim().toLowerCase();
+  const nameMap = {
+    'luxury gold': 'luxury-gold',
+    'royal black gold': 'royal-black-gold',
+    'luxury maroon': 'luxury-maroon',
+    'classic wedding': 'classic-wedding',
+    'klasik emas': 'classic-wedding',
+    'elegant white gold': 'elegant-white-gold',
+    'romantic pink': 'rose-gold-romance',
+    'rose gold romance': 'rose-gold-romance',
+    'modern emerald': 'emerald-royal',
+    'emerald royal': 'emerald-royal',
+    'navy luxe': 'navy-royal',
+    'royal sapphire': 'navy-royal',
+    'royal sapphire & gold': 'navy-royal',
+    'garden luxury': 'garden-luxury',
+    'floral elegant': 'floral-elegant',
+    'floral champagne': 'elegant-white-gold',
+    'minimalist luxury': 'minimalist-luxury',
+    'modern black': 'modern-black',
+    'islamic gold': 'islamic-gold',
+    'islamic emerald': 'islamic-emerald',
+    'islamic white': 'islamic-white',
+    'islamic maroon': 'islamic-maroon',
+    'traditional sunda': 'traditional-sunda',
+    'traditional jawa': 'traditional-jawa',
+    'traditional nusantara': 'traditional-nusantara',
+    'khitanan royal': 'khitanan-royal',
+    'khitan modern': 'khitanan-royal',
+    'aqiqah elegant': 'aqiqah-elegant',
+    'birthday luxury': 'birthday-luxury',
+    'birthday kids': 'birthday-kids',
+    'birthday modern': 'birthday-kids',
+    'graduation gold': 'graduation-gold',
+    'wisuda': 'graduation-gold',
+    'anniversary': 'anniversary',
+    'engagement': 'engagement',
+    'baby shower': 'baby-shower',
+    'tasyakuran': 'tasyakuran',
+    'corporate event': 'corporate-event',
+    'custom premium': 'custom-premium',
+    'lilac romance': 'custom-premium',
+    'gen z editorial': 'gen-z-editorial',
+  };
+  return nameMap[name] || ({ gold: 'luxury-gold', pink: 'rose-gold-romance', emerald: 'emerald-royal', champagne: 'elegant-white-gold', navy: 'navy-royal', lilac: 'custom-premium' }[template.palette] || slugify(template.name));
+};
+const templateFamily = (template) => {
+  const value = `${template.name} ${template.category} ${template.palette || ''}`.toLowerCase();
+  if (value.includes('navy') || value.includes('sapphire') || value.includes('royal') && value.includes('navy')) return 'Royal Sapphire';
+  if (value.includes('sunda') || value.includes('jawa') || value.includes('nusantara') || value.includes('adat')) return 'Adat & Budaya';
+  if (value.includes('minimal') || value.includes('modern') || value.includes('custom')) return 'Modern Minimalis';
+  if (value.includes('rose') || value.includes('pink') || value.includes('floral') || value.includes('romance')) return 'Dusty Rose';
+  return 'Klasik Emas';
+};
 
 const previewDetailsByCategory = {
   pernikahan: { eventType: 'Pernikahan', title: 'Aulia & Farhan', coupleNames: 'Aulia & Farhan' },
@@ -70,9 +124,10 @@ export default function Templates({ templates, demos, categories = [] }) {
     ...categories,
     ...templates.map((template) => template.category).filter(Boolean),
   ])].filter((category) => templates.some((template) => template.active !== false && template.category === category));
-  const categoryOptions = ['Semua', ...availableCategories];
+  const familyOptions = ['Semua', 'Klasik Emas', 'Adat & Budaya', 'Modern Minimalis', 'Royal Sapphire', 'Dusty Rose'];
+  const categoryOptions = familyOptions.filter((family) => family === 'Semua' || templates.some((template) => template.active !== false && templateFamily(template) === family));
   const visibleTemplates = templates.filter((template) => (
-    template.active !== false && (selectedCategory === 'Semua' || template.category === selectedCategory)
+    template.active !== false && (selectedCategory === 'Semua' || templateFamily(template) === selectedCategory)
   ));
 
   useEffect(() => {
@@ -127,7 +182,7 @@ export default function Templates({ templates, demos, categories = [] }) {
             {categoryOptions.map((category) => {
               const count = category === 'Semua'
                 ? templates.filter((template) => template.active !== false).length
-                : templates.filter((template) => template.active !== false && template.category === category).length;
+                : templates.filter((template) => template.active !== false && templateFamily(template) === category).length;
               return (
                 <button
                   key={category}
@@ -160,10 +215,10 @@ export default function Templates({ templates, demos, categories = [] }) {
               const details = previewDetails(template.category);
 
               return (
-                <article id={`template-${slug}`} key={template.name} className={`template-card invitation-template template-${template.palette}`}>
-                  <div className="template-thumb invitation-thumb">
+                <article id={`template-${slug}`} key={template.name} className={`template-card template-showcase-card invitation-template template-${template.palette}`}>
+                  <div className="template-thumb template-mockup-stage invitation-thumb">
                     <div
-                      className="template-phone-mockup"
+                      className="template-phone-mockup template-phone-frame"
                       style={{
                         '--template-primary': template.colors?.[0] || '#b88e44',
                         '--template-background': template.colors?.[1] || '#fffdf8',
@@ -176,13 +231,15 @@ export default function Templates({ templates, demos, categories = [] }) {
                       <span>12 Desember 2026</span>
                     </div>
                   </div>
-                  <span className="template-tag">{template.category}</span>
-                  <h3>{template.name}</h3>
-                  <p>{template.description}</p>
-                  <div className="template-card-actions">
-                    <button aria-expanded={showQr} onClick={() => setQrTemplate(showQr ? null : template.name)}>{showQr ? 'Tutup QR' : 'Lihat QR'}</button>
-                    <button className="template-preview-link" type="button" onClick={() => openPreview(template)}>Pratinjau di sini</button>
-                    <a className="template-preview-link" href={shareUrl}>Preview Undangan (halaman penuh)</a>
+                  <div className="template-card-body">
+                    <span className="template-tag">{templateFamily(template)}</span>
+                    <h3>{template.name}</h3>
+                    <p>{template.description}</p>
+                    <div className="template-card-actions">
+                      <button aria-expanded={showQr} onClick={() => setQrTemplate(showQr ? null : template.name)}>{showQr ? 'Tutup QR' : 'Lihat QR'}</button>
+                      <button className="template-preview-link" type="button" onClick={() => openPreview(template)}>Coba Preview</button>
+                      <a className="template-preview-link" href={shareUrl}>Preview Undangan</a>
+                    </div>
                   </div>
                   {showQr ? (
                     <div className="template-qr-panel">
@@ -215,6 +272,7 @@ export default function Templates({ templates, demos, categories = [] }) {
                   invitation={createPreviewInvitation(previewTemplate)}
                   slug={`demo-${slugify(previewTemplate.name)}`}
                   previewRecipientName=""
+                  previewMode
                 />
               </div>
             </div>

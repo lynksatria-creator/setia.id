@@ -5156,8 +5156,8 @@ input {
 .wedding-cover-shimmer {
   z-index: 0;
   background:
-    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.17), transparent 26%),
-    linear-gradient(180deg, rgba(20, 10, 32, 0.2), rgba(20, 10, 32, 0.68));
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.24), transparent 26%),
+    linear-gradient(180deg, rgba(44, 38, 33, 0.12), rgba(44, 38, 33, 0.46));
   pointer-events: none;
 }
 
@@ -5765,7 +5765,10 @@ input {
 }
 
 .wedding-cover {
-  background: var(--public-cover, linear-gradient(135deg, #443021, #bd9a5b 45%, #17120e));
+  background-image:
+    linear-gradient(135deg, color-mix(in srgb, var(--inv-primary, #b88e44), transparent 74%), rgba(44, 38, 33, 0.28)),
+    var(--inv-cover-photo, none),
+    var(--public-cover, linear-gradient(135deg, #f8f6f2, #b88e44 45%, #fffdf8));
   font-family: var(--public-font, 'Cormorant Garamond', Georgia, serif);
 }
 
@@ -11378,4 +11381,144 @@ input {
   .template-preview-modal-viewport {
     padding: 12px;
   }
+}
+
+.templates-grid,
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.template-showcase-card {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 22px;
+  background: var(--bg-surface);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.template-showcase-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--brand-gold);
+  box-shadow: 0 16px 34px -10px rgba(44, 38, 33, 0.12);
+}
+
+.template-mockup-stage {
+  display: flex;
+  height: 230px;
+  align-items: end;
+  justify-content: center;
+  padding: 24px 20px 0;
+  background: linear-gradient(180deg, #f3efe8 0%, #faf8f5 100%);
+}
+
+.template-phone-frame {
+  width: 195px;
+  height: 290px;
+  align-self: end;
+  border: 4px solid #2c2621;
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.14);
+}
+
+.template-card-body {
+  display: flex;
+  min-height: 210px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px 20px;
+}
+
+.template-card-body h3 {
+  margin: 0;
+}
+
+.template-card-body p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.wedding-person img {
+  border-radius: 999px 999px 24px 24px;
+  border: 1px solid var(--inv-border, rgba(184, 142, 68, 0.36));
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--inv-primary, #b88e44), transparent 78%);
+  object-fit: cover;
+}
+
+.wedding-quote {
+  border-top: 1px solid var(--inv-border, rgba(184, 142, 68, 0.42));
+  border-bottom: 1px solid var(--inv-border, rgba(184, 142, 68, 0.42));
+  background: var(--inv-surface, #fff);
+}
+
+.wedding-quote-ornament {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--inv-primary, #b88e44);
+  font-size: 1.35rem;
+}
+
+.wedding-envelope-options article {
+  border: 1px solid var(--inv-border, rgba(184, 142, 68, 0.36));
+  background: var(--inv-surface, #fff);
+}
+
+.wedding-account-number strong {
+  letter-spacing: 0.04em;
+}
+
+.wedding-copy-button {
+  min-height: 42px;
+  border: 1px solid var(--inv-border, rgba(184, 142, 68, 0.36));
+  border-radius: 999px;
+  background: var(--inv-primary, #b88e44);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.public-invitation-page {
+  --inv-border: color-mix(in srgb, var(--inv-primary, #b88e44), white 72%);
+  background: var(--inv-bg, var(--public-background, #f8f6f2));
+}
+
+.public-invitation-page .wedding-section {
+  border-radius: 18px;
+}
+
+.public-invitation-page .wedding-countdown {
+  max-width: min(900px, calc(100% - 32px));
+  border: 1px solid var(--inv-border);
+  background: color-mix(in srgb, var(--inv-primary, #b88e44), white 88%);
+  color: var(--inv-text, #2c2621);
+}
+
+.public-invitation-page .wedding-countdown h2,
+.public-invitation-page .wedding-countdown .wedding-eyebrow {
+  color: var(--inv-primary, #b88e44);
+}
+
+.public-invitation-page .countdown-grid div {
+  border: 1px solid var(--inv-border);
+  background: var(--inv-surface, #fff);
+  color: var(--inv-text, #2c2621);
+}
+
+.public-invitation-page .wedding-event-card {
+  border: 1px solid var(--inv-border);
+  background: var(--inv-surface, #fff);
+  box-shadow: 0 16px 34px -18px color-mix(in srgb, var(--inv-primary, #b88e44), transparent 70%);
+}
+
+.public-invitation-page .wedding-gallery-grid button {
+  border: 1px solid var(--inv-border);
+  border-radius: 14px;
 }

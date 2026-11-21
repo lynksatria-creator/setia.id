@@ -815,13 +815,13 @@ test('filters Nuansa Invite templates by category and can show all categories', 
 
   expect(container.querySelectorAll('.template-card')).toHaveLength(6);
   expect(screen.getByRole('heading', { name: 'Desain undangan yang siap Anda gunakan' })).toBeDefined();
-  expect(screen.getByRole('button', { name: /Pernikahan/ })).toBeDefined();
-  expect(screen.queryByRole('button', { name: /Khitanan/ })).toBeNull();
+  expect(screen.getByRole('button', { name: /Klasik Emas/ })).toBeDefined();
+  expect(screen.getByRole('button', { name: /Dusty Rose/ })).toBeDefined();
 
-  fireEvent.click(screen.getByRole('button', { name: /Aqiqah/ }));
-  expect(container.querySelectorAll('.template-card')).toHaveLength(1);
-  expect(screen.getByRole('heading', { name: 'Template Aqiqah' })).toBeDefined();
-  expect(container.querySelector('.template-card .template-tag').textContent).toBe('Aqiqah');
+  fireEvent.click(screen.getByRole('button', { name: /Dusty Rose/ }));
+  expect(container.querySelectorAll('.template-card')).toHaveLength(3);
+  expect(screen.getByRole('heading', { name: 'Template Dusty Rose' })).toBeDefined();
+  expect(container.querySelector('.template-card .template-tag').textContent).toBe('Dusty Rose');
 
   fireEvent.click(screen.getByRole('button', { name: /Semua/ }));
   expect(container.querySelectorAll('.template-card')).toHaveLength(6);

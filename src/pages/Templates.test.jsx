@@ -15,12 +15,12 @@ test('opens an accessible template preview modal with a link to use the template
   window.history.replaceState({}, '', '/templates');
   render(<Templates templates={[template]} demos={[]} />);
 
-  fireEvent.click(screen.getByRole('button', { name: 'Pratinjau di sini' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Coba Preview' }));
 
   const dialog = screen.getByRole('dialog', { name: 'Klasik Emas' });
   expect(dialog).toBeDefined();
   expect(screen.getByRole('link', { name: 'Gunakan template ini' }).getAttribute('href'))
-    .toBe('/undangan-dashboard?template=luxury-gold');
+    .toBe('/undangan-dashboard?template=classic-wedding');
 
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.queryByRole('dialog', { name: 'Klasik Emas' })).toBeNull();
