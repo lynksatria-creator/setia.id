@@ -984,11 +984,20 @@
   background: linear-gradient(115deg, color-mix(in srgb, var(--theme-primary), #2c2621 20%), var(--theme-primary) 56%, var(--theme-accent));
 }
 
+.invitation-shell .invitation-promo h2 {
+  color: #fff;
+}
+
 .invitation-shell .invitation-promo .eyebrow {
-  color: color-mix(in srgb, #fff, var(--theme-accent) 28%);
+  color: #fff4dc;
+}
+
+.invitation-shell .invitation-promo p:not(.eyebrow) {
+  color: rgba(255, 255, 255, 0.94);
 }
 
 .invitation-shell .invitation-promo .primary-btn {
+  background: #fff;
   color: var(--theme-primary);
 }
 
