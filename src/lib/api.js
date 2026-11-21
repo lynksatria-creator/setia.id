@@ -142,6 +142,10 @@ export const paymentsApi = {
     body: JSON.stringify({ payment_method_id: paymentMethodId, ...(planId ? { plan_id: planId } : {}) }),
   }),
   get: (token, id) => apiRequest(`/payments/${id}`, { token }),
+  syncMidtrans: (token, orderId) => apiRequest(`/payments/midtrans/sync/${encodeURIComponent(orderId)}`, {
+    token,
+    method: 'POST',
+  }),
   submitTransferReference: (token, id, transferReference) => apiRequest(`/payments/${id}/proof`, {
     token,
     method: 'POST',

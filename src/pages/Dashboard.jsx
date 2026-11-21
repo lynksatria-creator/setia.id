@@ -8,6 +8,7 @@ import { createOwnerGuestbookUrl } from '../lib/ownerGuestbookUrl';
 import { createWhatsAppUrl } from '../lib/whatsapp';
 import { regionalInvitationTemplates } from '../lib/regionalInvitationTemplates';
 import { createTicketCheckInMessage } from '../lib/ticketCheckInMessage';
+import { PaymentReturnBanner } from '../components/PaymentReturnBanner';
 
 const MAX_INVITATION_REQUEST_BYTES = 14 * 1024 * 1024;
 
@@ -599,10 +600,21 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
       .catch((requestError) => { if (active) setError(requestError.message); })
       .finally(() => { if (active) setIsLoading(false); });
 
-    const paymentId = new URLSearchParams(window.location.search).get('payment');
+    const paymentParams = new URLSearchParams(window.location.search);
+    const returnOrderId = paymentParams.get('order_id');
+    if (returnOrderId) {
+      checkMidtransStatus(returnOrderId);
+    }
+    const paymentId = paymentParams.get('payment');
     if (paymentId) {
       paymentsApi.get(token, paymentId)
-        .then((payment) => { if (active) setActivePayment(payment); })
+        .then((payment) => {
+          if (!active) return;
+          setActivePayment(payment);
+          if (payment.provider === 'midtrans' && payment.order_id) {
+            checkMidtransStatus(payment.order_id);
+          }
+        })
         .catch(() => {});
     }
 
@@ -723,6 +735,17 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
 
   const refreshInvitations = async () => {
     setInvitations(await invitationsApi.list(token));
+  };
+
+  const checkMidtransStatus = async (orderId) => {
+    if (!token || !orderId) return;
+    try {
+      await paymentsApi.syncMidtrans(token, orderId);
+      await refreshInvitations();
+      setMessage('Status pembayaran diperbarui. Undangan berhasil diaktifkan jika pembayaran telah diterima.');
+    } catch (requestError) {
+      setError(requestError.message);
+    }
   };
 
   const refreshBusinessManagement = async () => {
@@ -1910,6 +1933,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
           </div>
           {user.role === 'user' ? (
             <>
+              <PaymentReturnBanner onCheckStatus={checkMidtransStatus} />
               <nav className="buyer-dashboard-nav" aria-label="Menu akun pembeli">
                 <button type="button" aria-current={buyerMenu === 'dashboard' ? 'page' : undefined} onClick={() => setBuyerMenu('dashboard')}>Dashboard</button>
                 <button type="button" aria-current={buyerMenu === 'invitations' ? 'page' : undefined} onClick={() => setBuyerMenu('invitations')}>Undangan</button>

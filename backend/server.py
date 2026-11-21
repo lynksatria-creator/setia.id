@@ -3161,6 +3161,47 @@ async def get_payment(payment_id: str, current_user=Depends(get_current_user)):
     return public_payment(payment)
 
 
+@api_router.post("/payments/midtrans/sync/{order_id}")
+async def sync_midtrans_payment(order_id: str, current_user=Depends(get_current_user)):
+    payment = await db.payment_orders.find_one(
+        {"provider": "midtrans", "order_id": order_id, "owner_id": current_user["id"]},
+        {"_id": 0},
+    )
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Pembayaran Midtrans tidak ditemukan.")
+    if payment.get("status") == "paid":
+        return public_payment(payment)
+
+    transaction = await midtrans_request("GET", f"/v2/{order_id}/status")
+    try:
+        transaction_amount = Decimal(str(transaction["gross_amount"]))
+    except (KeyError, InvalidOperation, TypeError):
+        raise HTTPException(status_code=502, detail="Detail transaksi Midtrans tidak lengkap.") from None
+    if (
+        transaction.get("order_id") != order_id
+        or transaction_amount != Decimal(payment["amount"])
+        or transaction.get("currency", "IDR") != "IDR"
+    ):
+        raise HTTPException(status_code=400, detail="Transaksi Midtrans tidak sesuai dengan order.")
+
+    transaction_status = str(transaction.get("transaction_status", "")).lower()
+    fraud_status = str(transaction.get("fraud_status", "")).lower()
+    if transaction_status == "settlement" or (transaction_status == "capture" and fraud_status == "accept"):
+        if str(transaction.get("status_code")) != "200":
+            raise HTTPException(status_code=400, detail="Status transaksi Midtrans belum berhasil.")
+        await set_payment_status(payment, "paid", transaction_status)
+    elif transaction_status in {"deny", "cancel", "expire", "failure"}:
+        await set_payment_status(payment, "failed", transaction_status)
+    else:
+        await set_payment_status(payment, "pending", transaction_status)
+
+    updated = await db.payment_orders.find_one(
+        {"id": payment["id"], "owner_id": current_user["id"]},
+        {"_id": 0},
+    )
+    return public_payment(updated or payment)
+
+
 @api_router.post("/payments/{payment_id}/proof")
 async def submit_transfer_reference(payment_id: str, payload: PaymentProof, current_user=Depends(get_current_user)):
     payment = await db.payment_orders.find_one(

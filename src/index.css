@@ -1,13 +1,528 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+/* ==========================================================================
+1. VARIABEL TEMA SETIA.ID (WARM LUXURY EDITORIAL)
+========================================================================== */
+:root {
+--bg-canvas: #F8F6F2;
+--bg-surface: #FFFFFF;
+--bg-surface-muted: #FAF8F5;
+--bg-surface-hover: #F5F1EA;
+--border-subtle: #EAE4DA;
+--border-strong: #DFC9A6;
+--text-primary: #2C2621;
+--text-secondary: #6E675F;
+--text-muted: #9E968D;
+--brand-gold: #B88E44;
+--brand-gold-hover: #9E7632;
+--brand-gold-soft: #FAF5EB;
+--status-success-bg: #F2FBF6;
+--status-success-border: #BCE3CC;
+--status-success-text: #1E6F42;
+--status-pending-bg: #FFFDF5;
+--status-pending-border: #EAD9A8;
+--status-pending-text: #8A5A10;
+--status-danger-bg: #FEF2F2;
+--status-danger-border: #FECACA;
+--status-danger-text: #B91C1C;
+--radius-panel: 22px;
+--radius-card: 16px;
+--radius-control: 12px;
+--shadow-soft: 0 4px 20px -4px rgba(44, 38, 33, 0.05);
+--shadow-hover: 0 10px 28px -6px rgba(44, 38, 33, 0.09);
+}
+/* ==========================================================================
+2. RESET & TIPOGRAFI DASAR
+========================================================================== */
+*,
+*::before,
+*::after {
+box-sizing: border-box;
+}
+html,
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+margin: 0;
+padding: 0;
+background-color: var(--bg-canvas);
+color: var(--text-primary);
+font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+font-size: 15px;
+line-height: 1.6;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+h1, h2, h3, .font-serif-display {
+font-family: 'Playfair Display', Georgia, serif;
+color: var(--text-primary);
+letter-spacing: -0.01em;
+}
+a {
+color: var(--brand-gold-hover);
+text-decoration: none;
+transition: color 0.15s ease;
+}
+a:hover {
+color: var(--brand-gold);
+}
+/* ==========================================================================
+3. HEADER & NAVIGASI DASHBOARD
+========================================================================== */
+.dashboard-topbar,
+.account-header {
+position: sticky;
+top: 0;
+z-index: 40;
+background: rgba(248, 246, 242, 0.88);
+backdrop-filter: blur(12px);
+-webkit-backdrop-filter: blur(12px);
+border-bottom: 1px solid var(--border-subtle);
+padding: 14px 24px;
+}
+.dashboard-topbar-inner,
+.account-header-inner {
+max-width: 1380px;
+margin: 0 auto;
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 16px;
+}
+/* ==========================================================================
+4. GRID UTAMA DASHBOARD (/undangan-dashboard)
+========================================================================== */
+.account-shell,
+.dashboard-layout,
+.buyer-dashboard-view {
+max-width: 1380px;
+margin: 0 auto;
+padding: 28px 24px 64px;
+display: grid;
+grid-template-columns: minmax(0, 1fr) 350px;
+gap: 24px;
+align-items: start;
+}
+.dashboard-main-column {
+display: flex;
+flex-direction: column;
+gap: 24px;
+min-width: 0;
+}
+.dashboard-side-column {
+display: flex;
+flex-direction: column;
+gap: 20px;
+position: sticky;
+top: 84px;
+}
+@media (max-width: 1080px) {
+.account-shell,
+.dashboard-layout,
+.buyer-dashboard-view {
+grid-template-columns: 1fr;
+padding: 20px 16px 48px;
+}
+.dashboard-side-column {
+position: static;
+}
+}
+/* ==========================================================================
+5. KARTU PANEL (.account-panel) & HEADING
+========================================================================== */
+.account-panel {
+background: var(--bg-surface);
+border: 1px solid var(--border-subtle);
+border-radius: var(--radius-panel);
+padding: 24px 26px;
+box-shadow: var(--shadow-soft);
+transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.account-panel:hover {
+border-color: var(--border-strong);
+}
+.account-panel-heading {
+display: flex;
+flex-wrap: wrap;
+align-items: center;
+justify-content: space-between;
+gap: 12px;
+padding-bottom: 16px;
+margin-bottom: 20px;
+border-bottom: 1px solid #F2EDE4;
+}
+.account-panel-heading h2 {
+font-size: 1.32rem;
+font-weight: 700;
+margin: 2px 0 0;
+line-height: 1.3;
+}
+.account-panel-heading p {
+font-size: 0.85rem;
+color: var(--text-secondary);
+margin: 4px 0 0;
+}
+.eyebrow {
+display: inline-block;
+font-family: 'Plus Jakarta Sans', sans-serif;
+font-size: 0.7rem;
+font-weight: 700;
+letter-spacing: 0.14em;
+text-transform: uppercase;
+color: var(--brand-gold);
+}
+/* ==========================================================================
+6. BANNER STATUS PEMBAYARAN MIDTRANS & NOTIFIKASI
+========================================================================== */
+.payment-notice-banner,
+.status-banner {
+grid-column: 1 / -1;
+display: flex;
+flex-wrap: wrap;
+align-items: center;
+justify-content: space-between;
+gap: 14px;
+padding: 14px 20px;
+border-radius: var(--radius-card);
+background: var(--status-pending-bg);
+border: 1px solid var(--status-pending-border);
+color: var(--status-pending-text);
+font-size: 0.85rem;
+box-shadow: var(--shadow-soft);
+}
+.payment-notice-banner.is-success,
+.status-banner.is-success {
+background: var(--status-success-bg);
+border-color: var(--status-success-border);
+color: var(--status-success-text);
+}
+/* ==========================================================================
+7. KARTU UNDANGAN (DRAFT & AKTIF)
+========================================================================== */
+.invitation-grid,
+.invitation-cards-list {
+display: grid;
+grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+gap: 18px;
+}
+.invitation-card {
+background: var(--bg-surface-muted);
+border: 1px solid var(--border-subtle);
+border-radius: var(--radius-card);
+padding: 18px 20px;
+display: flex;
+flex-direction: column;
+justify-content: space-between;
+gap: 14px;
+transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+.invitation-card:hover {
+background: var(--bg-surface);
+border-color: var(--border-strong);
+transform: translateY(-2px);
+box-shadow: var(--shadow-hover);
+}
+.invitation-card.is-selected {
+background: var(--bg-surface);
+border: 1.5px solid var(--brand-gold);
+box-shadow: 0 0 0 3px rgba(184, 142, 68, 0.12);
+}
+.invitation-card-title {
+font-family: 'Playfair Display', serif;
+font-size: 1.12rem;
+font-weight: 700;
+color: var(--text-primary);
+margin: 0;
+}
+.invitation-card-meta {
+font-size: 0.8rem;
+color: var(--text-secondary);
+}
+/* ==========================================================================
+8. BADGE STATUS (DRAFT, PENDING, AKTIF)
+========================================================================== */
+.status-badge,
+.pill-badge {
+display: inline-flex;
+align-items: center;
+gap: 6px;
+padding: 4px 11px;
+border-radius: 999px;
+font-size: 0.72rem;
+font-weight: 700;
+letter-spacing: 0.03em;
+text-transform: uppercase;
+}
+.status-badge.draft,
+.pill-badge.draft {
+background: #F3EFE8;
+color: #6E675F;
+border: 1px solid #E2D9CB;
+}
+.status-badge.pending,
+.pill-badge.pending {
+background: var(--status-pending-bg);
+color: var(--status-pending-text);
+border: 1px solid var(--status-pending-border);
+}
+.status-badge.active,
+.status-badge.published,
+.pill-badge.active {
+background: var(--status-success-bg);
+color: var(--status-success-text);
+border: 1px solid var(--status-success-border);
+}
+/* ==========================================================================
+9. FORM INPUT, SELECT & TEXTAREA
+========================================================================== */
+label {
+display: block;
+font-size: 0.8rem;
+font-weight: 600;
+color: var(--text-primary);
+margin-bottom: 6px;
+}
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+input[type="url"],
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+select,
+textarea {
+width: 100%;
+background: var(--bg-surface-muted);
+color: var(--text-primary);
+border: 1px solid var(--border-subtle);
+border-radius: var(--radius-control);
+padding: 10px 14px;
+font-family: inherit;
+font-size: 0.88rem;
+transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+outline: none;
+background: var(--bg-surface);
+border-color: var(--brand-gold);
+box-shadow: 0 0 0 3px rgba(184, 142, 68, 0.14);
+}
+input::placeholder,
+textarea::placeholder {
+color: var(--text-muted);
+}
+/* ==========================================================================
+10. TOMBOL AKSI (PRIMARY, SECONDARY, DANGER)
+========================================================================== */
+.primary-button,
+.btn-primary {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+gap: 8px;
+background: linear-gradient(135deg, #B88E44 0%, #CFA558 100%);
+color: #FFFFFF;
+border: none;
+border-radius: var(--radius-control);
+padding: 10px 18px;
+font-family: inherit;
+font-size: 0.84rem;
+font-weight: 600;
+cursor: pointer;
+box-shadow: 0 4px 12px rgba(184, 142, 68, 0.24);
+transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.primary-button:hover,
+.btn-primary:hover {
+transform: translateY(-1px);
+box-shadow: 0 6px 18px rgba(184, 142, 68, 0.34);
+filter: brightness(1.03);
+}
+.primary-button:disabled,
+.btn-primary:disabled {
+opacity: 0.55;
+cursor: not-allowed;
+transform: none;
+box-shadow: none;
+}
+.secondary-button,
+.text-button,
+.btn-secondary {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+gap: 6px;
+background: var(--bg-surface-muted);
+color: var(--text-primary);
+border: 1px solid var(--border-subtle);
+border-radius: var(--radius-control);
+padding: 8px 14px;
+font-family: inherit;
+font-size: 0.82rem;
+font-weight: 600;
+cursor: pointer;
+transition: all 0.15s ease;
+}
+.secondary-button:hover,
+.text-button:hover,
+.btn-secondary:hover {
+background: var(--brand-gold-soft);
+border-color: var(--border-strong);
+color: var(--brand-gold-hover);
+}
+.danger-button,
+.btn-danger {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+gap: 6px;
+background: var(--status-danger-bg);
+color: var(--status-danger-text);
+border: 1px solid var(--status-danger-border);
+border-radius: var(--radius-control);
+padding: 8px 14px;
+font-family: inherit;
+font-size: 0.82rem;
+font-weight: 600;
+cursor: pointer;
+transition: background-color 0.15s ease;
+}
+.danger-button:hover,
+.btn-danger:hover {
+background: #FEE2E2;
+}
+/* ==========================================================================
+11. SIDEBAR PAKET & RINGKASAN AKUN (.account-plan-row)
+========================================================================== */
+.account-plan-row {
+display: flex;
+flex-direction: column;
+gap: 4px;
+padding: 14px 16px;
+border-radius: var(--radius-card);
+background: var(--bg-surface-muted);
+border: 1px solid var(--border-subtle);
+margin-top: 10px;
+}
+.account-plan-row strong {
+font-size: 0.92rem;
+font-weight: 700;
+color: var(--text-primary);
+}
+.account-plan-row span {
+font-size: 0.8rem;
+color: var(--text-secondary);
+}
+.account-plan-row b {
+align-self: flex-start;
+margin-top: 6px;
+padding: 3px 10px;
+border-radius: 999px;
+background: var(--brand-gold-soft);
+border: 1px solid var(--border-strong);
+color: var(--brand-gold-hover);
+font-size: 0.74rem;
+font-weight: 700;
+}
+/* ==========================================================================
+12. CONTAINER LIVE PREVIEW UNDANGAN
+========================================================================== */
+.invitation-preview-panel {
+background: #F1ECE3;
+border: 1px solid var(--border-subtle);
+border-radius: var(--radius-panel);
+padding: 20px;
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 16px;
+}
+.preview-device-frame {
+background: #FFFFFF;
+border: 1px solid var(--border-strong);
+border-radius: 28px;
+box-shadow: 0 18px 40px -12px rgba(44, 38, 33, 0.16);
+overflow: hidden;
+transition: width 0.25s ease;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+/* ==========================================================================
+13. RESPONSIVE DASHBOARD & BANNER PEMBAYARAN
+========================================================================== */
+.payment-notice-banner {
+min-height: 58px;
+}
+.account-invitation-card,
+.account-panel,
+.buyer-dashboard-overview {
+min-width: 0;
+}
+.account-card-actions,
+.account-invitation-card > div,
+.payment-method-select {
+min-width: 0;
+}
+.account-invitation-card {
+overflow: hidden;
+}
+.account-invitation-card h3,
+.account-invitation-card p,
+.invitation-link-label {
+overflow-wrap: anywhere;
+}
+.account-card-actions select,
+.account-card-actions button {
+max-width: 100%;
+}
+@media (max-width: 1080px) {
+.account-layout {
+grid-template-columns: minmax(0, 1fr);
+}
+.account-side-column {
+position: static;
+}
+}
+@media (max-width: 600px) {
+.account-topbar {
+position: sticky;
+top: 0;
+z-index: 50;
+}
+.account-layout {
+width: calc(100% - 24px);
+}
+.account-heading {
+padding: 4px 0;
+}
+.account-heading h1 {
+font-size: 2.15rem;
+line-height: 1.08;
+}
+.account-panel {
+padding: 16px;
+border-radius: 16px;
+}
+.account-invitation-card {
+grid-template-columns: 1fr;
+padding: 16px;
+}
+.account-card-actions {
+width: 100%;
+max-width: none;
+}
+.account-card-actions > button,
+.account-card-actions > a,
+.account-card-actions .primary-btn,
+.account-card-actions .secondary-btn {
+width: 100%;
+justify-content: center;
+}
+.payment-notice-banner {
+align-items: flex-start;
+padding: 14px;
+}
+.payment-notice-banner > div:last-child {
+width: 100%;
+justify-content: flex-end;
+}
 }
