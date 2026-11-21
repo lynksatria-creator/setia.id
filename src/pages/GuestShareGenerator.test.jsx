@@ -1,6 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
-import { GuestShareGenerator } from './Dashboard';
+import { getEventTitlePlaceholder, GuestShareGenerator } from './Dashboard';
+
+test.each([
+  ['Pernikahan', 'Contoh: Pernikahan Aulia & Farhan'],
+  ['Aqiqah', 'Contoh: Aqiqah Aisyah Putri'],
+  ['Wisuda', 'Contoh: Wisuda Naira Putri'],
+  ['Seminar', 'Contoh: Seminar Digital Marketing 2026'],
+])('uses a %s-specific event title example', (eventType, placeholder) => {
+  expect(getEventTitlePlaceholder(eventType)).toBe(placeholder);
+});
 
 const invitation = {
   id: 'invitation-1',

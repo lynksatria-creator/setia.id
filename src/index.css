@@ -90,8 +90,7 @@ gap: 16px;
 4. GRID UTAMA DASHBOARD (/undangan-dashboard)
 ========================================================================== */
 .account-shell,
-.dashboard-layout,
-.buyer-dashboard-view {
+.dashboard-layout {
 max-width: 1380px;
 margin: 0 auto;
 padding: 28px 24px 64px;
@@ -115,8 +114,7 @@ top: 84px;
 }
 @media (max-width: 1080px) {
 .account-shell,
-.dashboard-layout,
-.buyer-dashboard-view {
+.dashboard-layout {
 grid-template-columns: 1fr;
 padding: 20px 16px 48px;
 }

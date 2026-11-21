@@ -110,6 +110,46 @@ const eventGroups = [
 
 const weddingEventTypes = ['Pernikahan', 'Akad Nikah', 'Resepsi', 'Akad & Resepsi', 'Lamaran', 'Tunangan', 'Walimatul Ursy'];
 const organizerEventTypes = ['Reuni', 'Gathering', 'Family Gathering', 'Halal Bihalal', 'Seminar', 'Workshop', 'Meeting', 'Grand Opening', 'Event', 'Acara Komunitas', 'Custom Event'];
+const eventTitleExamples = {
+  Pernikahan: 'Pernikahan Aulia & Farhan',
+  'Akad Nikah': 'Akad Nikah Aulia & Farhan',
+  Resepsi: 'Resepsi Aulia & Farhan',
+  'Akad & Resepsi': 'Akad & Resepsi Aulia & Farhan',
+  Lamaran: 'Lamaran Aulia & Farhan',
+  Tunangan: 'Tunangan Aulia & Farhan',
+  'Walimatul Ursy': 'Walimatul Ursy Aulia & Farhan',
+  Aqiqah: 'Aqiqah Aisyah Putri',
+  Khitanan: 'Khitanan Rafi',
+  'Walimatul Khitan': 'Walimatul Khitan Rafi',
+  Tasyakuran: 'Tasyakuran Keluarga Bapak Andi',
+  Pengajian: 'Pengajian Majelis An-Nur',
+  Haul: 'Haul Almarhum Bapak Ahmad',
+  Syukuran: 'Syukuran Keluarga Bapak Andi',
+  Milad: 'Milad Naira',
+  Anniversary: 'Anniversary Aulia & Farhan',
+  'Ulang Tahun Anak': 'Ulang Tahun Nara',
+  'Ulang Tahun Dewasa': 'Ulang Tahun Naira',
+  'Baby Shower': 'Baby Shower Aulia dan keluarga',
+  'Gender Reveal': 'Gender Reveal Aulia & Farhan',
+  Wisuda: 'Wisuda Naira Putri',
+  Kelulusan: 'Kelulusan Naira Putri',
+  Reuni: 'Reuni SMA Angkatan 2010',
+  Gathering: 'Gathering Komunitas Pecinta Alam',
+  'Family Gathering': 'Family Gathering Keluarga Andi',
+  'Halal Bihalal': 'Halal Bihalal Keluarga Besar Andi',
+  Seminar: 'Seminar Digital Marketing 2026',
+  Workshop: 'Workshop Fotografi',
+  Meeting: 'Meeting Tahunan Perusahaan',
+  'Grand Opening': 'Grand Opening Kafe Senja',
+  Event: 'Event Komunitas Kreatif',
+  'Acara Komunitas': 'Acara Komunitas Warga RW 05',
+  'Custom Event': 'Acara Komunitas atau Perusahaan',
+};
+export const getEventTitlePlaceholder = (eventType) => {
+  const example = eventTitleExamples[eventType]
+    || `${eventType || 'Acara'} ${organizerEventTypes.includes(eventType) ? 'Komunitas ...' : '...'} `;
+  return `Contoh: ${example.trim()}`;
+};
 const eventFormProfiles = {
   Anniversary: {
     honoreeLabel: 'Nama pasangan yang merayakan',
@@ -2204,7 +2244,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
             <div id="buyer-invitations" className="buyer-section-anchor" />
             <div className="account-panel-heading"><div><span className="eyebrow">{editingId ? 'Edit undangan' : 'Undangan baru'}</span><h2>{editingId ? 'Perbarui detail acara' : 'Mulai dengan detail acara'}</h2></div>{editingId ? <button className="text-button" onClick={resetForm}>Buat draft baru</button> : null}</div>
             <form className="invitation-editor-form" onSubmit={saveInvitation}>
-              <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder="Pernikahan Aulia & Farhan" /></label>
+              <label>Nama acara<input value={form.title} onChange={(event) => updateField('title', event.target.value)} required maxLength={120} placeholder={getEventTitlePlaceholder(form.event_type)} /></label>
               {user.role === 'affiliate' ? <label>Paket kuota<select value={selectedPlan?.id || form.plan_id} disabled={Boolean(editingId)} onChange={(event) => updateField('plan_id', event.target.value)}>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · kuota tersisa {(user[`${plan.id}_quota`] || 0) - affiliatePlanCounts[plan.id]}</option>)}</select></label> : null}
               {selectedPlan?.id !== 'basic' ? <label>Link undangan (opsional, dapat diedit)<input value={form.slug} onChange={(event) => updateField('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} minLength={3} maxLength={64} placeholder={form.title ? form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : 'nama-acara'} /><small>Kosongkan untuk membuat link otomatis saat disimpan. Anda tetap dapat mengubah link ini nanti.</small></label> : <p className="form-hint">Paket Basic menggunakan link otomatis yang dibuat sistem.</p>}
               <div className="generated-rsvp-link">
@@ -2516,7 +2556,7 @@ export default function Dashboard({ onSignIn, requestedGuestbookSlug = '' }) {
                           {activationBulkEnabled ? <p className="form-hint">Limit {getPackageEntitlements({ plan_id: activationPlan?.id }, activationPlan).maxRecipients} penerima dibeli bersama paket dan hanya dapat diaktifkan melalui Midtrans Snap.</p> : null}
                           <button className="primary-btn" disabled={!activationPlan || !activationPaymentMethods.some((method) => method.id === paymentMethodId)} onClick={() => beginPayment(invitation)}>Bayar & aktifkan · Rp {Number(activationPlan?.price || 0).toLocaleString('id-ID')}</button>
                         </> : null}
-                        {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`/undangan/${invitation.slug}#rsvp`} target="_blank" rel="noreferrer">Buka link RSVP ↗</a> : null}
+                        {invitation.status === 'published' ? <a className="secondary-btn invitation-share-button" href={`${buildPersonalizedInvitationUrl(invitation.slug, '')}#rsvp`} target="_blank" rel="noreferrer">Buka link RSVP ↗</a> : null}
                         {user.role === 'user' && invitation.status === 'published' ? <>
                           <button className="secondary-btn" type="button" onClick={() => copyInvitationLink(invitation, '#rsvp')}>Salin link dashboard RSVP</button>
                           <button className="secondary-btn" type="button" onClick={() => { setShareDialogInvitationId(invitation.id); setShareDialogType('invitation'); }}>Bagikan undangan</button>

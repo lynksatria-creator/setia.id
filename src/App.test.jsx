@@ -458,7 +458,13 @@ test('shows the personalized recipient name on the invitation cover before openi
       : path.endsWith('/guestbook') ? [] : {
         title: 'Hari Bahagia',
         slug: 'hari-bahagia',
-        content: { couple_names: 'Aulia & Farhan', event_date: '2026-10-07' },
+        content: {
+          couple_names: 'Aulia & Farhan',
+          event_date: '2026-10-07',
+          digital_envelope: {
+            bank: { enabled: true, name: 'BCA', account_name: 'Aulia Putri', account_number: '001234567' },
+          },
+        },
       };
     return {
       ok: true,
@@ -471,7 +477,7 @@ test('shows the personalized recipient name on the invitation cover before openi
   window.history.pushState({}, '', `/i/hari-bahagia?ticket=${ticketToken}`);
   const { container } = renderApp();
 
-  expect(await screen.findByText('Nadia Putri')).toBeDefined();
+  await waitFor(() => expect(container.querySelector('.wedding-recipient-name strong')?.textContent).toBe('Nadia Putri'));
   expect(screen.getByText('Kepada Yth.')).toBeDefined();
   expect(screen.getByRole('button', { name: /buka undangan/i })).toBeDefined();
   fireEvent.click(screen.getByRole('button', { name: /buka undangan/i }));
@@ -1204,6 +1210,8 @@ test('owner can copy the dashboard RSVP link and open the generated public RSVP 
   expect(screen.getByText(`Dashboard RSVP: ${ownerGuestbookUrl}`)).toBeDefined();
   fireEvent.click(screen.getByRole('button', { name: 'Salin link dashboard RSVP' }));
   expect(writeText).toHaveBeenCalledWith(ownerGuestbookUrl);
+  fireEvent.click(screen.getByRole('button', { name: 'QR buku tamu' }));
+  expect(document.querySelector('.invitation-owner-qr-panel svg')).not.toBeNull();
 
   fireEvent.click(screen.getByRole('button', { name: 'Edit', exact: true }));
   const generatedRsvpLink = screen.getByLabelText('Link RSVP otomatis');
@@ -1211,7 +1219,7 @@ test('owner can copy the dashboard RSVP link and open the generated public RSVP 
   expect(generatedRsvpLink.value).toBe(`${window.location.origin}/undangan/hari-bahagia#rsvp`);
   expect(screen.queryByLabelText('Link RSVP', { exact: true })).toBeNull();
   expect(screen.getByRole('link', { name: 'Buka RSVP ↗' }).getAttribute('href')).toBe(`${window.location.origin}/undangan/hari-bahagia#rsvp`);
-  expect(screen.getByRole('link', { name: 'Buka link RSVP ↗' }).getAttribute('href')).toBe('/undangan/hari-bahagia#rsvp');
+  expect(screen.getByRole('link', { name: 'Buka link RSVP ↗' }).getAttribute('href')).toBe(`${window.location.origin}/undangan/hari-bahagia#rsvp`);
   if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
   else delete navigator.clipboard;
   sessionStorage.clear();
